@@ -55,6 +55,27 @@ import Layout from '../layouts/Layout.astro';
     let H = canvas.height = window.innerHeight;
     let mouse = { x: -999, y: -999 };
     const COLORS = ['#ff3f3f','#ff9f1c','#6ef9f5','#b8f75b','#c77dff','#ff6eb4','#38bdf8','#ffd166'];
+    const NOTES =  [392, 440, 523, 587, 659, 349, 466, 311];
+    let audioCtx: AudioContext | null = null;
+    let masterGain: GainNode | null = null;
+    let lastSoundTime = 0;
+    const SOUND_COOLDOWN = 180;
+    function playNote(freq: number) {
+      const now = performance.now();
+      if (now - lastSoundTime < SOUND_COOLDOWN) return;
+      lastSoundTime = now;
+      if (!audioCtx) { audioCtx = new AudioContext(); masterGain = audioCtx.createGain(); masterGain.gain.value = 0.18; masterGain.connect(audioCtx.destination); }
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(masterGain!);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.7, audioCtx.currentTime + 0.25);
+      gain.gain.setValueAtTime(1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+    }
+    let lastHoveredId = -1;
     const LABELS = ['projects','about','ila-web','contact','code','design','freelance','blog','?','?','?','?'];
     function rnd(a: number, b: number){ return a + Math.random()*(b-a); }
 
@@ -89,6 +110,8 @@ import Layout from '../layouts/Layout.astro';
         if(c.y-c.r<0||c.y+c.r>H) c.vy*=-1;
         const isHovered = dist(mouse.x,mouse.y,c.x,c.y)<c.r;
         if(isHovered) hoveredCircle=c;
+        if(isHovered && lastHoveredId !== c.id){ playNote(NOTES[c.id % NOTES.length]); lastHoveredId = c.id; }
+        if(!isHovered && lastHoveredId === c.id) lastHoveredId = -1;
         c.targetAlpha = isHovered?1:0;
         c.alpha += (c.targetAlpha-c.alpha)*0.08;
         const pulse = isHovered ? 1+0.06*Math.sin(now*0.004+c.phase) : 1;
