@@ -12,7 +12,7 @@ import Layout from '../layouts/Layout.astro';
         --bg: #080810; --text: #f0ede8; --muted: rgba(240,237,232,0.3);
       }
       html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; cursor: none; }
-      canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+      canvas { position: fixed; inset: 0; width: 100%; height: 100%; will-change: transform; }
       #cursor { position: fixed; width: 5px; height: 5px; background: var(--text); border-radius: 50%; pointer-events: none; z-index: 9999; transform: translate(-50%,-50%); }
       #cursor::before, #cursor::after { content:''; position:absolute; border-radius:50%; border:1px solid rgba(240,237,232,0.5); top:50%; left:50%; transform:translate(-50%,-50%); animation: sonar 2.4s ease-out infinite; }
       #cursor::after { animation-delay:1.2s; }
@@ -130,15 +130,21 @@ import Layout from '../layouts/Layout.astro';
       if (now - lastSoundTime < SOUND_COOLDOWN) return;
       lastSoundTime = now;
       if (!audioCtx) { audioCtx = new AudioContext(); masterGain = audioCtx.createGain(); masterGain.gain.value = 0.18; masterGain.connect(audioCtx.destination); }
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain); gain.connect(masterGain!);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.7, audioCtx.currentTime + 0.25);
-      gain.gain.setValueAtTime(1, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-      osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+      const t = audioCtx.currentTime;
+      function layer(f: number, type: OscillatorType, vol: number, dur: number, pitchDrop = 1){
+        const osc = audioCtx!.createOscillator();
+        const g = audioCtx!.createGain();
+        osc.connect(g); g.connect(masterGain!);
+        osc.type = type;
+        osc.frequency.setValueAtTime(f, t);
+        if(pitchDrop !== 1) osc.frequency.exponentialRampToValueAtTime(f * pitchDrop, t + dur * 0.6);
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.start(t); osc.stop(t + dur);
+      }
+      layer(freq,     'sine',     1.0,  0.35, 0.75); // main — suave con pitch drop
+      layer(freq/2,   'triangle', 0.5,  0.18);        // bass — cuerpo, corto
+      layer(freq*2,   'sine',     0.15, 0.2);         // shimmer — brillo suave
     }
     let lastHoveredId = -1;
     let songPlaying = false;
@@ -276,16 +282,28 @@ import Layout from '../layouts/Layout.astro';
       return { id:i, x:rnd(r,W-r), y:rnd(r,H-r), r, baseR:r, color:COLORS[i%COLORS.length], alpha:0, targetAlpha:0, label:LABELS[i], vx:rnd(-0.18,0.18), vy:rnd(-0.18,0.18), delay:i*40, born:performance.now(), phase:rnd(0,Math.PI*2) };
     }
 
-    let circles: Circle[] = Array.from({length:41},(_,i)=>createCircle(i));
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const CIRCLE_COUNT = isSafari ? 28 : 41;
+    let circles: Circle[] = Array.from({length:CIRCLE_COUNT},(_,i)=>createCircle(i));
     let hoveredCircle: Circle | null = null;
+
+    // Cache grid on offscreen canvas
+    let gridCanvas: HTMLCanvasElement | null = null;
+    function buildGrid(){
+      gridCanvas = document.createElement('canvas');
+      gridCanvas.width = W; gridCanvas.height = H;
+      const gc = gridCanvas.getContext('2d')!;
+      gc.strokeStyle='rgba(240,237,232,0.025)'; gc.lineWidth=1;
+      for(let x=0;x<W;x+=80){ gc.beginPath();gc.moveTo(x,0);gc.lineTo(x,H);gc.stroke(); }
+      for(let y=0;y<H;y+=80){ gc.beginPath();gc.moveTo(0,y);gc.lineTo(W,y);gc.stroke(); }
+    }
+    buildGrid();
 
     function dist(ax: number, ay: number, bx: number, by: number){ return Math.sqrt((ax-bx)**2+(ay-by)**2); }
 
     function draw(now: number){
       ctx.clearRect(0,0,W,H);
-      ctx.strokeStyle='rgba(240,237,232,0.025)'; ctx.lineWidth=1;
-      for(let x=0;x<W;x+=80){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
-      for(let y=0;y<H;y+=80){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+      if(gridCanvas) ctx.drawImage(gridCanvas,0,0);
       hoveredCircle = null;
       circles.forEach(c=>{
         const age = now - c.born - c.delay;
@@ -305,29 +323,40 @@ import Layout from '../layouts/Layout.astro';
         const pulse = isHovered ? 1+0.06*Math.sin(now*0.004+c.phase) : 1;
         const displayR = c.baseR*eased*pulse;
         if(c.alpha>0.01){
-          const glow=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2.5);
-          glow.addColorStop(0,c.color+Math.round(c.alpha*60).toString(16).padStart(2,'0'));
-          glow.addColorStop(1,'transparent');
-          ctx.beginPath();ctx.arc(c.x,c.y,displayR*2.5,0,Math.PI*2);
-          ctx.fillStyle=glow;ctx.fill();
+          if(!isSafari){
+            const glow=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2.5);
+            glow.addColorStop(0,c.color+Math.round(c.alpha*60).toString(16).padStart(2,'0'));
+            glow.addColorStop(1,'transparent');
+            ctx.beginPath();ctx.arc(c.x,c.y,displayR*2.5,0,Math.PI*2);
+            ctx.fillStyle=glow;ctx.fill();
+          }
         }
         ctx.beginPath();ctx.arc(c.x,c.y,displayR,0,Math.PI*2);
         if(c.alpha>0.01){
           const bubbleColor = LABELS[c.id] === 'message' ? '#ffd166' : c.color;
-          const fill=ctx.createRadialGradient(c.x,c.y-displayR*0.3,displayR*0.1,c.x,c.y,displayR);
-          fill.addColorStop(0,bubbleColor+'ff');fill.addColorStop(1,bubbleColor+'99');
-          ctx.fillStyle=fill;ctx.globalAlpha=c.alpha*eased;ctx.fill();ctx.globalAlpha=1;
+          if(isSafari){
+            ctx.fillStyle=bubbleColor;ctx.globalAlpha=c.alpha*eased*0.85;ctx.fill();ctx.globalAlpha=1;
+          } else {
+            const fill=ctx.createRadialGradient(c.x,c.y-displayR*0.3,displayR*0.1,c.x,c.y,displayR);
+            fill.addColorStop(0,bubbleColor+'ff');fill.addColorStop(1,bubbleColor+'99');
+            ctx.fillStyle=fill;ctx.globalAlpha=c.alpha*eased;ctx.fill();ctx.globalAlpha=1;
+          }
         } else {
           ctx.strokeStyle=`rgba(240,237,232,${0.08*eased})`;ctx.lineWidth=1;ctx.stroke();
           if(LABELS[c.id]){
             const pulse = 0.5 + 0.5*Math.sin(now*0.0015 + c.phase);
             const isMsg = LABELS[c.id] === 'message';
             const glowColor = isMsg ? '#ffd166' : c.color;
-            const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2);
-            glow2.addColorStop(0, glowColor+Math.round(pulse*50).toString(16).padStart(2,'0'));
-            glow2.addColorStop(1,'transparent');
-            ctx.beginPath();ctx.arc(c.x,c.y,displayR*2,0,Math.PI*2);
-            ctx.fillStyle=glow2;ctx.fill();
+            if(!isSafari){
+              const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2);
+              glow2.addColorStop(0, glowColor+Math.round(pulse*50).toString(16).padStart(2,'0'));
+              glow2.addColorStop(1,'transparent');
+              ctx.beginPath();ctx.arc(c.x,c.y,displayR*2,0,Math.PI*2);
+              ctx.fillStyle=glow2;ctx.fill();
+            } else {
+              ctx.beginPath();ctx.arc(c.x,c.y,displayR*1.5,0,Math.PI*2);
+              ctx.fillStyle=glowColor;ctx.globalAlpha=pulse*0.12*eased;ctx.fill();ctx.globalAlpha=1;
+            }
             if(isMsg){
               const numRays = 16;
               const rot = now * 0.0003;
@@ -346,18 +375,13 @@ import Layout from '../layouts/Layout.astro';
                 const halfW = hovered ? 2.5 : 1.5;
                 const px = Math.cos(angle), py = Math.sin(angle);
                 const nx = -py, ny = px;
-                const alpha = (hovered ? 0.7 : 0.35) * eased;
-                const grad = ctx.createLinearGradient(
-                  px*inner, py*inner, px*outer, py*outer
-                );
-                grad.addColorStop(0, `rgba(255,220,80,${alpha})`);
-                grad.addColorStop(1, `rgba(255,180,30,0)`);
+                const alpha = (hovered ? 0.55 : 0.28) * eased;
                 ctx.beginPath();
                 ctx.moveTo(px*inner + nx*halfW, py*inner + ny*halfW);
                 ctx.lineTo(px*outer, py*outer);
                 ctx.lineTo(px*inner - nx*halfW, py*inner - ny*halfW);
                 ctx.closePath();
-                ctx.fillStyle = grad;
+                ctx.fillStyle = `rgba(255,210,70,${alpha})`;
                 ctx.fill();
               }
               ctx.restore();
@@ -375,12 +399,28 @@ import Layout from '../layouts/Layout.astro';
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(label, c.x, c.y);
           } else if(!isNav){
-            // frases: elegant text outside below bubble
+            // frases: large elegant text below bubble, wrapped
+            const fontSize = Math.max(22, Math.min(32, W * 0.025));
             ctx.fillStyle = '#f0ede8';
-            ctx.font = `300 ${Math.max(13,Math.min(18,displayR*0.3))}px 'Cormorant Garamond',serif`;
+            ctx.font = `300 italic ${fontSize}px 'Cormorant Garamond',serif`;
             ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-            const maxWidth = Math.min(320, W * 0.7);
-            ctx.fillText(label, c.x, c.y + displayR + 14, maxWidth);
+            const maxWidth = Math.min(420, W * 0.75);
+            const words = label.split(' ');
+            const lines: string[] = [];
+            let line = '';
+            for(const word of words){
+              const test = line ? line + ' ' + word : word;
+              if(ctx.measureText(test).width > maxWidth && line){ lines.push(line); line = word; }
+              else line = test;
+            }
+            if(line) lines.push(line);
+            const lineH = fontSize * 1.35;
+            const startY = c.y + displayR + 16;
+            lines.forEach((l, i) => {
+              ctx.globalAlpha = c.alpha * eased;
+              ctx.fillText(l, c.x, startY + i * lineH);
+            });
+            ctx.globalAlpha = 1;
           }
           ctx.globalAlpha = 1;
         }
@@ -404,7 +444,7 @@ import Layout from '../layouts/Layout.astro';
     window.addEventListener('touchstart',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
     window.addEventListener('touchmove',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
     window.addEventListener('touchend',()=>{ mouse.x=-999; mouse.y=-999; }, {passive:true});
-    window.addEventListener('resize',()=>{ W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;circles=Array.from({length:41},(_,i)=>createCircle(i)); });
+    window.addEventListener('resize',()=>{ W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight; buildGrid(); circles=Array.from({length:CIRCLE_COUNT},(_,i)=>createCircle(i)); });
     requestAnimationFrame(draw);
   </script>
 </Layout>
