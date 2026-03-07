@@ -320,7 +320,10 @@ import Layout from '../layouts/Layout.astro';
         canvas.style.cursor = 'none';
         c.targetAlpha = isHovered?1:0;
         c.alpha += (c.targetAlpha-c.alpha)*0.08;
-        const pulse = isHovered ? 1+0.06*Math.sin(now*0.004+c.phase) : 1;
+        const isMsg = LABELS[c.id] === 'message';
+        const pulse = isHovered
+          ? (isMsg ? 2.8 + 0.08*Math.sin(now*0.003+c.phase) : 1+0.06*Math.sin(now*0.004+c.phase))
+          : 1;
         const displayR = c.baseR*eased*pulse;
         if(c.alpha>0.01){
           if(!isSafari){
@@ -345,7 +348,6 @@ import Layout from '../layouts/Layout.astro';
           ctx.strokeStyle=`rgba(240,237,232,${0.08*eased})`;ctx.lineWidth=1;ctx.stroke();
           if(LABELS[c.id]){
             const pulse = 0.5 + 0.5*Math.sin(now*0.0015 + c.phase);
-            const isMsg = LABELS[c.id] === 'message';
             const glowColor = isMsg ? '#ffd166' : c.color;
             if(!isSafari){
               const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2);
@@ -358,32 +360,49 @@ import Layout from '../layouts/Layout.astro';
               ctx.fillStyle=glowColor;ctx.globalAlpha=pulse*0.12*eased;ctx.fill();ctx.globalAlpha=1;
             }
             if(isMsg){
-              const numRays = 16;
-              const rot = now * 0.0003;
               const hovered = c.alpha > 0.5;
+              const rot = now * 0.0003;
+              const breath = 0.5 + 0.5*Math.sin(now*0.0012 + c.phase);
               ctx.save();
               ctx.translate(c.x, c.y);
               ctx.rotate(rot);
+
+              // corona rings
+              for(let ring=3;ring>0;ring--){
+                const ringR = displayR*(1.4 + ring*0.45 + breath*0.2);
+                const ringAlpha = (hovered ? 0.12 : 0.06) * (4-ring) * eased;
+                ctx.beginPath(); ctx.arc(0,0,ringR,0,Math.PI*2);
+                ctx.fillStyle = `rgba(255,200,50,${ringAlpha})`; ctx.fill();
+              }
+
+              // alternating long/short rays (24 total)
+              const numRays = 24;
               for(let ri=0;ri<numRays;ri++){
                 const angle = (ri/numRays)*Math.PI*2;
-                const breathe = Math.sin(now*0.0018 + ri*0.8);
-                const inner = displayR + 3;
-                const rayLen = hovered
-                  ? displayR*(2.5 + 0.8*breathe)
-                  : displayR*(1.2 + 0.4*breathe);
+                const isLong = ri % 2 === 0;
+                const breathe = Math.sin(now*0.0018 + ri*0.6);
+                const inner = displayR + 4;
+                const rayLen = isLong
+                  ? displayR*(hovered ? 2.8 + 0.7*breathe : 1.6 + 0.35*breathe)
+                  : displayR*(hovered ? 1.4 + 0.4*breathe : 0.7 + 0.2*breathe);
                 const outer = inner + rayLen;
-                const halfW = hovered ? 2.5 : 1.5;
+                const halfW = isLong ? (hovered ? 2.8 : 2) : (hovered ? 1.8 : 1.2);
                 const px = Math.cos(angle), py = Math.sin(angle);
                 const nx = -py, ny = px;
-                const alpha = (hovered ? 0.55 : 0.28) * eased;
+                const alpha = (hovered ? 0.75 : 0.4) * (isLong ? 1 : 0.6) * eased;
                 ctx.beginPath();
                 ctx.moveTo(px*inner + nx*halfW, py*inner + ny*halfW);
                 ctx.lineTo(px*outer, py*outer);
                 ctx.lineTo(px*inner - nx*halfW, py*inner - ny*halfW);
                 ctx.closePath();
-                ctx.fillStyle = `rgba(255,210,70,${alpha})`;
+                ctx.fillStyle = `rgba(255,${isLong?215:235},${isLong?60:100},${alpha})`;
                 ctx.fill();
               }
+
+              // bright inner core
+              ctx.beginPath(); ctx.arc(0,0,displayR*0.45,0,Math.PI*2);
+              ctx.fillStyle = `rgba(255,245,180,${(hovered?0.6:0.3)*eased})`; ctx.fill();
+
               ctx.restore();
             }
           }
