@@ -27,7 +27,7 @@ import Layout from '../layouts/Layout.astro';
       #modal { background: rgba(240,237,232,0.04); border: 1px solid rgba(240,237,232,0.1); border-radius: 16px; padding: 3rem; max-width: 680px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative; transform: translateY(30px); transition: transform .4s cubic-bezier(.16,1,.3,1); }
       #modal-overlay.open #modal { transform: translateY(0); }
       #modal h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2rem,5vw,3.5rem); font-weight: 300; letter-spacing: .3em; text-transform: uppercase; margin-bottom: 1.5rem; }
-      #modal p { font-family: 'DM Mono', monospace; font-size: .85rem; line-height: 1.9; color: var(--muted); }
+      #modal p { font-family: 'DM Mono', monospace; font-size: .85rem; line-height: 1.9; color: rgba(240,237,232,0.85); }
       #modal-close { position: absolute; top: 1.2rem; right: 1.5rem; background: none; border: none; color: var(--muted); font-size: 1.5rem; cursor: pointer; line-height: 1; transition: color .2s; }
       #modal-close:hover { color: var(--text); }
       #msg-overlay { position: fixed; inset: 0; background: rgba(8,8,16,0.85); backdrop-filter: blur(12px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
@@ -200,7 +200,18 @@ import Layout from '../layouts/Layout.astro';
     function closeModal(){ modal.classList.remove('open'); }
     const ABOUT_IDX = 3;
     const MSG_IDX = 15;
-    const LABELS = Array.from({length:41}, (_,i) => i === ABOUT_IDX ? 'about' : i === MSG_IDX ? 'message' : '');
+    const LABELS: string[] = Array.from({length:41}, (_,i) => i === ABOUT_IDX ? 'about' : i === MSG_IDX ? 'message' : '');
+
+    // Load frases from JSON and assign to spare circles
+    fetch('/frases.json')
+      .then(r => r.json())
+      .then(data => {
+        const spareIdxs = LABELS.map((l,i) => l === '' ? i : -1).filter(i => i !== -1);
+        data.frases.forEach((f: {texto: string}, i: number) => {
+          if(spareIdxs[i] !== undefined) LABELS[spareIdxs[i]] = f.texto;
+        });
+      })
+      .catch(() => {});
 
     // Message modal
     const msgOverlay = document.getElementById('msg-overlay')!;
@@ -261,7 +272,7 @@ import Layout from '../layouts/Layout.astro';
     }
 
     function createCircle(i: number): Circle {
-      const r = (i === ABOUT_IDX || i === MSG_IDX) ? rnd(55,75) : rnd(12,140);
+      const r = i === MSG_IDX ? rnd(22,32) : (i === ABOUT_IDX ? rnd(55,75) : rnd(12,140));
       return { id:i, x:rnd(r,W-r), y:rnd(r,H-r), r, baseR:r, color:COLORS[i%COLORS.length], alpha:0, targetAlpha:0, label:LABELS[i], vx:rnd(-0.18,0.18), vy:rnd(-0.18,0.18), delay:i*40, born:performance.now(), phase:rnd(0,Math.PI*2) };
     }
 
@@ -287,7 +298,7 @@ import Layout from '../layouts/Layout.astro';
         if(isHovered) hoveredCircle=c;
         if(isHovered && lastHoveredId !== c.id){ playNote(NOTES[c.id % NOTES.length]); lastHoveredId = c.id; }
         if(!isHovered && lastHoveredId === c.id) lastHoveredId = -1;
-        if(hoveredCircle?.label) cursor.classList.add('on-bubble'); else cursor.classList.remove('on-bubble');
+        if(hoveredCircle && LABELS[hoveredCircle.id]) cursor.classList.add('on-bubble'); else cursor.classList.remove('on-bubble');
         canvas.style.cursor = 'none';
         c.targetAlpha = isHovered?1:0;
         c.alpha += (c.targetAlpha-c.alpha)*0.08;
@@ -302,37 +313,88 @@ import Layout from '../layouts/Layout.astro';
         }
         ctx.beginPath();ctx.arc(c.x,c.y,displayR,0,Math.PI*2);
         if(c.alpha>0.01){
+          const bubbleColor = LABELS[c.id] === 'message' ? '#ffd166' : c.color;
           const fill=ctx.createRadialGradient(c.x,c.y-displayR*0.3,displayR*0.1,c.x,c.y,displayR);
-          fill.addColorStop(0,c.color+'ff');fill.addColorStop(1,c.color+'99');
+          fill.addColorStop(0,bubbleColor+'ff');fill.addColorStop(1,bubbleColor+'99');
           ctx.fillStyle=fill;ctx.globalAlpha=c.alpha*eased;ctx.fill();ctx.globalAlpha=1;
         } else {
           ctx.strokeStyle=`rgba(240,237,232,${0.08*eased})`;ctx.lineWidth=1;ctx.stroke();
-          if(c.label){
+          if(LABELS[c.id]){
             const pulse = 0.5 + 0.5*Math.sin(now*0.0015 + c.phase);
+            const isMsg = LABELS[c.id] === 'message';
+            const glowColor = isMsg ? '#ffd166' : c.color;
             const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2);
-            glow2.addColorStop(0, c.color+Math.round(pulse*40).toString(16).padStart(2,'0'));
+            glow2.addColorStop(0, glowColor+Math.round(pulse*50).toString(16).padStart(2,'0'));
             glow2.addColorStop(1,'transparent');
             ctx.beginPath();ctx.arc(c.x,c.y,displayR*2,0,Math.PI*2);
             ctx.fillStyle=glow2;ctx.fill();
+            if(isMsg){
+              const numRays = 16;
+              const rot = now * 0.0003;
+              const hovered = c.alpha > 0.5;
+              ctx.save();
+              ctx.translate(c.x, c.y);
+              ctx.rotate(rot);
+              for(let ri=0;ri<numRays;ri++){
+                const angle = (ri/numRays)*Math.PI*2;
+                const breathe = Math.sin(now*0.0018 + ri*0.8);
+                const inner = displayR + 3;
+                const rayLen = hovered
+                  ? displayR*(2.5 + 0.8*breathe)
+                  : displayR*(1.2 + 0.4*breathe);
+                const outer = inner + rayLen;
+                const halfW = hovered ? 2.5 : 1.5;
+                const px = Math.cos(angle), py = Math.sin(angle);
+                const nx = -py, ny = px;
+                const alpha = (hovered ? 0.7 : 0.35) * eased;
+                const grad = ctx.createLinearGradient(
+                  px*inner, py*inner, px*outer, py*outer
+                );
+                grad.addColorStop(0, `rgba(255,220,80,${alpha})`);
+                grad.addColorStop(1, `rgba(255,180,30,0)`);
+                ctx.beginPath();
+                ctx.moveTo(px*inner + nx*halfW, py*inner + ny*halfW);
+                ctx.lineTo(px*outer, py*outer);
+                ctx.lineTo(px*inner - nx*halfW, py*inner - ny*halfW);
+                ctx.closePath();
+                ctx.fillStyle = grad;
+                ctx.fill();
+              }
+              ctx.restore();
+            }
           }
         }
-        if(c.label && c.alpha > 0.3 && displayR > 20){
+        const label = LABELS[c.id] || '';
+        const isNav = label === 'about' || label === 'message';
+        if(label && c.alpha > 0.3){
           ctx.globalAlpha = c.alpha * eased;
-          ctx.fillStyle = '#080810';
-          ctx.font = `bold ${Math.max(10, displayR*0.28)}px 'DM Mono',monospace`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText(c.label, c.x, c.y);
+          if(isNav && displayR > 20){
+            // about & message: text inside bubble
+            ctx.fillStyle = '#080810';
+            ctx.font = `bold ${Math.max(10, displayR*0.28)}px 'DM Mono',monospace`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(label, c.x, c.y);
+          } else if(!isNav){
+            // frases: elegant text outside below bubble
+            ctx.fillStyle = '#f0ede8';
+            ctx.font = `300 ${Math.max(13,Math.min(18,displayR*0.3))}px 'Cormorant Garamond',serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            const maxWidth = Math.min(320, W * 0.7);
+            ctx.fillText(label, c.x, c.y + displayR + 14, maxWidth);
+          }
           ctx.globalAlpha = 1;
         }
       });
       requestAnimationFrame(draw);
     }
 
+
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
     if (isMobile) { document.getElementById('hint')!.textContent = 'tap the circles'; }
     window.addEventListener('mousemove',e=>{ mouse.x=e.clientX;mouse.y=e.clientY; (cursor as HTMLElement).style.left=e.clientX+'px'; (cursor as HTMLElement).style.top=e.clientY+'px'; });
     canvas.addEventListener('click', () => {
-      if(hoveredCircle?.label && SECTIONS[hoveredCircle.label]) SECTIONS[hoveredCircle.label]();
+      const lbl = hoveredCircle ? LABELS[hoveredCircle.id] : '';
+      if(lbl && SECTIONS[lbl]) SECTIONS[lbl]();
     });
     canvas.addEventListener('touchend', e => {
       const t = e.changedTouches[0];
