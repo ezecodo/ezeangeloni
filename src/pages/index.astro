@@ -208,13 +208,29 @@ import Layout from '../layouts/Layout.astro';
     const MSG_IDX = 15;
     const LABELS: string[] = Array.from({length:41}, (_,i) => i === ABOUT_IDX ? 'about' : i === MSG_IDX ? 'message' : '');
 
-    // Load frases from JSON and assign to spare circles
+    // Load frases from JSON — handles text and images
+    const IMAGES = new Map<number, HTMLImageElement>();
     fetch('/frases.json')
       .then(r => r.json())
       .then(data => {
         const spareIdxs = LABELS.map((l,i) => l === '' ? i : -1).filter(i => i !== -1);
-        data.frases.forEach((f: {texto: string}, i: number) => {
-          if(spareIdxs[i] !== undefined) LABELS[spareIdxs[i]] = f.texto;
+        let si = 0;
+        data.frases.forEach((f: {texto?: string, imagen?: string}) => {
+          if(spareIdxs[si] === undefined) return;
+          const idx = spareIdxs[si];
+          if(f.imagen){
+            LABELS[idx] = '__img__';
+            const img = new Image();
+            img.src = f.imagen;
+            img.onload = () => IMAGES.set(idx, img);
+          } else if(f.texto){
+            LABELS[idx] = f.texto;
+          }
+          si++;
+        });
+        // resize image circles now that labels are known
+        circles.forEach(c => {
+          if(LABELS[c.id] === '__img__'){ c.r = 50; c.baseR = 50; }
         });
       })
       .catch(() => {});
@@ -346,9 +362,9 @@ import Layout from '../layouts/Layout.astro';
           }
         } else {
           ctx.strokeStyle=`rgba(240,237,232,${0.08*eased})`;ctx.lineWidth=1;ctx.stroke();
-          if(LABELS[c.id]){
+          if(LABELS[c.id] || IMAGES.has(c.id)){
             const pulse = 0.5 + 0.5*Math.sin(now*0.0015 + c.phase);
-            const glowColor = isMsg ? '#ffd166' : c.color;
+            const glowColor = isMsg ? '#ffd166' : LABELS[c.id]==='__img__' ? '#f0ede8' : c.color;
             if(!isSafari){
               const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2);
               glow2.addColorStop(0, glowColor+Math.round(pulse*50).toString(16).padStart(2,'0'));
@@ -408,8 +424,19 @@ import Layout from '../layouts/Layout.astro';
           }
         }
         const label = LABELS[c.id] || '';
+        const isImg = label === '__img__';
         const isNav = label === 'about' || label === 'message';
-        if(label && c.alpha > 0.3){
+        // image bubble — draw clipped photo when hovered
+        if(isImg && c.alpha > 0.3 && IMAGES.has(c.id)){
+          const img = IMAGES.get(c.id)!;
+          ctx.save();
+          ctx.globalAlpha = c.alpha * eased;
+          ctx.beginPath(); ctx.arc(c.x, c.y, displayR, 0, Math.PI*2); ctx.clip();
+          const s = displayR * 2;
+          ctx.drawImage(img, c.x - displayR, c.y - displayR, s, s);
+          ctx.restore();
+        }
+        if(label && !isImg && c.alpha > 0.3){
           ctx.globalAlpha = c.alpha * eased;
           if(isNav && displayR > 20){
             // about & message: text inside bubble
