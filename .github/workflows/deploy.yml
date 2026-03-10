@@ -22,12 +22,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy via rsync
-        uses: burnett01/rsync-deployments@7.0.1
-        with:
-          switches: -avz --delete
-          path: dist/
-          remote_path: /var/www/ezeangeloni.xyz/html/
-          remote_host: ${{ secrets.VPS_HOST }}
-          remote_user: ${{ secrets.VPS_USER }}
-          remote_key: ${{ secrets.VPS_SSH_KEY }}
+- name: Deploy via rsync
+  uses: burnett01/rsync-deployments@7.0.1
+  with:
+    switches: -avz --delete --exclude='frases.json' --exclude='images/'
+    path: dist/
+    remote_path: /var/www/ezeangeloni.xyz/html/
+    remote_host: ${{ secrets.VPS_HOST }}
+    remote_user: ${{ secrets.VPS_USER }}
+    remote_key: ${{ secrets.VPS_SSH_KEY }}
