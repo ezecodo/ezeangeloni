@@ -47,6 +47,12 @@ import Layout from '../layouts/Layout.astro';
       #msg-send:disabled { opacity: .3; cursor: default; }
       #msg-close { position: absolute; top: 1.2rem; right: 1.5rem; background: none; border: none; color: var(--muted); font-size: 1.5rem; cursor: pointer; transition: color .2s; }
       #msg-close:hover { color: var(--text); }
+      #img-overlay { position: fixed; inset: 0; background: rgba(8,8,16,0.92); backdrop-filter: blur(16px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .3s ease; cursor: pointer; }
+      #img-overlay.open { opacity: 1; pointer-events: all; }
+      #img-overlay img { max-width: 90vw; max-height: 85vh; border-radius: 8px; object-fit: contain; transform: scale(0.92); transition: transform .4s cubic-bezier(.16,1,.3,1); box-shadow: 0 0 60px rgba(0,0,0,0.6); }
+      #img-overlay.open img { transform: scale(1); }
+      #img-close { position: fixed; top: 1.5rem; right: 1.5rem; background: none; border: none; color: rgba(240,237,232,0.5); font-size: 1.5rem; cursor: pointer; z-index: 101; transition: color .2s; }
+      #img-close:hover { color: var(--text); }
       #msg-thanks { text-align: center; padding: 1rem 0; }
       #msg-thanks p { font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-weight: 300; letter-spacing: .2em; margin-bottom: .8rem; }
       #msg-thanks small { font-family: 'DM Mono', monospace; font-size: .72rem; color: var(--muted); letter-spacing: .1em; }
@@ -98,6 +104,11 @@ import Layout from '../layouts/Layout.astro';
         <small>your words are now part of this space</small>
       </div>
     </div>
+  </div>
+
+  <div id="img-overlay">
+    <button id="img-close">✕</button>
+    <img id="img-full" src="" alt="" />
   </div>
 
   <div id="modal-overlay">
@@ -194,6 +205,13 @@ import Layout from '../layouts/Layout.astro';
       songPlaying = false;
     }
     document.addEventListener('keydown', e => { if(e.key === '1') playSong(); });
+    const imgOverlay = document.getElementById('img-overlay')!;
+    const imgFull = document.getElementById('img-full') as HTMLImageElement;
+    document.getElementById('img-close')!.addEventListener('click', closeImgModal);
+    imgOverlay.addEventListener('click', e => { if(e.target === imgOverlay) closeImgModal(); });
+    function openImgModal(src: string){ imgFull.src = src; imgOverlay.classList.add('open'); }
+    function closeImgModal(){ imgOverlay.classList.remove('open'); setTimeout(()=>{ imgFull.src=''; }, 300); }
+
     const SECTIONS: Record<string, () => void> = {
       about: () => openModal(),
       message: () => openMsgModal()
@@ -221,8 +239,8 @@ import Layout from '../layouts/Layout.astro';
           if(f.imagen){
             LABELS[idx] = '__img__';
             const img = new Image();
+            IMAGES.set(idx, img); // set immediately so hover works once loaded
             img.src = f.imagen;
-            img.onload = () => IMAGES.set(idx, img);
           } else if(f.texto){
             LABELS[idx] = f.texto;
           }
@@ -284,7 +302,7 @@ import Layout from '../layouts/Layout.astro';
     function closeMsgModal(){ msgOverlay.classList.remove('open'); }
     document.getElementById('msg-close')!.addEventListener('click', closeMsgModal);
     msgOverlay.addEventListener('click', e => { if(e.target === msgOverlay) closeMsgModal(); });
-    document.addEventListener('keydown', e => { if(e.key === 'Escape'){ closeModal(); closeMsgModal(); } });
+    document.addEventListener('keydown', e => { if(e.key === 'Escape'){ closeModal(); closeMsgModal(); closeImgModal(); } });
     function rnd(a: number, b: number){ return a + Math.random()*(b-a); }
 
     interface Circle {
@@ -364,16 +382,27 @@ import Layout from '../layouts/Layout.astro';
           ctx.strokeStyle=`rgba(240,237,232,${0.08*eased})`;ctx.lineWidth=1;ctx.stroke();
           if(LABELS[c.id] || IMAGES.has(c.id)){
             const pulse = 0.5 + 0.5*Math.sin(now*0.0015 + c.phase);
-            const glowColor = isMsg ? '#ffd166' : LABELS[c.id]==='__img__' ? '#f0ede8' : c.color;
+            const isImgBubble = LABELS[c.id]==='__img__';
+            const glowColor = isMsg ? '#ffd166' : isImgBubble ? '#38bdf8' : c.color;
+            const glowAlpha = isImgBubble ? pulse*120 : pulse*50;
             if(!isSafari){
-              const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2);
-              glow2.addColorStop(0, glowColor+Math.round(pulse*50).toString(16).padStart(2,'0'));
+              const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2.5);
+              glow2.addColorStop(0, glowColor+Math.round(glowAlpha).toString(16).padStart(2,'0'));
               glow2.addColorStop(1,'transparent');
-              ctx.beginPath();ctx.arc(c.x,c.y,displayR*2,0,Math.PI*2);
+              ctx.beginPath();ctx.arc(c.x,c.y,displayR*2.5,0,Math.PI*2);
               ctx.fillStyle=glow2;ctx.fill();
             } else {
-              ctx.beginPath();ctx.arc(c.x,c.y,displayR*1.5,0,Math.PI*2);
-              ctx.fillStyle=glowColor;ctx.globalAlpha=pulse*0.12*eased;ctx.fill();ctx.globalAlpha=1;
+              ctx.beginPath();ctx.arc(c.x,c.y,displayR*1.8,0,Math.PI*2);
+              ctx.fillStyle=glowColor;ctx.globalAlpha=(isImgBubble?0.28:0.12)*pulse*eased;ctx.fill();ctx.globalAlpha=1;
+            }
+            // photo icon on image bubble
+            if(isImgBubble){
+              ctx.globalAlpha = pulse * 0.7 * eased;
+              ctx.fillStyle = '#38bdf8';
+              ctx.font = `${Math.max(12,displayR*0.45)}px serif`;
+              ctx.textAlign='center'; ctx.textBaseline='middle';
+              ctx.fillText('◎', c.x, c.y);
+              ctx.globalAlpha = 1;
             }
             if(isMsg){
               const hovered = c.alpha > 0.5;
@@ -427,14 +456,16 @@ import Layout from '../layouts/Layout.astro';
         const isImg = label === '__img__';
         const isNav = label === 'about' || label === 'message';
         // image bubble — draw clipped photo when hovered
-        if(isImg && c.alpha > 0.3 && IMAGES.has(c.id)){
-          const img = IMAGES.get(c.id)!;
-          ctx.save();
-          ctx.globalAlpha = c.alpha * eased;
-          ctx.beginPath(); ctx.arc(c.x, c.y, displayR, 0, Math.PI*2); ctx.clip();
-          const s = displayR * 2;
-          ctx.drawImage(img, c.x - displayR, c.y - displayR, s, s);
-          ctx.restore();
+        if(isImg && c.alpha > 0.3){
+          const img = IMAGES.get(c.id);
+          if(img && img.complete && img.naturalWidth > 0){
+            ctx.save();
+            ctx.globalAlpha = c.alpha * eased;
+            ctx.beginPath(); ctx.arc(c.x, c.y, displayR, 0, Math.PI*2); ctx.clip();
+            const s = displayR * 2;
+            ctx.drawImage(img, c.x - displayR, c.y - displayR, s, s);
+            ctx.restore();
+          }
         }
         if(label && !isImg && c.alpha > 0.3){
           ctx.globalAlpha = c.alpha * eased;
@@ -479,13 +510,26 @@ import Layout from '../layouts/Layout.astro';
     if (isMobile) { document.getElementById('hint')!.textContent = 'tap the circles'; }
     window.addEventListener('mousemove',e=>{ mouse.x=e.clientX;mouse.y=e.clientY; (cursor as HTMLElement).style.left=e.clientX+'px'; (cursor as HTMLElement).style.top=e.clientY+'px'; });
     canvas.addEventListener('click', () => {
-      const lbl = hoveredCircle ? LABELS[hoveredCircle.id] : '';
-      if(lbl && SECTIONS[lbl]) SECTIONS[lbl]();
+      if(!hoveredCircle) return;
+      const lbl = LABELS[hoveredCircle.id];
+      if(lbl === '__img__'){
+        const img = IMAGES.get(hoveredCircle.id);
+        if(img?.src) openImgModal(img.src);
+      } else if(lbl && SECTIONS[lbl]){
+        SECTIONS[lbl]();
+      }
     });
     canvas.addEventListener('touchend', e => {
       const t = e.changedTouches[0];
-      const hit = circles.find(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r && c.label);
-      if(hit && SECTIONS[hit.label]) SECTIONS[hit.label]();
+      const hit = circles.find(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r);
+      if(!hit) return;
+      const lbl = LABELS[hit.id];
+      if(lbl === '__img__'){
+        const img = IMAGES.get(hit.id);
+        if(img?.src) openImgModal(img.src);
+      } else if(lbl && SECTIONS[lbl]){
+        SECTIONS[lbl]();
+      }
     }, {passive:true});
     window.addEventListener('touchstart',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
     window.addEventListener('touchmove',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
