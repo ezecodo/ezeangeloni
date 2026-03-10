@@ -339,17 +339,28 @@ import Layout from '../layouts/Layout.astro';
       ctx.clearRect(0,0,W,H);
       if(gridCanvas) ctx.drawImage(gridCanvas,0,0);
       hoveredCircle = null;
-      circles.forEach(c=>{
+      // draw content bubbles last so they appear on top
+      const sorted = [...circles].sort((a,b) => {
+        const aHas = LABELS[a.id] ? 1 : 0;
+        const bHas = LABELS[b.id] ? 1 : 0;
+        return aHas - bHas;
+      });
+      // hover detection uses same priority: content bubbles win
+      const hoverSorted = [...sorted].reverse();
+      hoverSorted.forEach(c => {
+        const isHov = dist(mouse.x,mouse.y,c.x,c.y)<c.r;
+        if(isHov && !hoveredCircle) hoveredCircle = c;
+      });
+      sorted.forEach(c=>{
         const age = now - c.born - c.delay;
         if(age<0) return;
         const eased = 1-Math.pow(1-Math.min(age/800,1),3);
         c.x+=c.vx; c.y+=c.vy;
         if(c.x-c.r<0||c.x+c.r>W) c.vx*=-1;
         if(c.y-c.r<0||c.y+c.r>H) c.vy*=-1;
-        const isHovered = dist(mouse.x,mouse.y,c.x,c.y)<c.r;
-        if(isHovered) hoveredCircle=c;
+        const isHovered = hoveredCircle?.id === c.id;
         if(isHovered && lastHoveredId !== c.id){ playNote(NOTES[c.id % NOTES.length]); lastHoveredId = c.id; }
-        if(!isHovered && lastHoveredId === c.id) lastHoveredId = -1;
+        if(!hoveredCircle && lastHoveredId !== -1) lastHoveredId = -1;
         if(hoveredCircle && LABELS[hoveredCircle.id]) cursor.classList.add('on-bubble'); else cursor.classList.remove('on-bubble');
         canvas.style.cursor = 'none';
         c.targetAlpha = isHovered?1:0;
