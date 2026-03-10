@@ -310,13 +310,18 @@ import Layout from '../layouts/Layout.astro';
       vx: number; vy: number; delay: number; born: number; phase: number;
     }
 
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isMobileDevice = window.matchMedia('(max-width: 768px)').matches;
+    const CIRCLE_COUNT = isSafari ? 28 : 41;
+
     function createCircle(i: number): Circle {
-      const r = i === MSG_IDX ? rnd(22,32) : (i === ABOUT_IDX ? rnd(55,75) : rnd(12,140));
+      const r = i === MSG_IDX
+        ? rnd(isMobileDevice ? 16:22, isMobileDevice ? 24:32)
+        : i === ABOUT_IDX
+          ? rnd(isMobileDevice ? 36:55, isMobileDevice ? 50:75)
+          : rnd(isMobileDevice ? 8:12, isMobileDevice ? 65:140);
       return { id:i, x:rnd(r,W-r), y:rnd(r,H-r), r, baseR:r, color:COLORS[i%COLORS.length], alpha:0, targetAlpha:0, label:LABELS[i], vx:rnd(-0.18,0.18), vy:rnd(-0.18,0.18), delay:i*40, born:performance.now(), phase:rnd(0,Math.PI*2) };
     }
-
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    const CIRCLE_COUNT = isSafari ? 28 : 41;
     let circles: Circle[] = Array.from({length:CIRCLE_COUNT},(_,i)=>createCircle(i));
     let hoveredCircle: Circle | null = null;
     let prevUnderCursor = new Set<number>();
@@ -524,8 +529,7 @@ import Layout from '../layouts/Layout.astro';
     }
 
 
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    if (isMobile) { document.getElementById('hint')!.textContent = 'tap the circles'; }
+    if (isMobileDevice) { document.getElementById('hint')!.textContent = 'tap the circles'; }
     window.addEventListener('mousemove',e=>{ mouse.x=e.clientX;mouse.y=e.clientY; (cursor as HTMLElement).style.left=e.clientX+'px'; (cursor as HTMLElement).style.top=e.clientY+'px'; });
     canvas.addEventListener('click', () => {
       if(!hoveredCircle) return;
@@ -539,7 +543,9 @@ import Layout from '../layouts/Layout.astro';
     });
     canvas.addEventListener('touchend', e => {
       const t = e.changedTouches[0];
-      const hit = circles.find(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r);
+      // same priority as draw: content bubbles win over empty ones
+      const hits = circles.filter(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r);
+      const hit = hits.find(c => LABELS[c.id]) ?? hits[0];
       if(!hit) return;
       const lbl = LABELS[hit.id];
       if(lbl === '__img__'){
