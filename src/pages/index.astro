@@ -157,7 +157,6 @@ import Layout from '../layouts/Layout.astro';
       layer(freq/2,   'triangle', 0.5,  0.18);        // bass — cuerpo, corto
       layer(freq*2,   'sine',     0.15, 0.2);         // shimmer — brillo suave
     }
-    let lastHoveredId = -1;
     let songPlaying = false;
     // Note frequencies
     const G4=392, A4=440, B4=493.88, C5=523.25, D5=587.33, E4=329.63, D4=293.66, C4=261.63;
@@ -320,6 +319,7 @@ import Layout from '../layouts/Layout.astro';
     const CIRCLE_COUNT = isSafari ? 28 : 41;
     let circles: Circle[] = Array.from({length:CIRCLE_COUNT},(_,i)=>createCircle(i));
     let hoveredCircle: Circle | null = null;
+    let prevUnderCursor = new Set<number>();
 
     // Cache grid on offscreen canvas
     let gridCanvas: HTMLCanvasElement | null = null;
@@ -345,12 +345,21 @@ import Layout from '../layouts/Layout.astro';
         const bHas = LABELS[b.id] ? 1 : 0;
         return aHas - bHas;
       });
-      // hover detection uses same priority: content bubbles win
+      // hover detection: topmost content bubble wins for click/visual
       const hoverSorted = [...sorted].reverse();
+      const allUnderCursor = new Set<number>();
       hoverSorted.forEach(c => {
         const isHov = dist(mouse.x,mouse.y,c.x,c.y)<c.r;
-        if(isHov && !hoveredCircle) hoveredCircle = c;
+        if(isHov){
+          allUnderCursor.add(c.id);
+          if(!hoveredCircle) hoveredCircle = c;
+        }
       });
+      // sound for every bubble the cursor just entered
+      allUnderCursor.forEach(id => {
+        if(!prevUnderCursor.has(id)) playNote(NOTES[id % NOTES.length]);
+      });
+      prevUnderCursor = allUnderCursor;
       sorted.forEach(c=>{
         const age = now - c.born - c.delay;
         if(age<0) return;
@@ -359,8 +368,6 @@ import Layout from '../layouts/Layout.astro';
         if(c.x-c.r<0||c.x+c.r>W) c.vx*=-1;
         if(c.y-c.r<0||c.y+c.r>H) c.vy*=-1;
         const isHovered = hoveredCircle?.id === c.id;
-        if(isHovered && lastHoveredId !== c.id){ playNote(NOTES[c.id % NOTES.length]); lastHoveredId = c.id; }
-        if(!hoveredCircle && lastHoveredId !== -1) lastHoveredId = -1;
         if(hoveredCircle && LABELS[hoveredCircle.id]) cursor.classList.add('on-bubble'); else cursor.classList.remove('on-bubble');
         canvas.style.cursor = 'none';
         c.targetAlpha = isHovered?1:0;
