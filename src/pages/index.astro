@@ -68,7 +68,8 @@ import Layout from '../layouts/Layout.astro';
       }
       #logo { width: clamp(16rem,40vw,30rem); margin-bottom: -8rem; filter: brightness(0) invert(1); animation: fadeUp 1.2s cubic-bezier(.16,1,.3,1) .3s forwards, logoGlow 6s ease-in-out 1.5s infinite; opacity: 0; }
       @media (max-width: 768px) {
-        html, body { cursor: auto; }
+        html, body { cursor: auto; touch-action: manipulation; }
+        canvas { touch-action: manipulation; }
         #cursor, #cursor::before, #cursor::after { display: none; }
         #hero { justify-content: center; padding-top: 0; gap: 4px; }
         #logo { width: 72vw; margin-bottom: -5rem; }
@@ -531,7 +532,10 @@ import Layout from '../layouts/Layout.astro';
 
     if (isMobileDevice) { document.getElementById('hint')!.textContent = 'tap the circles'; }
     window.addEventListener('mousemove',e=>{ mouse.x=e.clientX;mouse.y=e.clientY; (cursor as HTMLElement).style.left=e.clientX+'px'; (cursor as HTMLElement).style.top=e.clientY+'px'; });
+    let lastTouchHandled = false;
     canvas.addEventListener('click', () => {
+      // on mobile the browser fires a synthetic click after touchend — ignore it
+      if(lastTouchHandled){ lastTouchHandled = false; return; }
       if(!hoveredCircle) return;
       const lbl = LABELS[hoveredCircle.id];
       if(lbl === '__img__'){
@@ -542,9 +546,14 @@ import Layout from '../layouts/Layout.astro';
       }
     });
     canvas.addEventListener('touchend', e => {
+      // ignore if any modal is open
+      if(modal.classList.contains('open') || msgOverlay.classList.contains('open') || imgOverlay.classList.contains('open')) return;
+      lastTouchHandled = true;
       const t = e.changedTouches[0];
-      // same priority as draw: content bubbles win over empty ones
-      const hits = circles.filter(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r);
+      // touch hit area is 1.4x radius to compensate for finger size
+      const TAP = 1.4;
+      const hits = circles.filter(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r * TAP);
+      // content bubbles win over empty ones
       const hit = hits.find(c => LABELS[c.id]) ?? hits[0];
       if(!hit) return;
       const lbl = LABELS[hit.id];
