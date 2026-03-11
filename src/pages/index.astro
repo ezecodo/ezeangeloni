@@ -71,10 +71,11 @@ import Layout from '../layouts/Layout.astro';
         html, body { cursor: auto; touch-action: manipulation; }
         canvas { touch-action: manipulation; }
         #cursor, #cursor::before, #cursor::after { display: none; }
-        #hero { justify-content: center; padding-top: 0; gap: 4px; }
-        #logo { width: 72vw; margin-bottom: -5rem; }
-        #hero p { font-size: clamp(.75rem,4vw,1rem); letter-spacing: .2em; }
-        #hint { font-size: .6rem; bottom: 1.5rem; }
+        #hero { justify-content: center; padding-top: 0; gap: 0; transform: translateY(-6vh); }
+        #logo { width: 48vw; margin-bottom: -2.8rem; }
+        #hero-name { font-size: clamp(.95rem,5vw,1.4rem) !important; letter-spacing: .35em !important; }
+        #hero-sub { font-size: clamp(.6rem,3vw,.78rem); letter-spacing: .18em; }
+        #hint { font-size: .58rem; bottom: 1.2rem; }
       }
     </style>
   </Fragment>
@@ -83,8 +84,8 @@ import Layout from '../layouts/Layout.astro';
   <canvas id="canvas"></canvas>
   <div id="hero">
     <img id="logo" src="/eZe.svg" alt="eZe" />
-    <p style="font-family: 'Cormorant Garamond', serif; font-size: clamp(1.2rem,3.5vw,2.4rem); font-weight: 300; letter-spacing: .5em; text-transform: uppercase; color: var(--text); opacity: 0; animation: fadeUp 1.2s cubic-bezier(.16,1,.3,1) .5s forwards; padding-left: .5em;">angeloni</p>
-    <p>Developer · Builder · Explorer</p>
+    <p id="hero-name" style="font-family: 'Cormorant Garamond', serif; font-size: clamp(1.2rem,3.5vw,2.4rem); font-weight: 300; letter-spacing: .5em; text-transform: uppercase; color: var(--text); opacity: 0; animation: fadeUp 1.2s cubic-bezier(.16,1,.3,1) .5s forwards; padding-left: .5em;">angeloni</p>
+    <p id="hero-sub">Developer · Builder · Explorer</p>
   </div>
   <div id="hint">explore the circles</div>
 
@@ -313,7 +314,8 @@ import Layout from '../layouts/Layout.astro';
 
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     const isMobileDevice = window.matchMedia('(max-width: 768px)').matches;
-    const CIRCLE_COUNT = isSafari ? 28 : 41;
+    const CIRCLE_COUNT = isMobileDevice ? 16 : (isSafari ? 28 : 41);
+    const simple = isSafari || isMobileDevice; // skip gradients for performance
 
     function createCircle(i: number): Circle {
       const r = i === MSG_IDX
@@ -376,7 +378,8 @@ import Layout from '../layouts/Layout.astro';
         const isHovered = hoveredCircle?.id === c.id;
         if(hoveredCircle && LABELS[hoveredCircle.id]) cursor.classList.add('on-bubble'); else cursor.classList.remove('on-bubble');
         canvas.style.cursor = 'none';
-        c.targetAlpha = isHovered?1:0;
+        const hasContent = !!(LABELS[c.id] || IMAGES.has(c.id));
+        c.targetAlpha = isHovered ? 1 : (isMobileDevice ? (hasContent ? 0.7 : 0.38) : 0);
         c.alpha += (c.targetAlpha-c.alpha)*0.08;
         const isMsg = LABELS[c.id] === 'message';
         const pulse = isHovered
@@ -384,7 +387,7 @@ import Layout from '../layouts/Layout.astro';
           : 1;
         const displayR = c.baseR*eased*pulse;
         if(c.alpha>0.01){
-          if(!isSafari){
+          if(!simple){
             const glow=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2.5);
             glow.addColorStop(0,c.color+Math.round(c.alpha*60).toString(16).padStart(2,'0'));
             glow.addColorStop(1,'transparent');
@@ -395,7 +398,7 @@ import Layout from '../layouts/Layout.astro';
         ctx.beginPath();ctx.arc(c.x,c.y,displayR,0,Math.PI*2);
         if(c.alpha>0.01){
           const bubbleColor = LABELS[c.id] === 'message' ? '#ffd166' : c.color;
-          if(isSafari){
+          if(simple){
             ctx.fillStyle=bubbleColor;ctx.globalAlpha=c.alpha*eased*0.85;ctx.fill();ctx.globalAlpha=1;
           } else {
             const fill=ctx.createRadialGradient(c.x,c.y-displayR*0.3,displayR*0.1,c.x,c.y,displayR);
@@ -409,7 +412,7 @@ import Layout from '../layouts/Layout.astro';
             const isImgBubble = LABELS[c.id]==='__img__';
             const glowColor = isMsg ? '#ffd166' : isImgBubble ? '#38bdf8' : c.color;
             const glowAlpha = isImgBubble ? pulse*120 : pulse*50;
-            if(!isSafari){
+            if(!simple){
               const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2.5);
               glow2.addColorStop(0, glowColor+Math.round(glowAlpha).toString(16).padStart(2,'0'));
               glow2.addColorStop(1,'transparent');
@@ -444,8 +447,8 @@ import Layout from '../layouts/Layout.astro';
                 ctx.fillStyle = `rgba(255,200,50,${ringAlpha})`; ctx.fill();
               }
 
-              // alternating long/short rays (24 total)
-              const numRays = 24;
+              // alternating long/short rays
+              const numRays = isMobileDevice ? 12 : 24;
               for(let ri=0;ri<numRays;ri++){
                 const angle = (ri/numRays)*Math.PI*2;
                 const isLong = ri % 2 === 0;
@@ -479,8 +482,8 @@ import Layout from '../layouts/Layout.astro';
         const label = LABELS[c.id] || '';
         const isImg = label === '__img__';
         const isNav = label === 'about' || label === 'message';
-        // image bubble — draw clipped photo when hovered
-        if(isImg && c.alpha > 0.3){
+        // image bubble — always visible on mobile, hover-reveal on desktop
+        if(isImg && c.alpha > (isMobileDevice ? 0.05 : 0.3)){
           const img = IMAGES.get(c.id);
           if(img && img.complete && img.naturalWidth > 0){
             ctx.save();
@@ -491,7 +494,7 @@ import Layout from '../layouts/Layout.astro';
             ctx.restore();
           }
         }
-        if(label && !isImg && c.alpha > 0.3){
+        if(label && !isImg && c.alpha > (isMobileDevice ? 0.05 : 0.3)){
           ctx.globalAlpha = c.alpha * eased;
           if(isNav && displayR > 20){
             // about & message: text inside bubble
@@ -500,12 +503,14 @@ import Layout from '../layouts/Layout.astro';
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(label, c.x, c.y);
           } else if(!isNav){
-            // frases: large elegant text below bubble, wrapped
-            const fontSize = Math.max(22, Math.min(32, W * 0.025));
+            // frases: large elegant text, smart positioning
+            const fontSize = isMobileDevice
+              ? Math.max(15, Math.min(20, W * 0.045))
+              : Math.max(22, Math.min(32, W * 0.025));
             ctx.fillStyle = '#f0ede8';
             ctx.font = `300 italic ${fontSize}px 'Cormorant Garamond',serif`;
             ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-            const maxWidth = Math.min(420, W * 0.75);
+            const maxWidth = Math.min(420, W * 0.82);
             const words = label.split(' ');
             const lines: string[] = [];
             let line = '';
@@ -516,7 +521,10 @@ import Layout from '../layouts/Layout.astro';
             }
             if(line) lines.push(line);
             const lineH = fontSize * 1.35;
-            const startY = c.y + displayR + 16;
+            const totalTextH = lines.length * lineH;
+            // place above bubble if not enough space below
+            const spaceBelow = H - (c.y + displayR + 20) - totalTextH;
+            const startY = spaceBelow > 0 ? c.y + displayR + 16 : c.y - displayR - totalTextH - 8;
             lines.forEach((l, i) => {
               ctx.globalAlpha = c.alpha * eased;
               ctx.fillText(l, c.x, startY + i * lineH);
