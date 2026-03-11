@@ -47,10 +47,15 @@ import Layout from '../layouts/Layout.astro';
       #msg-send:disabled { opacity: .3; cursor: default; }
       #msg-close { position: absolute; top: 1.2rem; right: 1.5rem; background: none; border: none; color: var(--muted); font-size: 1.5rem; cursor: pointer; transition: color .2s; }
       #msg-close:hover { color: var(--text); }
-      #img-overlay { position: fixed; inset: 0; background: rgba(8,8,16,0.92); backdrop-filter: blur(16px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .3s ease; cursor: pointer; }
+      #img-overlay { position: fixed; inset: 0; background: rgba(8,8,16,0.92); backdrop-filter: blur(16px); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; opacity: 0; pointer-events: none; transition: opacity .3s ease; cursor: pointer; }
       #img-overlay.open { opacity: 1; pointer-events: all; }
-      #img-overlay img { max-width: 90vw; max-height: 85vh; border-radius: 8px; object-fit: contain; transform: scale(0.92); transition: transform .4s cubic-bezier(.16,1,.3,1); box-shadow: 0 0 60px rgba(0,0,0,0.6); }
+      #img-overlay img { max-width: 90vw; max-height: 85vh; border-radius: 8px; object-fit: contain; transform: scale(0.92); transition: transform .4s cubic-bezier(.16,1,.3,1), opacity .3s ease; box-shadow: 0 0 60px rgba(0,0,0,0.6); }
       #img-overlay.open img { transform: scale(1); }
+      #img-overlay img.loading { opacity: 0; }
+      #img-loader { width: 32px; height: 32px; border: 2px solid rgba(240,237,232,0.15); border-top-color: rgba(240,237,232,0.7); border-radius: 50%; animation: spin .8s linear infinite; display: none; }
+      #img-overlay.loading #img-loader { display: block; }
+      #img-overlay.loading img { display: none; }
+      @keyframes spin { to { transform: rotate(360deg); } }
       #img-close { position: fixed; top: 1.5rem; right: 1.5rem; background: none; border: none; color: rgba(240,237,232,0.5); font-size: 1.5rem; cursor: pointer; z-index: 101; transition: color .2s; }
       #img-close:hover { color: var(--text); }
       #msg-thanks { text-align: center; padding: 1rem 0; }
@@ -110,6 +115,7 @@ import Layout from '../layouts/Layout.astro';
 
   <div id="img-overlay">
     <button id="img-close">✕</button>
+    <div id="img-loader"></div>
     <img id="img-full" src="" alt="" />
   </div>
 
@@ -210,8 +216,18 @@ import Layout from '../layouts/Layout.astro';
     const imgFull = document.getElementById('img-full') as HTMLImageElement;
     document.getElementById('img-close')!.addEventListener('click', closeImgModal);
     imgOverlay.addEventListener('click', e => { if(e.target === imgOverlay) closeImgModal(); });
-    function openImgModal(src: string){ imgFull.src = src; imgOverlay.classList.add('open'); }
-    function closeImgModal(){ imgOverlay.classList.remove('open'); setTimeout(()=>{ imgFull.src=''; }, 300); }
+    function openImgModal(src: string){
+      imgFull.src = '';
+      imgOverlay.classList.add('open', 'loading');
+      const tmp = new Image();
+      tmp.onload = () => {
+        imgFull.src = src;
+        imgOverlay.classList.remove('loading');
+      };
+      tmp.onerror = () => { imgOverlay.classList.remove('loading'); };
+      tmp.src = src;
+    }
+    function closeImgModal(){ imgOverlay.classList.remove('open','loading'); setTimeout(()=>{ imgFull.src=''; }, 300); }
 
     const SECTIONS: Record<string, () => void> = {
       about: () => openModal(),
@@ -544,6 +560,7 @@ import Layout from '../layouts/Layout.astro';
     canvas.addEventListener('click', () => {
       // on mobile the browser fires a synthetic click after touchend — ignore it
       if(lastTouchHandled){ lastTouchHandled = false; return; }
+
       if(!hoveredCircle) return;
       const lbl = LABELS[hoveredCircle.id];
       if(lbl === '__img__'){
@@ -563,7 +580,9 @@ import Layout from '../layouts/Layout.astro';
       const hits = circles.filter(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r * TAP);
       // content bubbles win over empty ones
       const hit = hits.find(c => LABELS[c.id]) ?? hits[0];
-      if(!hit) return;
+      if(!hit){ lastTouchHandled = false; return; } // no hit — unlock for next tap
+      // safety: auto-reset flag in case synthetic click never fires
+      setTimeout(() => { lastTouchHandled = false; }, 600);
       const lbl = LABELS[hit.id];
       if(lbl === '__img__'){
         const img = IMAGES.get(hit.id);
