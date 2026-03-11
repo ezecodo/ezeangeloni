@@ -319,10 +319,10 @@ import Layout from '../layouts/Layout.astro';
 
     function createCircle(i: number): Circle {
       const r = i === MSG_IDX
-        ? rnd(isMobileDevice ? 16:22, isMobileDevice ? 24:32)
+        ? rnd(isMobileDevice ? 13:22, isMobileDevice ? 19:32)
         : i === ABOUT_IDX
-          ? rnd(isMobileDevice ? 36:55, isMobileDevice ? 50:75)
-          : rnd(isMobileDevice ? 8:12, isMobileDevice ? 65:140);
+          ? rnd(isMobileDevice ? 22:55, isMobileDevice ? 32:75)
+          : rnd(isMobileDevice ? 6:12, isMobileDevice ? 30:140);
       return { id:i, x:rnd(r,W-r), y:rnd(r,H-r), r, baseR:r, color:COLORS[i%COLORS.length], alpha:0, targetAlpha:0, label:LABELS[i], vx:rnd(-0.18,0.18), vy:rnd(-0.18,0.18), delay:i*40, born:performance.now(), phase:rnd(0,Math.PI*2) };
     }
     let circles: Circle[] = Array.from({length:CIRCLE_COUNT},(_,i)=>createCircle(i));
@@ -378,8 +378,7 @@ import Layout from '../layouts/Layout.astro';
         const isHovered = hoveredCircle?.id === c.id;
         if(hoveredCircle && LABELS[hoveredCircle.id]) cursor.classList.add('on-bubble'); else cursor.classList.remove('on-bubble');
         canvas.style.cursor = 'none';
-        const hasContent = !!(LABELS[c.id] || IMAGES.has(c.id));
-        c.targetAlpha = isHovered ? 1 : (isMobileDevice ? (hasContent ? 0.7 : 0.38) : 0);
+        c.targetAlpha = isHovered ? 1 : 0;
         c.alpha += (c.targetAlpha-c.alpha)*0.08;
         const isMsg = LABELS[c.id] === 'message';
         const pulse = isHovered
@@ -406,12 +405,13 @@ import Layout from '../layouts/Layout.astro';
             ctx.fillStyle=fill;ctx.globalAlpha=c.alpha*eased;ctx.fill();ctx.globalAlpha=1;
           }
         } else {
-          ctx.strokeStyle=`rgba(240,237,232,${0.08*eased})`;ctx.lineWidth=1;ctx.stroke();
+          ctx.strokeStyle=`rgba(240,237,232,${(isMobileDevice?0.22:0.08)*eased})`;ctx.lineWidth=isMobileDevice?1.5:1;ctx.stroke();
           if(LABELS[c.id] || IMAGES.has(c.id)){
             const pulse = 0.5 + 0.5*Math.sin(now*0.0015 + c.phase);
             const isImgBubble = LABELS[c.id]==='__img__';
             const glowColor = isMsg ? '#ffd166' : isImgBubble ? '#38bdf8' : c.color;
-            const glowAlpha = isImgBubble ? pulse*120 : pulse*50;
+            const glowMult = isMobileDevice ? 2.2 : 1;
+            const glowAlpha = (isImgBubble ? pulse*120 : pulse*50) * glowMult;
             if(!simple){
               const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2.5);
               glow2.addColorStop(0, glowColor+Math.round(glowAlpha).toString(16).padStart(2,'0'));
@@ -574,7 +574,8 @@ import Layout from '../layouts/Layout.astro';
     }, {passive:true});
     window.addEventListener('touchstart',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
     window.addEventListener('touchmove',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
-    window.addEventListener('touchend',()=>{ mouse.x=-999; mouse.y=-999; }, {passive:true});
+    // delay mouse reset so the tap flash is visible before bubble fades
+    window.addEventListener('touchend',()=>{ setTimeout(()=>{ mouse.x=-999; mouse.y=-999; }, 350); }, {passive:true});
     window.addEventListener('resize',()=>{ W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight; buildGrid(); circles=Array.from({length:CIRCLE_COUNT},(_,i)=>createCircle(i)); });
     requestAnimationFrame(draw);
   </script>
