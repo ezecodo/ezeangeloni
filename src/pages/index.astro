@@ -5,7 +5,7 @@ import Layout from '../layouts/Layout.astro';
 <Layout title="Eze Angeloni">
   <Fragment slot="head">
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:ital@0;1&family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:ital@0;1&family=Cormorant+Garamond:ital,wght@0,300;1,300;1,400&family=Playfair+Display:ital@1&family=Lora:ital@1&family=Libre+Baskerville:ital@1&family=EB+Garamond:ital@1&family=Crimson+Text:ital@1&display=swap" rel="stylesheet" />
     <style>
       *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
       :root {
@@ -30,6 +30,14 @@ import Layout from '../layouts/Layout.astro';
       #modal p { font-family: 'DM Mono', monospace; font-size: .85rem; line-height: 1.9; color: rgba(240,237,232,0.85); }
       #modal-close { position: absolute; top: 1.2rem; right: 1.5rem; background: none; border: none; color: var(--muted); font-size: 1.5rem; cursor: pointer; line-height: 1; transition: color .2s; }
       #modal-close:hover { color: var(--text); }
+      #frase-overlay { position: fixed; inset: 0; background: rgba(8,8,16,0.88); backdrop-filter: blur(16px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
+      #frase-overlay.open { opacity: 1; pointer-events: all; }
+      #frase-box { max-width: 600px; width: 88%; position: relative; transform: translateY(24px); transition: transform .4s cubic-bezier(.16,1,.3,1); text-align: center; padding: 1rem; }
+      #frase-overlay.open #frase-box { transform: translateY(0); }
+      #frase-accent { width: 32px; height: 1px; background: currentColor; margin: 0 auto 2rem; opacity: .4; }
+      #frase-text { font-family: 'Cormorant Garamond', serif; font-size: clamp(1.6rem,5vw,3rem); font-weight: 300; font-style: italic; line-height: 1.45; letter-spacing: .01em; color: var(--text); }
+      #frase-close { position: absolute; top: -1rem; right: -.5rem; background: none; border: none; color: var(--muted); font-size: 1.4rem; cursor: pointer; line-height: 1; transition: color .2s; padding: .5rem; }
+      #frase-close:hover { color: var(--text); }
       #msg-overlay { position: fixed; inset: 0; background: rgba(8,8,16,0.85); backdrop-filter: blur(12px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
       #msg-overlay.open { opacity: 1; pointer-events: all; }
       #msg-box { background: rgba(240,237,232,0.04); border: 1px solid rgba(240,237,232,0.1); border-radius: 16px; padding: 2.5rem; max-width: 520px; width: 90%; position: relative; transform: translateY(30px); transition: transform .4s cubic-bezier(.16,1,.3,1); }
@@ -117,6 +125,14 @@ import Layout from '../layouts/Layout.astro';
     <button id="img-close">✕</button>
     <div id="img-loader"></div>
     <img id="img-full" src="" alt="" />
+  </div>
+
+  <div id="frase-overlay">
+    <div id="frase-box">
+      <button id="frase-close">✕</button>
+      <div id="frase-accent"></div>
+      <p id="frase-text"></p>
+    </div>
   </div>
 
   <div id="modal-overlay">
@@ -236,9 +252,32 @@ import Layout from '../layouts/Layout.astro';
     const modal = document.getElementById('modal-overlay')!;
     document.getElementById('modal-close')!.addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if(e.target === modal) closeModal(); });
-    document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal(); });
+    document.addEventListener('keydown', e => { if(e.key === 'Escape'){ closeModal(); closeFraseModal(); } });
     function openModal(){ modal.classList.add('open'); }
     function closeModal(){ modal.classList.remove('open'); }
+
+    const fraseOverlay = document.getElementById('frase-overlay')!;
+    const fraseText = document.getElementById('frase-text')!;
+    const fraseAccent = document.getElementById('frase-accent')!;
+    document.getElementById('frase-close')!.addEventListener('click', closeFraseModal);
+    document.getElementById('frase-close')!.addEventListener('touchstart', e => { e.preventDefault(); closeFraseModal(); }, { passive: false });
+    fraseOverlay.addEventListener('click', e => { if(e.target === fraseOverlay) closeFraseModal(); });
+    fraseOverlay.addEventListener('touchstart', e => { if(e.target === fraseOverlay) { e.preventDefault(); closeFraseModal(); } }, { passive: false });
+    const FRASE_FONTS = [
+      "'Cormorant Garamond'",
+      "'Playfair Display'",
+      "'Lora'",
+      "'Libre Baskerville'",
+      "'EB Garamond'",
+      "'Crimson Text'",
+    ];
+    function openFraseModal(text: string, color?: string) {
+      fraseText.textContent = text;
+      fraseAccent.style.color = color || 'var(--text)';
+      fraseText.style.fontFamily = FRASE_FONTS[Math.floor(Math.random() * FRASE_FONTS.length)] + ', serif';
+      fraseOverlay.classList.add('open');
+    }
+    function closeFraseModal(){ fraseOverlay.classList.remove('open'); }
     const ABOUT_IDX = 3;
     const MSG_IDX = 15;
     const LABELS: string[] = Array.from({length:41}, (_,i) => i === ABOUT_IDX ? 'about' : i === MSG_IDX ? 'message' : '');
@@ -510,43 +549,13 @@ import Layout from '../layouts/Layout.astro';
             ctx.restore();
           }
         }
-        if(label && !isImg && c.alpha > (isMobileDevice ? 0.05 : 0.3)){
+        if(label && !isImg && isNav && c.alpha > 0.3 && displayR > 20){
+          // about & message: label text inside the bubble
           ctx.globalAlpha = c.alpha * eased;
-          if(isNav && displayR > 20){
-            // about & message: text inside bubble
-            ctx.fillStyle = '#080810';
-            ctx.font = `bold ${Math.max(10, displayR*0.28)}px 'DM Mono',monospace`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(label, c.x, c.y);
-          } else if(!isNav){
-            // frases: large elegant text, smart positioning
-            const fontSize = isMobileDevice
-              ? Math.max(15, Math.min(20, W * 0.045))
-              : Math.max(22, Math.min(32, W * 0.025));
-            ctx.fillStyle = '#f0ede8';
-            ctx.font = `300 italic ${fontSize}px 'Cormorant Garamond',serif`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-            const maxWidth = Math.min(420, W * 0.82);
-            const words = label.split(' ');
-            const lines: string[] = [];
-            let line = '';
-            for(const word of words){
-              const test = line ? line + ' ' + word : word;
-              if(ctx.measureText(test).width > maxWidth && line){ lines.push(line); line = word; }
-              else line = test;
-            }
-            if(line) lines.push(line);
-            const lineH = fontSize * 1.35;
-            const totalTextH = lines.length * lineH;
-            // place above bubble if not enough space below
-            const spaceBelow = H - (c.y + displayR + 20) - totalTextH;
-            const startY = spaceBelow > 0 ? c.y + displayR + 16 : c.y - displayR - totalTextH - 8;
-            lines.forEach((l, i) => {
-              ctx.globalAlpha = c.alpha * eased;
-              ctx.fillText(l, c.x, startY + i * lineH);
-            });
-            ctx.globalAlpha = 1;
-          }
+          ctx.fillStyle = '#080810';
+          ctx.font = `bold ${Math.max(10, displayR*0.28)}px 'DM Mono',monospace`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(label, c.x, c.y);
           ctx.globalAlpha = 1;
         }
       });
@@ -557,40 +566,39 @@ import Layout from '../layouts/Layout.astro';
     if (isMobileDevice) { document.getElementById('hint')!.textContent = 'tap the circles'; }
     window.addEventListener('mousemove',e=>{ mouse.x=e.clientX;mouse.y=e.clientY; (cursor as HTMLElement).style.left=e.clientX+'px'; (cursor as HTMLElement).style.top=e.clientY+'px'; });
     let lastTouchHandled = false;
-    canvas.addEventListener('click', () => {
-      // on mobile the browser fires a synthetic click after touchend — ignore it
-      if(lastTouchHandled){ lastTouchHandled = false; return; }
+    function handleBubbleAction(id: number) {
+      const lbl = LABELS[id];
+      if(!lbl) return;
+      if(lbl === '__img__'){
+        const img = IMAGES.get(id);
+        if(img?.src) openImgModal(img.src);
+      } else if(SECTIONS[lbl]){
+        SECTIONS[lbl]();
+      } else {
+        // frase — open centered modal
+        const c = circles.find(c => c.id === id);
+        openFraseModal(lbl, c?.color);
+      }
+    }
 
+    canvas.addEventListener('click', () => {
+      if(lastTouchHandled){ lastTouchHandled = false; return; }
       if(!hoveredCircle) return;
-      const lbl = LABELS[hoveredCircle.id];
-      if(lbl === '__img__'){
-        const img = IMAGES.get(hoveredCircle.id);
-        if(img?.src) openImgModal(img.src);
-      } else if(lbl && SECTIONS[lbl]){
-        SECTIONS[lbl]();
-      }
+      handleBubbleAction(hoveredCircle.id);
     });
-    canvas.addEventListener('touchend', e => {
-      // ignore if any modal is open
+    canvas.addEventListener('touchstart', e => {
       if(modal.classList.contains('open') || msgOverlay.classList.contains('open') || imgOverlay.classList.contains('open')) return;
-      lastTouchHandled = true;
-      const t = e.changedTouches[0];
-      // touch hit area is 1.4x radius to compensate for finger size
-      const TAP = 1.4;
+      if(fraseOverlay.classList.contains('open')){ e.preventDefault(); closeFraseModal(); return; }
+      const t = e.touches[0];
+      const TAP = 2.4; // generous hit area for fingers
       const hits = circles.filter(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r * TAP);
-      // content bubbles win over empty ones
-      const hit = hits.find(c => LABELS[c.id]) ?? hits[0];
-      if(!hit){ lastTouchHandled = false; return; } // no hit — unlock for next tap
-      // safety: auto-reset flag in case synthetic click never fires
+      const hit = hits.find(c => LABELS[c.id]) ?? null;
+      if(!hit) return;
+      e.preventDefault(); // block synthetic click
+      lastTouchHandled = true;
       setTimeout(() => { lastTouchHandled = false; }, 600);
-      const lbl = LABELS[hit.id];
-      if(lbl === '__img__'){
-        const img = IMAGES.get(hit.id);
-        if(img?.src) openImgModal(img.src);
-      } else if(lbl && SECTIONS[lbl]){
-        SECTIONS[lbl]();
-      }
-    }, {passive:true});
+      handleBubbleAction(hit.id);
+    }, {passive: false});
     window.addEventListener('touchstart',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
     window.addEventListener('touchmove',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
     // delay mouse reset so the tap flash is visible before bubble fades
