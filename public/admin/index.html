@@ -13,13 +13,13 @@
   :root { --bg:#080810; --text:#f0ede8; --muted:rgba(240,237,232,0.45); --line:rgba(240,237,232,0.12); --pink:#ff6eb4; --violet:#c77dff; --green:#b8f75b; --red:#ff3f3f; --cyan:#6ef9f5; }
   html, body { width:100%; min-height:100vh; background:var(--bg); color:var(--text); font-family:'DM Mono', monospace; -webkit-font-smoothing:antialiased; }
   body { padding:2rem 1rem; background: radial-gradient(ellipse at center, #11111f 0%, var(--bg) 70%); }
-  main { width:100%; max-width:680px; margin:0 auto; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:18px; padding:2.5rem 2rem; backdrop-filter: blur(8px); }
+  main { width:100%; max-width:720px; margin:0 auto; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:18px; padding:2.5rem 2rem; backdrop-filter: blur(8px); }
   h1 { font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:clamp(1.8rem, 5vw, 2.6rem); letter-spacing:.02em; text-align:center; margin-bottom:.4rem; }
   .accent { width:32px; height:1px; background:var(--pink); margin:0 auto 1.2rem; opacity:.6; }
   .subtitle { text-align:center; font-size:.7rem; letter-spacing:.25em; text-transform:uppercase; color:var(--muted); margin-bottom:2rem; }
 
   label { display:block; font-size:.65rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin: 1.1rem 0 .4rem; }
-  input[type=text], input[type=password], input[type=date], input[type=file], textarea {
+  input[type=text], input[type=password], input[type=date], input[type=number], input[type=file], textarea {
     width:100%; background:rgba(240,237,232,0.04); border:1px solid var(--line); border-radius:8px;
     color:var(--text); font-family:'DM Mono', monospace; font-size:.85rem; padding:.7rem .9rem;
     outline:none; transition: border-color .2s;
@@ -34,8 +34,38 @@
   }
   input[type=file]::file-selector-button:hover { background:rgba(255,110,180,0.22); }
   .hint { font-size:.65rem; color:var(--muted); margin-top:.4rem; letter-spacing:.05em; }
+
+  /* field with mark button */
+  .field-row { display:flex; gap:.5rem; align-items:stretch; }
+  .field-row input { flex:1; min-width:0; }
+  .mark-btn {
+    background:rgba(255,110,180,0.1); border:1px solid rgba(255,110,180,0.3); color:var(--text);
+    font-size:.95rem; padding:.5rem .8rem; border-radius:8px; cursor:pointer;
+    transition: background .15s; flex-shrink:0; white-space:nowrap;
+  }
+  .mark-btn:hover { background:rgba(255,110,180,0.25); }
+  .mark-btn:disabled { opacity:.35; cursor:not-allowed; }
   .row { display:flex; gap:.8rem; }
-  .row > * { flex:1; }
+  .row > * { flex:1; min-width:0; }
+
+  /* WaveSurfer editor */
+  .editor {
+    margin-top: 1.4rem; padding: 1rem; background: rgba(240,237,232,0.025);
+    border: 1px solid var(--line); border-radius: 12px; display: none;
+  }
+  .editor.active { display: block; }
+  .wf-container { width: 100%; height: 110px; cursor: pointer; }
+  .wf-toolbar { display: flex; gap: .6rem; align-items: center; margin-top: .7rem; flex-wrap: wrap; }
+  .wf-btn {
+    background: rgba(240,237,232,0.06); border: 1px solid var(--line); color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: .68rem; letter-spacing: .15em; text-transform: uppercase;
+    padding: .5rem .85rem; border-radius: 6px; cursor: pointer; transition: background .2s, border-color .2s;
+  }
+  .wf-btn:hover { background: rgba(240,237,232,0.12); border-color: rgba(240,237,232,0.3); }
+  .wf-btn.primary { background: linear-gradient(90deg, rgba(255,110,180,0.2), rgba(199,125,255,0.2)); border-color: rgba(255,110,180,0.4); }
+  .wf-time { font-size: .72rem; color: var(--muted); letter-spacing: .08em; margin-left: auto; }
+  .wf-time .now { color: var(--text); }
+  .wf-loading { font-size: .68rem; color: var(--muted); letter-spacing: .15em; text-align: center; padding: 2rem; text-transform: uppercase; }
 
   button.primary {
     width:100%; margin-top:1.6rem; padding:.9rem;
@@ -55,7 +85,6 @@
   button.ghost.danger { color:var(--red); border-color:rgba(255,63,63,0.25); }
   button.ghost.danger:hover { background:rgba(255,63,63,0.08); border-color:rgba(255,63,63,0.5); }
 
-  /* toggle */
   .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:.7rem .9rem; margin-top:.4rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:8px; cursor:pointer; }
   .toggle-row span { font-size:.72rem; letter-spacing:.1em; }
   .toggle { width:36px; height:20px; background:rgba(240,237,232,0.15); border-radius:10px; position:relative; transition: background .2s; flex-shrink:0; }
@@ -74,7 +103,6 @@
   .share-url:hover { background:rgba(184,247,91,0.1); }
   .share-url small { display:block; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; font-size:.6rem; margin-bottom:.3rem; }
 
-  /* tabs */
   .tabs { display:flex; gap:.4rem; margin-bottom:1.6rem; border-bottom:1px solid var(--line); padding-bottom:.6rem; }
   .tabs button { flex:1; background:none; border:none; color:var(--muted); font-family:'DM Mono',monospace; font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; padding:.7rem; cursor:pointer; border-radius:6px; transition: color .2s, background .2s; }
   .tabs button:hover { color:var(--text); }
@@ -82,7 +110,6 @@
   section.tab { display:none; }
   section.tab.active { display:block; }
 
-  /* set list */
   .set-row { border:1px solid var(--line); border-radius:12px; padding:1rem; margin-bottom:.7rem; transition: border-color .2s; }
   .set-row.editing { border-color: rgba(255,110,180,0.4); }
   .set-row-head { display:flex; gap:.9rem; align-items:center; }
@@ -92,7 +119,7 @@
   .set-info { flex:1; min-width:0; }
   .set-info h3 { font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:1.2rem; letter-spacing:.02em; line-height:1.2; }
   .set-info .meta { font-size:.65rem; color:var(--muted); letter-spacing:.1em; margin-top:.2rem; }
-  .set-actions { display:flex; gap:.35rem; flex-shrink:0; }
+  .set-actions { display:flex; gap:.35rem; flex-shrink:0; flex-wrap: wrap; justify-content: flex-end; }
   .set-edit { display:none; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--line); }
   .set-row.editing .set-edit { display:block; }
   .empty { text-align:center; color:var(--muted); font-size:.75rem; padding:2rem 1rem; letter-spacing:.1em; }
@@ -135,33 +162,56 @@
       <input id="file" type="file" accept="audio/*,.wav,.mp3,.m4a,.aac,.flac,.ogg">
       <p class="hint">any audio format · max 800mb · auto-converts to mp3 192kbps</p>
 
+      <div id="upload-editor" class="editor">
+        <div id="upload-waveform" class="wf-container"></div>
+        <div class="wf-toolbar">
+          <button type="button" class="wf-btn primary" data-act="play">▶ play</button>
+          <button type="button" class="wf-btn" data-act="zoom-in">zoom +</button>
+          <button type="button" class="wf-btn" data-act="zoom-out">zoom −</button>
+          <span class="wf-time"><span class="now">0:00</span> / <span class="total">--:--</span></span>
+        </div>
+        <p class="hint">click waveform to seek · use 📍 buttons below to mark trim/fade points at current position</p>
+      </div>
+
       <label for="title">title</label>
       <input id="title" type="text" placeholder="Set Mayo 2026">
 
       <label for="date">date</label>
       <input id="date" type="date">
 
-      <details>
+      <details open>
         <summary>audio processing</summary>
         <div class="row">
           <div>
             <label for="trimStart">trim start</label>
-            <input id="trimStart" type="text" placeholder="0:05 or 5" value="0">
+            <div class="field-row">
+              <input id="trimStart" type="text" placeholder="0:05 or 5" value="0">
+              <button type="button" class="mark-btn" data-mark="trimStart" disabled title="set current playback position">📍</button>
+            </div>
           </div>
           <div>
             <label for="trimEnd">trim end</label>
-            <input id="trimEnd" type="text" placeholder="0:30 or 30" value="0">
+            <div class="field-row">
+              <input id="trimEnd" type="text" placeholder="0:30 or 30" value="0">
+              <button type="button" class="mark-btn" data-mark="trimEnd" disabled title="set cut from this point to end">📍</button>
+            </div>
           </div>
         </div>
-        <p class="hint">cut from start / end · format mm:ss or seconds</p>
+        <p class="hint">cut from start / end · format mm:ss or seconds · 📍 captures preview position</p>
         <div class="row">
           <div>
             <label for="fadeIn">fade in (s)</label>
-            <input id="fadeIn" type="number" min="0" step="0.5" value="0">
+            <div class="field-row">
+              <input id="fadeIn" type="number" min="0" step="0.5" value="0">
+              <button type="button" class="mark-btn" data-mark="fadeIn" disabled title="set fade-in to end at current position">📍</button>
+            </div>
           </div>
           <div>
             <label for="fadeOut">fade out (s)</label>
-            <input id="fadeOut" type="number" min="0" step="0.5" value="0">
+            <div class="field-row">
+              <input id="fadeOut" type="number" min="0" step="0.5" value="0">
+              <button type="button" class="mark-btn" data-mark="fadeOut" disabled title="set fade-out to start at current position">📍</button>
+            </div>
           </div>
         </div>
         <label class="toggle-row">
@@ -178,6 +228,7 @@
         <p class="hint">square image works best · shown in the player</p>
 
         <label for="tracklist">tracklist (optional)</label>
+        <button type="button" class="wf-btn" id="addCueBtn" disabled style="margin-bottom:.5rem">＋ cue at current position</button>
         <textarea id="tracklist" rows="6" placeholder="00:00 Intro&#10;05:30 Artist - Track&#10;12:15 Another track"></textarea>
         <p class="hint">one per line · format <code>mm:ss Label</code> or <code>h:mm:ss Label</code></p>
       </details>
@@ -200,14 +251,17 @@
   </div>
 </main>
 
-<script>
+<script type="module">
+  import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js';
+  import RegionsPlugin from 'https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.esm.js';
+
   const $ = (id) => document.getElementById(id);
   const PASS_KEY = 'eze-upload-pass';
   let password = localStorage.getItem(PASS_KEY) || '';
+  let uploadWS = null; // current upload-form WaveSurfer instance
 
   function setView(v) { document.body.dataset.view = v; }
 
-  // parse "mm:ss" or "h:mm:ss" or just seconds — returns float seconds
   function parseTime(str) {
     if (str == null) return 0;
     const s = String(str).trim();
@@ -219,32 +273,114 @@
     return 0;
   }
   function fmtTime(sec) {
-    if (!sec) return '0:00';
+    if (!isFinite(sec) || sec < 0) sec = 0;
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
     if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     return `${m}:${String(s).padStart(2,'0')}`;
   }
 
   async function api(path, opts = {}) {
-    const headers = { 'X-Auth': password, ...(opts.headers || {}) };
-    return fetch(path, { ...opts, headers });
+    return fetch(path, { ...opts, headers: { 'X-Auth': password, ...(opts.headers || {}) } });
   }
-
   async function verify(p) {
-    const r = await fetch('/api/sets/auth', {
-      method: 'POST',
-      headers: { 'X-Auth': p, 'Content-Type': 'application/json' },
-      body: '{}'
-    });
+    const r = await fetch('/api/sets/auth', { method:'POST', headers:{ 'X-Auth':p, 'Content-Type':'application/json' }, body:'{}' });
     return r.ok;
   }
 
-  // --- login ---
+  // ===== WaveSurfer factory =====
+  // opts: { container, audioSrc, currentEdits? } — currentEdits used in edit form for absolute math
+  function createEditor(opts) {
+    const { container, audioSrc, currentEdits = {}, isBlob = false } = opts;
+    const wsRoot = container.querySelector('.wf-container');
+    const playBtn = container.querySelector('[data-act=play]');
+    const zoomIn = container.querySelector('[data-act=zoom-in]');
+    const zoomOut = container.querySelector('[data-act=zoom-out]');
+    const nowEl = container.querySelector('.wf-time .now');
+    const totalEl = container.querySelector('.wf-time .total');
+
+    wsRoot.innerHTML = '<div class="wf-loading">loading audio...</div>';
+
+    const ws = WaveSurfer.create({
+      container: wsRoot,
+      waveColor: 'rgba(255,110,180,0.55)',
+      progressColor: '#c77dff',
+      cursorColor: '#f0ede8',
+      cursorWidth: 2,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 1,
+      height: 110,
+      normalize: true,
+      minPxPerSec: 1,
+    });
+
+    const regions = ws.registerPlugin(RegionsPlugin.create());
+
+    ws.on('decode', () => {
+      wsRoot.querySelector('.wf-loading')?.remove();
+      totalEl.textContent = fmtTime(ws.getDuration());
+    });
+    ws.on('timeupdate', (t) => { nowEl.textContent = fmtTime(t); });
+    ws.on('play', () => { playBtn.textContent = '❚❚ pause'; });
+    ws.on('pause', () => { playBtn.textContent = '▶ play'; });
+    ws.on('finish', () => { playBtn.textContent = '▶ play'; });
+
+    playBtn.addEventListener('click', () => ws.playPause());
+
+    let zoomLevel = 0;
+    zoomIn.addEventListener('click', () => { zoomLevel = Math.min(zoomLevel + 20, 200); ws.zoom(zoomLevel); });
+    zoomOut.addEventListener('click', () => { zoomLevel = Math.max(zoomLevel - 20, 0); ws.zoom(zoomLevel); });
+
+    if (isBlob) ws.loadBlob(audioSrc);
+    else ws.load(audioSrc);
+
+    container.classList.add('active');
+
+    // mark + cue buttons live OUTSIDE the editor container (in the form),
+    // so the caller wires them up using the returned ws.
+    return { ws, regions, currentEdits, destroy: () => { try { ws.destroy(); } catch {} container.classList.remove('active'); } };
+  }
+
+  function wireMarkButtons(scope, editor) {
+    if (!editor) return;
+    const { ws, currentEdits } = editor;
+    scope.querySelectorAll('.mark-btn').forEach(btn => {
+      btn.disabled = false;
+      btn.onclick = () => {
+        const target = btn.dataset.mark;
+        const t = ws.getCurrentTime();
+        const d = ws.getDuration() || 0;
+        let val;
+        if (target === 'trimStart') val = (currentEdits.trimStart || 0) + t;
+        else if (target === 'trimEnd') val = (currentEdits.trimEnd || 0) + (d - t);
+        else if (target === 'fadeIn') val = t;
+        else if (target === 'fadeOut') val = d - t;
+        const input = scope.querySelector(`[data-mark="${target}"]`).parentElement.querySelector('input');
+        if (target === 'fadeIn' || target === 'fadeOut') input.value = val.toFixed(1);
+        else input.value = fmtTime(val);
+      };
+    });
+  }
+  function wireAddCueButton(btn, editor, textarea) {
+    if (!btn || !editor) return;
+    btn.disabled = false;
+    btn.onclick = () => {
+      const t = editor.ws.getCurrentTime();
+      const line = `${fmtTime(t)} `;
+      const cur = textarea.value;
+      textarea.value = cur ? (cur.replace(/\s+$/, '') + '\n' + line) : line;
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    };
+  }
+  function unwireMarkButtons(scope) {
+    scope.querySelectorAll('.mark-btn').forEach(btn => { btn.disabled = true; btn.onclick = null; });
+  }
+
+  // ===== LOGIN =====
   async function tryAutoLogin() {
     if (!password) return;
-    try {
-      if (await verify(password)) { setView('app'); loadList(); }
-    } catch {}
+    try { if (await verify(password)) { setView('app'); loadList(); } } catch {}
   }
   $('loginBtn').addEventListener('click', async () => {
     const p = $('pass').value;
@@ -254,11 +390,9 @@
     try {
       const ok = await verify(p);
       if (ok) {
-        password = p;
-        localStorage.setItem(PASS_KEY, p);
+        password = p; localStorage.setItem(PASS_KEY, p);
         $('loginStatus').textContent = '';
-        setView('app');
-        loadList();
+        setView('app'); loadList();
       } else {
         $('loginStatus').textContent = 'wrong password';
         $('loginStatus').className = 'status error';
@@ -270,13 +404,10 @@
   });
   $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
   $('logoutBtn').addEventListener('click', () => {
-    localStorage.removeItem(PASS_KEY);
-    password = '';
-    setView('login');
-    $('pass').value = '';
+    localStorage.removeItem(PASS_KEY); password = ''; setView('login'); $('pass').value = '';
   });
 
-  // --- tabs ---
+  // ===== TABS =====
   document.querySelectorAll('.tabs button').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b === btn));
@@ -285,7 +416,7 @@
     });
   });
 
-  // --- upload form ---
+  // ===== UPLOAD FORM =====
   $('date').value = new Date().toISOString().slice(0, 10);
   function checkReady() {
     const ready = $('file').files[0] && $('title').value.trim() && $('date').value;
@@ -294,6 +425,16 @@
   ['file','title','date'].forEach(id => {
     $(id).addEventListener('input', checkReady);
     $(id).addEventListener('change', checkReady);
+  });
+
+  $('file').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (uploadWS) uploadWS.destroy();
+    const editorEl = $('upload-editor');
+    uploadWS = createEditor({ container: editorEl, audioSrc: file, isBlob: true });
+    wireMarkButtons($('tab-upload'), uploadWS);
+    wireAddCueButton($('addCueBtn'), uploadWS, $('tracklist'));
   });
 
   $('uploadBtn').addEventListener('click', () => {
@@ -343,12 +484,14 @@
           shareEl.onclick = () => navigator.clipboard.writeText(data.shareUrl).then(() => {
             shareEl.innerHTML = '<small>copied ✦</small>' + data.shareUrl;
           });
-          // reset form
           $('file').value = ''; $('title').value = ''; $('tracklist').value = '';
           $('artwork').value = '';
           $('trimStart').value = '0'; $('trimEnd').value = '0';
           $('fadeIn').value = '0'; $('fadeOut').value = '0';
           $('date').value = new Date().toISOString().slice(0, 10);
+          if (uploadWS) { uploadWS.destroy(); uploadWS = null; }
+          unwireMarkButtons($('tab-upload'));
+          $('addCueBtn').disabled = true;
           checkReady();
         } else {
           $('status').textContent = 'error: ' + (data.error || 'unknown');
@@ -369,7 +512,9 @@
     xhr.send(form);
   });
 
-  // --- manage / list ---
+  // ===== MANAGE / EDIT =====
+  let editEditor = null; // current edit-form WaveSurfer
+
   async function loadList() {
     const list = $('setList');
     list.innerHTML = '<p class="empty">loading...</p>';
@@ -393,6 +538,10 @@
   function tracklistToText(tl) {
     if (!Array.isArray(tl)) return '';
     return tl.map(t => `${fmtTime(t.at)} ${t.label}`).join('\n');
+  }
+  function attr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   function setRowEl(set) {
@@ -421,7 +570,15 @@
       navigator.clipboard.writeText(url).then(() => alertMsg('share link copied'));
     });
     el.querySelector('[data-act=edit]').addEventListener('click', () => {
-      if (el.classList.toggle('editing')) renderEditForm(editBox, set);
+      const opening = !el.classList.contains('editing');
+      // close any other open editor
+      document.querySelectorAll('.set-row.editing').forEach(r => {
+        if (r !== el) { r.classList.remove('editing'); r.querySelector('.set-edit').innerHTML = ''; }
+      });
+      if (editEditor) { editEditor.destroy(); editEditor = null; }
+      el.classList.toggle('editing', opening);
+      if (opening) renderEditForm(editBox, set);
+      else editBox.innerHTML = '';
     });
     el.querySelector('[data-act=delete]').addEventListener('click', () => deleteSet(set));
     return el;
@@ -430,18 +587,49 @@
   function renderEditForm(container, set) {
     const e = set.edits || {};
     container.innerHTML = `
+      <div class="editor" data-edit-editor>
+        <div class="wf-container"></div>
+        <div class="wf-toolbar">
+          <button type="button" class="wf-btn primary" data-act="play">▶ play</button>
+          <button type="button" class="wf-btn" data-act="zoom-in">zoom +</button>
+          <button type="button" class="wf-btn" data-act="zoom-out">zoom −</button>
+          <span class="wf-time"><span class="now">0:00</span> / <span class="total">--:--</span></span>
+        </div>
+        <p class="hint">previewing current mp3 (after existing edits) · 📍 buttons use original-time math</p>
+      </div>
+
       <label>title</label><input type="text" data-f="title" value="${attr(set.title)}">
       <label>date</label><input type="date" data-f="date" value="${attr(set.date)}">
 
       <details open>
         <summary>audio processing (re-renders mp3 from original)</summary>
         <div class="row">
-          <div><label>trim start</label><input type="text" data-f="trimStart" value="${attr(fmtTime(e.trimStart||0))}"></div>
-          <div><label>trim end</label><input type="text" data-f="trimEnd" value="${attr(fmtTime(e.trimEnd||0))}"></div>
+          <div><label>trim start</label>
+            <div class="field-row">
+              <input type="text" data-f="trimStart" value="${attr(fmtTime(e.trimStart||0))}">
+              <button type="button" class="mark-btn" data-mark="trimStart">📍</button>
+            </div>
+          </div>
+          <div><label>trim end</label>
+            <div class="field-row">
+              <input type="text" data-f="trimEnd" value="${attr(fmtTime(e.trimEnd||0))}">
+              <button type="button" class="mark-btn" data-mark="trimEnd">📍</button>
+            </div>
+          </div>
         </div>
         <div class="row">
-          <div><label>fade in (s)</label><input type="number" min="0" step="0.5" data-f="fadeIn" value="${e.fadeIn||0}"></div>
-          <div><label>fade out (s)</label><input type="number" min="0" step="0.5" data-f="fadeOut" value="${e.fadeOut||0}"></div>
+          <div><label>fade in (s)</label>
+            <div class="field-row">
+              <input type="number" min="0" step="0.5" data-f="fadeIn" value="${e.fadeIn||0}">
+              <button type="button" class="mark-btn" data-mark="fadeIn">📍</button>
+            </div>
+          </div>
+          <div><label>fade out (s)</label>
+            <div class="field-row">
+              <input type="number" min="0" step="0.5" data-f="fadeOut" value="${e.fadeOut||0}">
+              <button type="button" class="mark-btn" data-mark="fadeOut">📍</button>
+            </div>
+          </div>
         </div>
         <label class="toggle-row">
           <span>normalize loudness · -14 LUFS</span>
@@ -453,6 +641,7 @@
       <details>
         <summary>presentation</summary>
         <label>tracklist</label>
+        <button type="button" class="wf-btn" data-act="add-cue" style="margin-bottom:.5rem">＋ cue at current position</button>
         <textarea rows="5" data-f="tracklist">${escapeHtml(tracklistToText(set.tracklist))}</textarea>
         <label>artwork (replace)</label>
         <input type="file" accept="image/*" data-f="artwork">
@@ -462,6 +651,18 @@
       <button class="primary" data-act="save">save changes</button>
       <p class="status edit-status"></p>
     `;
+
+    // editor
+    const editorEl = container.querySelector('[data-edit-editor]');
+    editEditor = createEditor({
+      container: editorEl,
+      audioSrc: set.audio,
+      currentEdits: { trimStart: e.trimStart || 0, trimEnd: e.trimEnd || 0 },
+      isBlob: false
+    });
+    wireMarkButtons(container, editEditor);
+    wireAddCueButton(container.querySelector('[data-act=add-cue]'), editEditor, container.querySelector('[data-f=tracklist]'));
+
     let removeArtwork = false;
     const rmBtn = container.querySelector('[data-act=remove-artwork]');
     if (rmBtn) rmBtn.addEventListener('click', () => {
@@ -469,6 +670,7 @@
       rmBtn.textContent = removeArtwork ? 'will remove ✓' : 'remove current artwork';
       rmBtn.style.color = removeArtwork ? 'var(--red)' : '';
     });
+
     container.querySelector('[data-act=save]').addEventListener('click', async () => {
       const form = new FormData();
       const get = (f) => container.querySelector(`[data-f="${f}"]`);
@@ -493,7 +695,7 @@
         if (r.ok && data.ok) {
           statusEl.textContent = 'saved ✦';
           statusEl.className = 'status edit-status ok';
-          setTimeout(() => loadList(), 800);
+          setTimeout(() => { if (editEditor) { editEditor.destroy(); editEditor = null; } loadList(); }, 800);
         } else {
           statusEl.textContent = 'error: ' + (data.error || r.status);
           statusEl.className = 'status edit-status error';
@@ -511,15 +713,9 @@
       const r = await api(`/api/sets/${encodeURIComponent(set.slug)}`, { method: 'DELETE' });
       if (r.ok) loadList();
       else alertMsg('delete failed');
-    } catch (e) {
-      alertMsg('connection error');
-    }
+    } catch { alertMsg('connection error'); }
   }
 
-  function attr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
-  function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
   function alertMsg(m) {
     const s = $('status');
     s.textContent = m; s.className = 'status';

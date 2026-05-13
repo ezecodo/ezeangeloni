@@ -73,7 +73,9 @@ Lives in `apps/uploader/` in this repo. Express server that exposes:
 
 All require header `X-Auth: <UPLOAD_PASSWORD>`. Rate limited: 5 failed auth attempts per IP per 10min.
 
-**Admin UI** at `https://ezeangeloni.xyz/admin/` (`public/admin/index.html`, deployed by the Action). Two tabs: "upload new" (form with all processing options) and "manage" (list of existing sets with edit/delete). Password stored in localStorage on first successful login.
+**Admin UI** at `https://ezeangeloni.xyz/admin/` (`public/admin/index.html`, deployed by the Action). Two tabs: "upload new" (form with all processing options) and "manage" (list of existing sets with inline edit/delete). Password stored in localStorage on first successful login.
+
+The admin form embeds **WaveSurfer.js** (loaded from unpkg via ESM) for waveform preview, play/pause, click-to-seek and zoom. Each timing input (trim start/end, fade in/out) has a 📍 button that captures the current playback position and fills the value — for the upload form that's the raw uploaded audio; for the edit form, the math accounts for existing trim values so the saved value is in original-time. There's also a "＋ cue at current position" button that appends a line to the tracklist textarea at the current preview position.
 
 **Audio processing** uses `ffmpeg`/`ffprobe` installed on the VPS. Every upload:
 1. Saves the original (any format) to `/root/sets-originals/<slug>.<ext>` — never modified.
