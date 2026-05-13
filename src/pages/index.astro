@@ -365,6 +365,7 @@ import Layout from '../layouts/Layout.astro';
       id: number; x: number; y: number; r: number; baseR: number;
       color: string; alpha: number; targetAlpha: number; label: string;
       vx: number; vy: number; delay: number; born: number; phase: number;
+      proximityFade?: number;
     }
 
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -401,6 +402,30 @@ import Layout from '../layouts/Layout.astro';
     function draw(now: number){
       ctx.clearRect(0,0,W,H);
       if(gridCanvas) ctx.drawImage(gridCanvas,0,0);
+
+      // photo bubbles push others away + fade overlap, so the photos stay readable
+      const photoCircles = circles.filter(c => LABELS[c.id] === '__img__');
+      const MAX_SPEED = 0.55;
+      circles.forEach(c => {
+        if (LABELS[c.id] === '__img__') { c.proximityFade = 1; return; }
+        let minFade = 1;
+        for (const p of photoCircles) {
+          const dx = c.x - p.x, dy = c.y - p.y;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          const minDist = c.r + p.r + 28;
+          if (d < minDist && d > 0.01) {
+            const force = (minDist - d) / minDist;
+            const push = 0.06 * force;
+            c.vx += (dx / d) * push;
+            c.vy += (dy / d) * push;
+            minFade = Math.min(minFade, Math.max(0.1, d / minDist));
+          }
+        }
+        const sp = Math.sqrt(c.vx*c.vx + c.vy*c.vy);
+        if (sp > MAX_SPEED) { c.vx *= MAX_SPEED/sp; c.vy *= MAX_SPEED/sp; }
+        c.proximityFade = minFade;
+      });
+
       hoveredCircle = null;
       // draw content bubbles last so they appear on top
       const sorted = [...circles].sort((a,b) => {
@@ -460,13 +485,14 @@ import Layout from '../layouts/Layout.astro';
             ctx.fillStyle=fill;ctx.globalAlpha=c.alpha*eased;ctx.fill();ctx.globalAlpha=1;
           }
         } else {
-          ctx.strokeStyle=`rgba(240,237,232,${(isMobileDevice?0.22:0.08)*eased})`;ctx.lineWidth=isMobileDevice?1.5:1;ctx.stroke();
+          const pf = c.proximityFade ?? 1;
+          ctx.strokeStyle=`rgba(240,237,232,${(isMobileDevice?0.22:0.08)*eased*pf})`;ctx.lineWidth=isMobileDevice?1.5:1;ctx.stroke();
           if(LABELS[c.id] || IMAGES.has(c.id)){
             const pulse = 0.5 + 0.5*Math.sin(now*0.0015 + c.phase);
             const isImgBubble = LABELS[c.id]==='__img__';
             const glowColor = isMsg ? '#ffd166' : isImgBubble ? '#38bdf8' : c.color;
             const glowMult = isMobileDevice ? 2.2 : 1;
-            const glowAlpha = (isImgBubble ? pulse*120 : pulse*50) * glowMult;
+            const glowAlpha = (isImgBubble ? pulse*120 : pulse*50) * glowMult * pf;
             if(!simple){
               const glow2 = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,displayR*2.5);
               glow2.addColorStop(0, glowColor+Math.round(glowAlpha).toString(16).padStart(2,'0'));
@@ -475,7 +501,7 @@ import Layout from '../layouts/Layout.astro';
               ctx.fillStyle=glow2;ctx.fill();
             } else {
               ctx.beginPath();ctx.arc(c.x,c.y,displayR*1.8,0,Math.PI*2);
-              ctx.fillStyle=glowColor;ctx.globalAlpha=(isImgBubble?0.28:0.12)*pulse*eased;ctx.fill();ctx.globalAlpha=1;
+              ctx.fillStyle=glowColor;ctx.globalAlpha=(isImgBubble?0.28:0.12)*pulse*eased*pf;ctx.fill();ctx.globalAlpha=1;
             }
             // photo icon on image bubble
             if(isImgBubble){
