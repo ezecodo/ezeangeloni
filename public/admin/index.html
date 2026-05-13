@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>upload set · eze</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=DM+Mono:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+  :root { --bg:#080810; --text:#f0ede8; --muted:rgba(240,237,232,0.45); --line:rgba(240,237,232,0.12); --pink:#ff6eb4; --violet:#c77dff; --green:#b8f75b; --red:#ff3f3f; }
+  html, body { width:100%; min-height:100vh; background:var(--bg); color:var(--text); font-family:'DM Mono', monospace; -webkit-font-smoothing:antialiased; }
+  body { display:flex; align-items:center; justify-content:center; padding:2rem 1rem; background: radial-gradient(ellipse at center, #11111f 0%, var(--bg) 70%); }
+  main { width:100%; max-width:520px; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:18px; padding:2.5rem 2rem; backdrop-filter: blur(8px); }
+  h1 { font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:clamp(1.8rem, 5vw, 2.6rem); letter-spacing:.02em; text-align:center; margin-bottom:.4rem; }
+  .accent { width:32px; height:1px; background:var(--pink); margin:0 auto 1.2rem; opacity:.6; }
+  .subtitle { text-align:center; font-size:.7rem; letter-spacing:.25em; text-transform:uppercase; color:var(--muted); margin-bottom:2rem; }
+  label { display:block; font-size:.65rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin: 1.2rem 0 .4rem; }
+  input[type=text], input[type=password], input[type=date], input[type=file] { width:100%; background:rgba(240,237,232,0.04); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'DM Mono', monospace; font-size:.85rem; padding:.7rem .9rem; outline:none; transition: border-color .2s; }
+  input[type=text]:focus, input[type=password]:focus, input[type=date]:focus { border-color: rgba(240,237,232,0.35); }
+  input[type=file] { padding:.6rem .9rem; cursor:pointer; }
+  input[type=file]::file-selector-button { background:rgba(255,110,180,0.12); border:1px solid rgba(255,110,180,0.3); color:var(--text); font-family:'DM Mono',monospace; font-size:.7rem; letter-spacing:.15em; text-transform:uppercase; padding:.45rem .9rem; border-radius:6px; cursor:pointer; margin-right:.9rem; transition: background .2s; }
+  input[type=file]::file-selector-button:hover { background:rgba(255,110,180,0.22); }
+  .hint { font-size:.65rem; color:var(--muted); margin-top:.4rem; letter-spacing:.05em; }
+  .row { display:flex; gap:.8rem; }
+  .row > * { flex:1; }
+  button.primary { width:100%; margin-top:1.6rem; padding:.9rem; background:linear-gradient(90deg, var(--pink), var(--violet)); border:none; color:#080810; font-family:'DM Mono', monospace; font-size:.75rem; letter-spacing:.25em; text-transform:uppercase; border-radius:8px; cursor:pointer; font-weight:600; transition: opacity .2s, transform .2s; }
+  button.primary:hover { opacity:.92; }
+  button.primary:active { transform: scale(.98); }
+  button.primary:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+  .progress { margin-top:1.4rem; height:3px; background:var(--line); border-radius:3px; overflow:hidden; display:none; }
+  .progress.show { display:block; }
+  .progress-bar { height:100%; width:0%; background:linear-gradient(90deg, var(--pink), var(--violet)); transition: width .15s ease; }
+  .status { margin-top:1rem; font-size:.72rem; letter-spacing:.05em; color:var(--muted); text-align:center; min-height:1em; }
+  .status.error { color:var(--red); }
+  .status.ok { color:var(--green); }
+  .share-url { margin-top:.8rem; padding:.7rem; background:rgba(184,247,91,0.06); border:1px solid rgba(184,247,91,0.2); border-radius:8px; font-size:.72rem; word-break:break-all; text-align:center; color:var(--green); cursor:pointer; transition: background .2s; }
+  .share-url:hover { background:rgba(184,247,91,0.1); }
+  .share-url small { display:block; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; font-size:.6rem; margin-bottom:.3rem; }
+  #login, #app { display:none; }
+  body[data-view=login] #login, body[data-view=app] #app { display:block; }
+  .back { display:inline-block; margin-top:1.5rem; font-size:.65rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); text-decoration:none; }
+  .back:hover { color:var(--text); }
+  .center { text-align:center; }
+</style>
+</head>
+<body data-view="login">
+<main>
+  <h1>upload set</h1>
+  <div class="accent"></div>
+  <p class="subtitle">private · ezeangeloni</p>
+
+  <div id="login">
+    <label for="pass">password</label>
+    <input id="pass" type="password" autocomplete="current-password" autofocus>
+    <button class="primary" id="loginBtn">enter</button>
+    <p id="loginStatus" class="status"></p>
+  </div>
+
+  <div id="app">
+    <label for="file">audio file</label>
+    <input id="file" type="file" accept="audio/*">
+    <p class="hint">mp3 or wav · max 300mb</p>
+
+    <label for="title">title</label>
+    <input id="title" type="text" placeholder="Set Mayo 2026">
+
+    <label for="date">date</label>
+    <input id="date" type="date">
+
+    <button class="primary" id="uploadBtn" disabled>upload</button>
+
+    <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
+    <p id="status" class="status"></p>
+    <div id="shareUrl" class="share-url" style="display:none"></div>
+    <div class="center"><a href="/" class="back">← back to site</a></div>
+  </div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const PASS_KEY = 'eze-upload-pass';
+  let password = localStorage.getItem(PASS_KEY) || '';
+
+  function setView(v) { document.body.dataset.view = v; }
+
+  async function verify(p) {
+    const r = await fetch('/api/sets/auth', {
+      method: 'POST',
+      headers: { 'X-Auth': p, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    return r.ok;
+  }
+
+  async function tryAutoLogin() {
+    if (!password) return;
+    try {
+      if (await verify(password)) setView('app');
+    } catch {}
+  }
+
+  $('loginBtn').addEventListener('click', async () => {
+    const p = $('pass').value;
+    if (!p) return;
+    $('loginStatus').textContent = 'checking...';
+    $('loginStatus').className = 'status';
+    try {
+      const ok = await verify(p);
+      if (ok) {
+        password = p;
+        localStorage.setItem(PASS_KEY, p);
+        $('loginStatus').textContent = '';
+        setView('app');
+      } else {
+        $('loginStatus').textContent = 'wrong password';
+        $('loginStatus').className = 'status error';
+      }
+    } catch (e) {
+      $('loginStatus').textContent = 'connection error';
+      $('loginStatus').className = 'status error';
+    }
+  });
+  $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
+
+  // default date = today
+  const today = new Date().toISOString().slice(0, 10);
+  $('date').value = today;
+
+  function checkReady() {
+    const ready = $('file').files[0] && $('title').value.trim() && $('date').value;
+    $('uploadBtn').disabled = !ready;
+  }
+  ['file','title','date'].forEach(id => $(id).addEventListener('input', checkReady));
+  ['file','title','date'].forEach(id => $(id).addEventListener('change', checkReady));
+
+  $('uploadBtn').addEventListener('click', () => {
+    const file = $('file').files[0];
+    const title = $('title').value.trim();
+    const date = $('date').value;
+    if (!file || !title || !date) return;
+
+    const form = new FormData();
+    form.append('audio', file);
+    form.append('title', title);
+    form.append('date', date);
+
+    $('uploadBtn').disabled = true;
+    $('progress').classList.add('show');
+    $('progressBar').style.width = '0%';
+    $('status').textContent = 'uploading...';
+    $('status').className = 'status';
+    $('shareUrl').style.display = 'none';
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', e => {
+      if (!e.lengthComputable) return;
+      const pct = (e.loaded / e.total) * 100;
+      $('progressBar').style.width = pct + '%';
+      if (pct >= 100) $('status').textContent = 'processing on server...';
+    });
+    xhr.addEventListener('load', () => {
+      $('uploadBtn').disabled = false;
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status === 200 && data.ok) {
+          $('status').textContent = 'done · ' + data.slug;
+          $('status').className = 'status ok';
+          const shareEl = $('shareUrl');
+          shareEl.innerHTML = '<small>share link · click to copy</small>' + data.shareUrl;
+          shareEl.style.display = 'block';
+          shareEl.onclick = () => {
+            navigator.clipboard.writeText(data.shareUrl).then(() => {
+              shareEl.innerHTML = '<small>copied ✦</small>' + data.shareUrl;
+            });
+          };
+          // clear form for next upload
+          $('file').value = '';
+          $('title').value = '';
+          $('date').value = today;
+          checkReady();
+        } else {
+          $('status').textContent = 'error: ' + (data.error || 'unknown');
+          $('status').className = 'status error';
+        }
+      } catch {
+        $('status').textContent = 'error: bad response (' + xhr.status + ')';
+        $('status').className = 'status error';
+      }
+    });
+    xhr.addEventListener('error', () => {
+      $('uploadBtn').disabled = false;
+      $('status').textContent = 'connection error';
+      $('status').className = 'status error';
+    });
+    xhr.open('POST', '/api/sets');
+    xhr.setRequestHeader('X-Auth', password);
+    xhr.send(form);
+  });
+
+  tryAutoLogin();
+</script>
+</body>
+</html>

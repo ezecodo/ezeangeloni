@@ -61,6 +61,25 @@ The landing fetches `sets.json` at runtime, so no rebuild needed when adding set
 - Color palette: `['#ff3f3f','#ff9f1c','#6ef9f5','#b8f75b','#c77dff','#ff6eb4','#38bdf8','#ffd166']`
 - Bubble color cues: photos = cyan `#38bdf8`, sets = pink/purple `#ff6eb4`/`#c77dff`, message = yellow `#ffd166`
 
+## Set uploader (mini backend)
+
+Lives in `apps/uploader/` in this repo. Small Express server that exposes:
+
+- `POST /api/sets` (multipart: file + title + date) — auth via `X-Auth` header
+- `POST /api/sets/auth` — verify password without uploading
+
+The admin UI is at `https://ezeangeloni.xyz/admin/` (`public/admin/index.html`, deployed by the Action like the rest of `dist/`). Password is stored in localStorage on first successful login, no session cookies.
+
+**On the VPS** the server runs as PM2 process `set-uploader`, listening on `127.0.0.1:3010`. Code lives at `/root/eze-repo/apps/uploader/`. Updates: `cd /root/eze-repo && git pull && cd apps/uploader && npm install --omit=dev && pm2 restart set-uploader`.
+
+**Env vars** (in `apps/uploader/.env`, chmod 600):
+- `UPLOAD_PASSWORD` — required, the form password
+- `PORT`, `SETS_DIR`, `SETS_JSON`, `MAX_SIZE_MB` — optional overrides
+
+**Nginx**: the `ezeangeloni.xyz` server block proxies `/api/sets*` to `127.0.0.1:3010` and sets `client_max_body_size 320M;`. See `apps/uploader/README.md` for the exact block.
+
+The uploader handles slug generation from title (lowercase, dashed, no diacritics), file rename, atomic-ish update of `sets.json` (entries prepended so newest is first).
+
 ## Future
-- Mini backend / n8n workflow for mobile uploads of sets (current: scp from desktop).
+- Telegram bot integration (n8n workflow) calling `POST /api/sets` from the existing bot, so sets can be uploaded via Telegram like frases.
 - Optional nginx tuning: dedicated `location /sets/` with `Cache-Control: public, max-age=31536000, immutable` for cleaner audio caching.
