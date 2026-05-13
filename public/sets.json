@@ -1,0 +1,10 @@
+{
+  "sets": [
+    {
+      "slug": "ejemplo-set",
+      "title": "Ejemplo Set",
+      "date": "2026-05-13",
+      "audio": "/sets/ejemplo.mp3"
+    }
+  ]
+}
