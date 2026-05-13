@@ -12,7 +12,7 @@ import Layout from '../layouts/Layout.astro';
         --bg: #080810; --text: #f0ede8; --muted: rgba(240,237,232,0.3);
       }
       html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; cursor: none; }
-      canvas { position: fixed; inset: 0; width: 100%; height: 100%; will-change: transform; }
+      canvas { position: fixed; inset: 0; width: 100%; height: 100%; will-change: transform; touch-action: none; }
       #cursor { position: fixed; width: 5px; height: 5px; background: var(--text); border-radius: 50%; pointer-events: none; z-index: 9999; transform: translate(-50%,-50%); }
       #cursor::before, #cursor::after { content:''; position:absolute; border-radius:50%; border:1px solid rgba(240,237,232,0.5); top:50%; left:50%; transform:translate(-50%,-50%); animation: sonar 2.4s ease-out infinite; }
       #cursor::after { animation-delay:1.2s; }
@@ -82,7 +82,7 @@ import Layout from '../layouts/Layout.astro';
       #logo { width: clamp(16rem,40vw,30rem); margin-bottom: -8rem; filter: brightness(0) invert(1); animation: fadeUp 1.2s cubic-bezier(.16,1,.3,1) .3s forwards, logoGlow 6s ease-in-out 1.5s infinite; opacity: 0; }
       @media (max-width: 768px) {
         html, body { cursor: auto; touch-action: manipulation; }
-        canvas { touch-action: manipulation; }
+        canvas { touch-action: none; }
         #cursor, #cursor::before, #cursor::after { display: none; }
         #hero { justify-content: center; padding-top: 0; gap: 0; transform: translateY(-6vh); }
         #logo { width: 48vw; margin-bottom: -2.8rem; }
@@ -385,6 +385,10 @@ import Layout from '../layouts/Layout.astro';
     let hoveredCircle: Circle | null = null;
     let prevUnderCursor = new Set<number>();
 
+    interface DragState { c: Circle; startX: number; startY: number; lastX: number; lastY: number; moved: boolean; vx: number; vy: number; }
+    let drag: DragState | null = null;
+    const DRAG_THRESHOLD = 6;
+
     // Cache grid on offscreen canvas
     let gridCanvas: HTMLCanvasElement | null = null;
     function buildGrid(){
@@ -405,25 +409,31 @@ import Layout from '../layouts/Layout.astro';
 
       // photo bubbles push others away + fade overlap, so the photos stay readable
       const photoCircles = circles.filter(c => LABELS[c.id] === '__img__');
-      const MAX_SPEED = 0.55;
+      const AMBIENT_SPEED = 0.55;
+      const draggedId = drag?.c.id ?? -1;
       circles.forEach(c => {
-        if (LABELS[c.id] === '__img__') { c.proximityFade = 1; return; }
-        let minFade = 1;
-        for (const p of photoCircles) {
-          const dx = c.x - p.x, dy = c.y - p.y;
-          const d = Math.sqrt(dx*dx + dy*dy);
-          const minDist = c.r + p.r + 28;
-          if (d < minDist && d > 0.01) {
-            const force = (minDist - d) / minDist;
-            const push = 0.06 * force;
-            c.vx += (dx / d) * push;
-            c.vy += (dy / d) * push;
-            minFade = Math.min(minFade, Math.max(0.1, d / minDist));
+        if (LABELS[c.id] === '__img__' || c.id === draggedId) { c.proximityFade = 1;
+        } else {
+          let minFade = 1;
+          for (const p of photoCircles) {
+            const dx = c.x - p.x, dy = c.y - p.y;
+            const d = Math.sqrt(dx*dx + dy*dy);
+            const minDist = c.r + p.r + 28;
+            if (d < minDist && d > 0.01) {
+              const force = (minDist - d) / minDist;
+              const push = 0.06 * force;
+              c.vx += (dx / d) * push;
+              c.vy += (dy / d) * push;
+              minFade = Math.min(minFade, Math.max(0.1, d / minDist));
+            }
           }
+          c.proximityFade = minFade;
         }
-        const sp = Math.sqrt(c.vx*c.vx + c.vy*c.vy);
-        if (sp > MAX_SPEED) { c.vx *= MAX_SPEED/sp; c.vy *= MAX_SPEED/sp; }
-        c.proximityFade = minFade;
+        // soft decay: anything above ambient speed (from throw or repulsion) eases back
+        if (c.id !== draggedId) {
+          const sp = Math.sqrt(c.vx*c.vx + c.vy*c.vy);
+          if (sp > AMBIENT_SPEED) { c.vx *= 0.97; c.vy *= 0.97; }
+        }
       });
 
       hoveredCircle = null;
@@ -591,7 +601,6 @@ import Layout from '../layouts/Layout.astro';
 
     if (isMobileDevice) { document.getElementById('hint')!.textContent = 'tap the circles'; }
     window.addEventListener('mousemove',e=>{ mouse.x=e.clientX;mouse.y=e.clientY; (cursor as HTMLElement).style.left=e.clientX+'px'; (cursor as HTMLElement).style.top=e.clientY+'px'; });
-    let lastTouchHandled = false;
     function handleBubbleAction(id: number) {
       const lbl = LABELS[id];
       if(!lbl) return;
@@ -607,24 +616,59 @@ import Layout from '../layouts/Layout.astro';
       }
     }
 
-    canvas.addEventListener('click', () => {
-      if(lastTouchHandled){ lastTouchHandled = false; return; }
-      if(!hoveredCircle) return;
-      handleBubbleAction(hoveredCircle.id);
-    });
-    canvas.addEventListener('touchstart', e => {
+    canvas.addEventListener('pointerdown', e => {
       if(modal.classList.contains('open') || msgOverlay.classList.contains('open') || imgOverlay.classList.contains('open')) return;
-      if(fraseOverlay.classList.contains('open')){ e.preventDefault(); closeFraseModal(); return; }
-      const t = e.touches[0];
-      const TAP = 2.4; // generous hit area for fingers
-      const hits = circles.filter(c => dist(t.clientX, t.clientY, c.x, c.y) < c.r * TAP);
-      const hit = hits.find(c => LABELS[c.id]) ?? null;
+      if(fraseOverlay.classList.contains('open')){ closeFraseModal(); return; }
+      const x = e.clientX, y = e.clientY;
+      const isTouch = e.pointerType === 'touch';
+      const TAP = isTouch ? 2.0 : 1.0;
+      // pick topmost: prefer content bubbles, then decorative
+      const hits = circles.filter(c => dist(x, y, c.x, c.y) < c.r * TAP);
+      const hit = hits.find(c => LABELS[c.id]) ?? hits[hits.length - 1] ?? null;
       if(!hit) return;
-      e.preventDefault(); // block synthetic click
-      lastTouchHandled = true;
-      setTimeout(() => { lastTouchHandled = false; }, 600);
-      handleBubbleAction(hit.id);
-    }, {passive: false});
+      e.preventDefault();
+      try { canvas.setPointerCapture(e.pointerId); } catch {}
+      hit.vx = 0; hit.vy = 0;
+      drag = { c: hit, startX: x, startY: y, lastX: x, lastY: y, moved: false, vx: 0, vy: 0 };
+    });
+    canvas.addEventListener('pointermove', e => {
+      if(!drag) return;
+      const dx = e.clientX - drag.lastX;
+      const dy = e.clientY - drag.lastY;
+      // smooth velocity estimate from recent pointer deltas
+      drag.vx = drag.vx * 0.5 + dx * 0.5;
+      drag.vy = drag.vy * 0.5 + dy * 0.5;
+      const r = drag.c.r;
+      drag.c.x = Math.max(r, Math.min(W - r, e.clientX));
+      drag.c.y = Math.max(r, Math.min(H - r, e.clientY));
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
+      if(!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > DRAG_THRESHOLD){
+        drag.moved = true;
+      }
+    });
+    function endDrag(e: PointerEvent){
+      if(!drag) return;
+      const d = drag;
+      drag = null;
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
+      if(d.moved){
+        // throw with inertia — scale per-event delta to per-frame velocity, clamp
+        const SCALE = 0.35;
+        let vx = d.vx * SCALE, vy = d.vy * SCALE;
+        const sp = Math.hypot(vx, vy);
+        const THROW_CAP = 5;
+        if(sp > THROW_CAP){ vx *= THROW_CAP/sp; vy *= THROW_CAP/sp; }
+        d.c.vx = vx; d.c.vy = vy;
+      } else {
+        // tap — restore the ambient drift it had before being grabbed
+        d.c.vx = rnd(-0.18, 0.18);
+        d.c.vy = rnd(-0.18, 0.18);
+        if(LABELS[d.c.id]) handleBubbleAction(d.c.id);
+      }
+    }
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
     window.addEventListener('touchstart',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
     window.addEventListener('touchmove',e=>{ const t=e.touches[0]; mouse.x=t.clientX; mouse.y=t.clientY; }, {passive:true});
     // delay mouse reset so the tap flash is visible before bubble fades
