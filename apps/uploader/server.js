@@ -1,58 +1,82 @@
 import express from 'express';
 import multer from 'multer';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 
+// === Config ===
 const PORT = parseInt(process.env.PORT || '3010', 10);
 const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD;
 const SETS_DIR = process.env.SETS_DIR || '/var/www/ezeangeloni.xyz/html/sets';
+const ARTWORKS_DIR = process.env.ARTWORKS_DIR || path.join(SETS_DIR, 'artworks');
+const ORIGINALS_DIR = process.env.ORIGINALS_DIR || '/root/sets-originals';
 const SETS_JSON = process.env.SETS_JSON || '/var/www/ezeangeloni.xyz/html/sets.json';
-const MAX_SIZE_MB = parseInt(process.env.MAX_SIZE_MB || '300', 10);
+const PUBLIC_ROOT = process.env.PUBLIC_ROOT || '/var/www/ezeangeloni.xyz/html';
+const MAX_SIZE_MB = parseInt(process.env.MAX_SIZE_MB || '800', 10);
 
 if (!UPLOAD_PASSWORD) {
   console.error('FATAL: UPLOAD_PASSWORD env var is required');
   process.exit(1);
 }
 
-const app = express();
-app.set('trust proxy', 'loopback');
+// === ffmpeg / ffprobe helpers ===
+function runProc(cmd, args) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '';
+    proc.stdout.on('data', d => { stdout += d.toString(); });
+    proc.stderr.on('data', d => { stderr += d.toString(); });
+    proc.on('error', reject);
+    proc.on('close', code => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(`${cmd} exited ${code}: ${stderr.slice(-400)}`));
+    });
+  });
+}
 
-const upload = multer({
-  dest: '/tmp',
-  limits: { fileSize: MAX_SIZE_MB * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (!/^audio\//.test(file.mimetype)) return cb(new Error('only audio files allowed'));
-    cb(null, true);
+async function getDurationSec(filepath) {
+  const out = await runProc('ffprobe', [
+    '-v', 'error',
+    '-show_entries', 'format=duration',
+    '-of', 'default=noprint_wrappers=1:nokey=1',
+    filepath
+  ]);
+  return parseFloat(out) || 0;
+}
+
+async function processAudio(input, output, opts = {}) {
+  const trimStart = Math.max(0, Number(opts.trimStart) || 0);
+  const trimEnd = Math.max(0, Number(opts.trimEnd) || 0);
+  const fadeIn = Math.max(0, Number(opts.fadeIn) || 0);
+  const fadeOut = Math.max(0, Number(opts.fadeOut) || 0);
+  const normalize = !!opts.normalize;
+
+  const sourceDuration = await getDurationSec(input);
+  const effectiveDuration = Math.max(0.5, sourceDuration - trimStart - trimEnd);
+
+  const args = ['-y', '-hide_banner', '-loglevel', 'error'];
+  if (trimStart > 0) args.push('-ss', String(trimStart));
+  args.push('-i', input);
+  if (trimStart > 0 || trimEnd > 0) args.push('-t', String(effectiveDuration));
+
+  const filters = [];
+  if (fadeIn > 0) filters.push(`afade=t=in:st=0:d=${fadeIn}`);
+  if (fadeOut > 0) {
+    const start = Math.max(0, effectiveDuration - fadeOut);
+    filters.push(`afade=t=out:st=${start}:d=${fadeOut}`);
   }
-});
+  if (normalize) filters.push('loudnorm=I=-14:LRA=11:TP=-1');
+  if (filters.length) args.push('-af', filters.join(','));
 
-const failedAttempts = new Map();
-const RATE_WINDOW_MS = 10 * 60 * 1000;
-const RATE_MAX = 5;
-function checkRateLimit(ip) {
-  const now = Date.now();
-  const recent = (failedAttempts.get(ip) || []).filter(at => now - at < RATE_WINDOW_MS);
-  failedAttempts.set(ip, recent);
-  return recent.length < RATE_MAX;
-}
-function recordFailure(ip) {
-  const arr = failedAttempts.get(ip) || [];
-  arr.push(Date.now());
-  failedAttempts.set(ip, arr);
+  args.push('-b:a', '192k', '-ar', '44100', '-ac', '2', output);
+  await runProc('ffmpeg', args);
+  return await getDurationSec(output);
 }
 
-function checkAuth(req, res, next) {
-  const ip = req.ip || 'unknown';
-  if (!checkRateLimit(ip)) return res.status(429).json({ error: 'rate limited, try later' });
-  if (req.header('X-Auth') !== UPLOAD_PASSWORD) {
-    recordFailure(ip);
-    return res.status(401).json({ error: 'unauthorized' });
-  }
-  next();
-}
-
+// === helpers ===
 function slugify(str) {
-  return str
+  return String(str || '')
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
@@ -67,6 +91,23 @@ function uniqueSlug(base, existing) {
   return `${base}-${i}`;
 }
 
+function parseTracklist(text) {
+  if (!text || typeof text !== 'string') return [];
+  return text.split('\n').map(raw => {
+    const line = raw.trim();
+    if (!line) return null;
+    const m = line.match(/^(?:(\d+):)?(\d+):(\d+)\s+(.+?)\s*$/);
+    if (!m) return null;
+    const [, h, mm, ss, label] = m;
+    const at = (parseInt(h || '0', 10) * 3600) + (parseInt(mm, 10) * 60) + parseInt(ss, 10);
+    return { at, label: label.trim() };
+  }).filter(x => x && x.label).sort((a, b) => a.at - b.at);
+}
+
+function safeBool(v) {
+  return v === 'true' || v === 'on' || v === '1' || v === true;
+}
+
 async function loadSets() {
   try {
     const raw = await fs.readFile(SETS_JSON, 'utf-8');
@@ -78,52 +119,291 @@ async function loadSets() {
   }
 }
 
+async function saveSets(data) {
+  await fs.writeFile(SETS_JSON, JSON.stringify(data, null, 2) + '\n');
+}
+
+async function ensureDir(p) {
+  await fs.mkdir(p, { recursive: true });
+}
+
+async function moveFile(src, dest) {
+  try {
+    await fs.rename(src, dest);
+  } catch (e) {
+    if (e.code === 'EXDEV') {
+      await fs.copyFile(src, dest);
+      await fs.unlink(src).catch(() => {});
+    } else {
+      throw e;
+    }
+  }
+}
+
+async function safeUnlink(p) { try { await fs.unlink(p); } catch {} }
+
+// === init dirs ===
+await ensureDir(SETS_DIR);
+await ensureDir(ARTWORKS_DIR);
+await ensureDir(ORIGINALS_DIR);
+
+// === express setup ===
+const app = express();
+app.set('trust proxy', 'loopback');
+
+const upload = multer({
+  dest: '/tmp',
+  limits: { fileSize: MAX_SIZE_MB * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.fieldname === 'audio') {
+      if (!/^audio\//.test(file.mimetype)) return cb(new Error('audio field requires an audio file'));
+    } else if (file.fieldname === 'artwork') {
+      if (!/^image\//.test(file.mimetype)) return cb(new Error('artwork field requires an image'));
+    } else {
+      return cb(new Error('unexpected field: ' + file.fieldname));
+    }
+    cb(null, true);
+  }
+});
+
+// === rate limit + auth ===
+const failedAttempts = new Map();
+const RATE_WINDOW_MS = 10 * 60 * 1000;
+const RATE_MAX = 5;
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const recent = (failedAttempts.get(ip) || []).filter(at => now - at < RATE_WINDOW_MS);
+  failedAttempts.set(ip, recent);
+  return recent.length < RATE_MAX;
+}
+function recordFailure(ip) {
+  const arr = failedAttempts.get(ip) || [];
+  arr.push(Date.now());
+  failedAttempts.set(ip, arr);
+}
+function checkAuth(req, res, next) {
+  const ip = req.ip || 'unknown';
+  if (!checkRateLimit(ip)) return res.status(429).json({ error: 'rate limited, try later' });
+  if (req.header('X-Auth') !== UPLOAD_PASSWORD) {
+    recordFailure(ip);
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  next();
+}
+
+// === routes ===
+
 app.post('/api/sets/auth', express.json(), checkAuth, (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/sets', checkAuth, upload.single('audio'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'no file uploaded' });
+app.get('/api/sets/list', checkAuth, async (_req, res) => {
+  const data = await loadSets();
+  res.json({ sets: data.sets });
+});
+
+app.post('/api/sets', checkAuth, upload.fields([
+  { name: 'audio', maxCount: 1 },
+  { name: 'artwork', maxCount: 1 }
+]), async (req, res) => {
+  const audio = req.files?.audio?.[0];
+  const artwork = req.files?.artwork?.[0];
+
+  const cleanupTmp = async () => {
+    if (audio) await safeUnlink(audio.path);
+    if (artwork) await safeUnlink(artwork.path);
+  };
+
+  if (!audio) { await cleanupTmp(); return res.status(400).json({ error: 'audio file required' }); }
 
   const title = (req.body.title || '').trim();
   const date = (req.body.date || '').trim();
+  const tracklist = parseTracklist(req.body.tracklist || '');
+  const edits = {
+    trimStart: parseFloat(req.body.trimStart || '0') || 0,
+    trimEnd: parseFloat(req.body.trimEnd || '0') || 0,
+    fadeIn: parseFloat(req.body.fadeIn || '0') || 0,
+    fadeOut: parseFloat(req.body.fadeOut || '0') || 0,
+    normalize: safeBool(req.body.normalize)
+  };
 
-  const cleanup = async () => { try { await fs.unlink(req.file.path); } catch {} };
-
-  if (!title) { await cleanup(); return res.status(400).json({ error: 'title required' }); }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { await cleanup(); return res.status(400).json({ error: 'date must be YYYY-MM-DD' }); }
+  if (!title) { await cleanupTmp(); return res.status(400).json({ error: 'title required' }); }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { await cleanupTmp(); return res.status(400).json({ error: 'date must be YYYY-MM-DD' }); }
 
   const data = await loadSets();
   const baseSlug = slugify(title);
-  if (!baseSlug) { await cleanup(); return res.status(400).json({ error: 'title produces empty slug' }); }
+  if (!baseSlug) { await cleanupTmp(); return res.status(400).json({ error: 'title produces empty slug' }); }
   const slug = uniqueSlug(baseSlug, data.sets.map(s => s.slug));
 
-  const finalName = `${slug}.mp3`;
-  const finalPath = path.join(SETS_DIR, finalName);
+  const originalExt = (path.extname(audio.originalname).replace('.', '') || 'bin').toLowerCase();
+  const originalPath = path.join(ORIGINALS_DIR, `${slug}.${originalExt}`);
+  const mp3Path = path.join(SETS_DIR, `${slug}.mp3`);
 
   try {
-    await fs.rename(req.file.path, finalPath);
+    await moveFile(audio.path, originalPath);
   } catch (e) {
-    if (e.code === 'EXDEV') {
-      // cross-device — fall back to copy + unlink
-      await fs.copyFile(req.file.path, finalPath);
-      await cleanup();
-    } else {
-      await cleanup();
-      throw e;
+    await cleanupTmp();
+    return res.status(500).json({ error: 'could not save original: ' + e.message });
+  }
+
+  let duration = 0;
+  try {
+    duration = await processAudio(originalPath, mp3Path, edits);
+  } catch (e) {
+    await safeUnlink(originalPath);
+    if (artwork) await safeUnlink(artwork.path);
+    return res.status(500).json({ error: 'audio processing failed: ' + e.message });
+  }
+  await fs.chmod(mp3Path, 0o644);
+
+  let artworkUrl = null;
+  if (artwork) {
+    const ext = (path.extname(artwork.originalname).replace('.', '') || 'jpg').toLowerCase();
+    const artPath = path.join(ARTWORKS_DIR, `${slug}.${ext}`);
+    try {
+      await moveFile(artwork.path, artPath);
+      await fs.chmod(artPath, 0o644);
+      artworkUrl = `/sets/artworks/${slug}.${ext}`;
+    } catch (e) {
+      console.error('[uploader] artwork save failed', e.message);
+      await safeUnlink(artwork.path);
     }
   }
-  await fs.chmod(finalPath, 0o644);
 
-  data.sets.unshift({ slug, title, date, audio: `/sets/${finalName}` });
-  await fs.writeFile(SETS_JSON, JSON.stringify(data, null, 2) + '\n');
+  const entry = {
+    slug,
+    title,
+    date,
+    audio: `/sets/${slug}.mp3`,
+    duration: Math.round(duration),
+    originalExt,
+    edits,
+    ...(artworkUrl ? { artwork: artworkUrl } : {}),
+    ...(tracklist.length ? { tracklist } : {})
+  };
+  data.sets.unshift(entry);
+  await saveSets(data);
 
   res.json({
     ok: true,
     slug,
-    audio: `/sets/${finalName}`,
+    audio: entry.audio,
+    duration: entry.duration,
     shareUrl: `https://ezeangeloni.xyz/?set=${slug}`
   });
+});
+
+app.patch('/api/sets/:slug', checkAuth, upload.fields([
+  { name: 'artwork', maxCount: 1 }
+]), async (req, res) => {
+  const artwork = req.files?.artwork?.[0];
+  const cleanupTmp = async () => { if (artwork) await safeUnlink(artwork.path); };
+
+  const slug = req.params.slug;
+  const data = await loadSets();
+  const idx = data.sets.findIndex(s => s.slug === slug);
+  if (idx === -1) { await cleanupTmp(); return res.status(404).json({ error: 'set not found' }); }
+  const set = { ...data.sets[idx] };
+
+  // metadata
+  if (req.body.title !== undefined) {
+    const t = req.body.title.trim();
+    if (!t) { await cleanupTmp(); return res.status(400).json({ error: 'title cannot be empty' }); }
+    set.title = t;
+  }
+  if (req.body.date !== undefined) {
+    const d = req.body.date.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { await cleanupTmp(); return res.status(400).json({ error: 'invalid date' }); }
+    set.date = d;
+  }
+  if (req.body.tracklist !== undefined) {
+    const tl = parseTracklist(req.body.tracklist);
+    if (tl.length) set.tracklist = tl; else delete set.tracklist;
+  }
+
+  // audio edits → re-process from original
+  const editFields = ['trimStart', 'trimEnd', 'fadeIn', 'fadeOut', 'normalize'];
+  const hasAudioEdit = editFields.some(f => req.body[f] !== undefined);
+  if (hasAudioEdit) {
+    const originalPath = path.join(ORIGINALS_DIR, `${slug}.${set.originalExt || 'bin'}`);
+    if (!existsSync(originalPath)) {
+      await cleanupTmp();
+      return res.status(400).json({ error: 'original file missing; cannot re-process audio' });
+    }
+    const newEdits = { ...(set.edits || {}) };
+    editFields.forEach(f => {
+      if (req.body[f] !== undefined) {
+        newEdits[f] = f === 'normalize' ? safeBool(req.body[f]) : (parseFloat(req.body[f]) || 0);
+      }
+    });
+    const tmpMp3 = `/tmp/${slug}-${Date.now()}.mp3`;
+    let duration = 0;
+    try {
+      duration = await processAudio(originalPath, tmpMp3, newEdits);
+    } catch (e) {
+      await safeUnlink(tmpMp3);
+      await cleanupTmp();
+      return res.status(500).json({ error: 'audio processing failed: ' + e.message });
+    }
+    const mp3Path = path.join(SETS_DIR, `${slug}.mp3`);
+    try {
+      await moveFile(tmpMp3, mp3Path);
+    } catch (e) {
+      await safeUnlink(tmpMp3);
+      await cleanupTmp();
+      return res.status(500).json({ error: 'could not replace mp3: ' + e.message });
+    }
+    await fs.chmod(mp3Path, 0o644);
+    set.duration = Math.round(duration);
+    set.edits = newEdits;
+  }
+
+  // artwork
+  if (artwork) {
+    if (set.artwork) {
+      await safeUnlink(path.join(PUBLIC_ROOT, set.artwork.replace(/^\//, '')));
+    }
+    const ext = (path.extname(artwork.originalname).replace('.', '') || 'jpg').toLowerCase();
+    const artPath = path.join(ARTWORKS_DIR, `${slug}.${ext}`);
+    try {
+      await moveFile(artwork.path, artPath);
+      await fs.chmod(artPath, 0o644);
+      set.artwork = `/sets/artworks/${slug}.${ext}`;
+    } catch (e) {
+      await safeUnlink(artwork.path);
+      return res.status(500).json({ error: 'artwork save failed: ' + e.message });
+    }
+  }
+  if (safeBool(req.body.removeArtwork)) {
+    if (set.artwork) {
+      await safeUnlink(path.join(PUBLIC_ROOT, set.artwork.replace(/^\//, '')));
+      delete set.artwork;
+    }
+  }
+
+  data.sets[idx] = set;
+  await saveSets(data);
+  res.json({ ok: true, set });
+});
+
+app.delete('/api/sets/:slug', express.json(), checkAuth, async (req, res) => {
+  const slug = req.params.slug;
+  const data = await loadSets();
+  const idx = data.sets.findIndex(s => s.slug === slug);
+  if (idx === -1) return res.status(404).json({ error: 'set not found' });
+  const set = data.sets[idx];
+
+  await safeUnlink(path.join(SETS_DIR, `${slug}.mp3`));
+  if (set.originalExt) {
+    await safeUnlink(path.join(ORIGINALS_DIR, `${slug}.${set.originalExt}`));
+  }
+  if (set.artwork) {
+    await safeUnlink(path.join(PUBLIC_ROOT, set.artwork.replace(/^\//, '')));
+  }
+
+  data.sets.splice(idx, 1);
+  await saveSets(data);
+  res.json({ ok: true });
 });
 
 app.use((err, _req, res, _next) => {
@@ -137,6 +417,8 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[uploader] listening on http://127.0.0.1:${PORT}`);
   console.log(`[uploader] sets dir: ${SETS_DIR}`);
+  console.log(`[uploader] originals dir: ${ORIGINALS_DIR}`);
+  console.log(`[uploader] artworks dir: ${ARTWORKS_DIR}`);
   console.log(`[uploader] sets json: ${SETS_JSON}`);
   console.log(`[uploader] max upload size: ${MAX_SIZE_MB}MB`);
 });

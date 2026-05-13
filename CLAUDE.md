@@ -63,22 +63,59 @@ The landing fetches `sets.json` at runtime, so no rebuild needed when adding set
 
 ## Set uploader (mini backend)
 
-Lives in `apps/uploader/` in this repo. Small Express server that exposes:
+Lives in `apps/uploader/` in this repo. Express server that exposes:
 
-- `POST /api/sets` (multipart: file + title + date) — auth via `X-Auth` header
 - `POST /api/sets/auth` — verify password without uploading
+- `GET  /api/sets/list` — list all sets (for admin UI)
+- `POST /api/sets` — multipart upload (audio + optional artwork) + metadata + optional audio processing
+- `PATCH /api/sets/:slug` — edit metadata, re-process audio from original, swap/remove artwork
+- `DELETE /api/sets/:slug` — remove mp3, original, artwork and json entry
 
-The admin UI is at `https://ezeangeloni.xyz/admin/` (`public/admin/index.html`, deployed by the Action like the rest of `dist/`). Password is stored in localStorage on first successful login, no session cookies.
+All require header `X-Auth: <UPLOAD_PASSWORD>`. Rate limited: 5 failed auth attempts per IP per 10min.
 
-**On the VPS** the server runs as PM2 process `set-uploader`, listening on `127.0.0.1:3010`. Code lives at `/root/eze-repo/apps/uploader/`. Updates: `cd /root/eze-repo && git pull && cd apps/uploader && npm install --omit=dev && pm2 restart set-uploader`.
+**Admin UI** at `https://ezeangeloni.xyz/admin/` (`public/admin/index.html`, deployed by the Action). Two tabs: "upload new" (form with all processing options) and "manage" (list of existing sets with edit/delete). Password stored in localStorage on first successful login.
+
+**Audio processing** uses `ffmpeg`/`ffprobe` installed on the VPS. Every upload:
+1. Saves the original (any format) to `/root/sets-originals/<slug>.<ext>` — never modified.
+2. Runs ffmpeg with the requested operations: optional trim start/end, fade in/out, loudness normalization to -14 LUFS.
+3. Outputs MP3 192kbps to `/var/www/.../sets/<slug>.mp3` — the file the public player loads.
+4. Stores edit params in `sets.json` so PATCH can re-render from the original with new params.
+
+Re-renders are always **from the original**, so edits are non-destructive — changing trim/fade params later does NOT compound quality loss.
+
+**File layout on the VPS:**
+- `/root/apps/eze-repo/apps/uploader/` — repo clone, server.js, .env
+- `/root/sets-originals/<slug>.<ext>` — uncompressed/original uploads (kept forever for re-editing)
+- `/var/www/ezeangeloni.xyz/html/sets/<slug>.mp3` — public MP3 served by nginx
+- `/var/www/ezeangeloni.xyz/html/sets/artworks/<slug>.<ext>` — public artwork
+- `/var/www/ezeangeloni.xyz/html/sets.json` — metadata file the landing fetches
+
+**Runs as PM2** process `set-uploader` listening on `127.0.0.1:3010`. Updates: `cd /root/apps/eze-repo && git pull && cd apps/uploader && npm install --omit=dev && pm2 restart set-uploader`.
 
 **Env vars** (in `apps/uploader/.env`, chmod 600):
-- `UPLOAD_PASSWORD` — required, the form password
-- `PORT`, `SETS_DIR`, `SETS_JSON`, `MAX_SIZE_MB` — optional overrides
+- `UPLOAD_PASSWORD` — required
+- `PORT` (3010), `SETS_DIR`, `ORIGINALS_DIR`, `ARTWORKS_DIR`, `SETS_JSON`, `PUBLIC_ROOT`, `MAX_SIZE_MB` (800) — optional overrides
 
-**Nginx**: the `ezeangeloni.xyz` server block proxies `/api/sets*` to `127.0.0.1:3010` and sets `client_max_body_size 320M;`. See `apps/uploader/README.md` for the exact block.
+**Nginx** in the `ezeangeloni.xyz` block proxies `/api/sets*` to `127.0.0.1:3010` and sets `client_max_body_size 320M;` plus `proxy_read_timeout 600s`. Detailed config in `apps/uploader/README.md`.
 
-The uploader handles slug generation from title (lowercase, dashed, no diacritics), file rename, atomic-ish update of `sets.json` (entries prepended so newest is first).
+**sets.json schema:**
+```json
+{
+  "sets": [
+    {
+      "slug": "set1",
+      "title": "Set 1",
+      "date": "2026-05-13",
+      "audio": "/sets/set1.mp3",
+      "duration": 1122,
+      "originalExt": "wav",
+      "edits": { "trimStart": 0, "trimEnd": 0, "fadeIn": 0, "fadeOut": 0, "normalize": true },
+      "artwork": "/sets/artworks/set1.jpg",
+      "tracklist": [{ "at": 0, "label": "Intro" }, { "at": 330, "label": "Artist - Track" }]
+    }
+  ]
+}
+```
 
 ## Future
 - Telegram bot integration (n8n workflow) calling `POST /api/sets` from the existing bot, so sets can be uploaded via Telegram like frases.

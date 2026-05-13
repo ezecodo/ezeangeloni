@@ -1,58 +1,87 @@
 # Set Uploader
 
-Tiny Node backend that lets the admin upload DJ sets via the `/admin` page on the landing.
+Express backend behind `/admin` on the landing. Handles audio uploads, server-side processing with ffmpeg, metadata editing, and deletion of DJ sets.
+
+## Requirements on the VPS
+
+- Node 18+
+- `ffmpeg` and `ffprobe` in `$PATH` (install: `apt install ffmpeg -y`)
+- `pm2` for process management
 
 ## Endpoints
 
-- `POST /api/sets/auth` — verify password (used by the form before showing the upload UI)
-- `POST /api/sets` — multipart upload, fields: `audio` (file), `title` (string), `date` (YYYY-MM-DD)
+All require `X-Auth: <UPLOAD_PASSWORD>` header. Rate limited.
 
-Both require header `X-Auth: <UPLOAD_PASSWORD>`.
+| Method | Path | Body | Purpose |
+|---|---|---|---|
+| POST | `/api/sets/auth` | empty json | verify password |
+| GET  | `/api/sets/list` | — | list all sets |
+| POST | `/api/sets` | multipart | upload + process new set |
+| PATCH | `/api/sets/:slug` | multipart | edit metadata or re-process audio |
+| DELETE | `/api/sets/:slug` | — | remove set + files |
+
+### POST /api/sets fields
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `audio` | file | yes | any audio format, max 800MB |
+| `title` | string | yes | used to generate slug |
+| `date` | string | yes | YYYY-MM-DD |
+| `artwork` | file | no | image, displayed in the player |
+| `tracklist` | string | no | text, one `mm:ss Label` per line |
+| `trimStart` | number | no | seconds to cut from start |
+| `trimEnd` | number | no | seconds to cut from end |
+| `fadeIn` | number | no | fade in duration in seconds |
+| `fadeOut` | number | no | fade out duration in seconds |
+| `normalize` | bool | no | apply -14 LUFS loudness normalization |
+
+### PATCH /api/sets/:slug
+
+Same fields as POST except `audio` is not editable (re-uploading creates a new set). Adds:
+
+- `removeArtwork: true` — drop existing artwork
+- Any of the audio fields triggers a re-render of the MP3 from the saved original
 
 ## Env vars
 
 | Var | Default | Purpose |
 |---|---|---|
-| `UPLOAD_PASSWORD` | (required) | Password the form sends in `X-Auth` |
-| `PORT` | `3010` | Listen port (loopback only) |
-| `SETS_DIR` | `/var/www/ezeangeloni.xyz/html/sets` | Where MP3s are written |
-| `SETS_JSON` | `/var/www/ezeangeloni.xyz/html/sets.json` | JSON file updated on upload |
-| `MAX_SIZE_MB` | `300` | Reject files larger than this |
+| `UPLOAD_PASSWORD` | (required) | password the form sends in `X-Auth` |
+| `PORT` | `3010` | listen port (loopback only) |
+| `SETS_DIR` | `/var/www/ezeangeloni.xyz/html/sets` | where MP3s live |
+| `ARTWORKS_DIR` | `${SETS_DIR}/artworks` | where artwork images live |
+| `ORIGINALS_DIR` | `/root/sets-originals` | where original uploads are kept |
+| `SETS_JSON` | `/var/www/ezeangeloni.xyz/html/sets.json` | metadata file |
+| `PUBLIC_ROOT` | `/var/www/ezeangeloni.xyz/html` | for path resolution |
+| `MAX_SIZE_MB` | `800` | reject larger uploads |
 
-## Deploy on the VPS
+## Deploy on the VPS (one time)
 
 ```bash
-# 1. clone the repo to a working dir (one-time)
-cd /root
-git clone <repo-url> eze-repo
+# 1. ffmpeg
+apt install ffmpeg -y
 
-# 2. install production deps
+# 2. clone repo
+mkdir -p /root/apps && cd /root/apps
+git clone https://github.com/ezecodo/ezeangeloni.git eze-repo
 cd eze-repo/apps/uploader
 npm install --omit=dev
 
-# 3. create .env (chmod 600 so only root can read)
-cat > .env <<EOF
-UPLOAD_PASSWORD=your-strong-password-here
-EOF
+# 3. .env
+nano .env
+# put: UPLOAD_PASSWORD=...
 chmod 600 .env
 
-# 4. start with PM2, loading .env automatically
-pm2 start server.js --name set-uploader --env-from-file .env
-pm2 save
-```
-
-If `pm2 start --env-from-file` is not available in your PM2 version, use:
-
-```bash
+# 4. PM2
 set -a; source .env; set +a
 pm2 start server.js --name set-uploader --update-env
 pm2 save
 ```
 
-## Update
+## Update (after pushing changes)
 
 ```bash
-cd /root/eze-repo
+cd /root/apps/eze-repo
 git pull
 cd apps/uploader
 npm install --omit=dev
@@ -61,7 +90,7 @@ pm2 restart set-uploader
 
 ## Nginx
 
-Add to the `ezeangeloni.xyz` server block:
+Add inside the `ezeangeloni.xyz` server block (same one that serves the landing):
 
 ```nginx
 client_max_body_size 320M;
