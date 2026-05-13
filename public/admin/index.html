@@ -34,6 +34,7 @@
   }
   input[type=file]::file-selector-button:hover { background:rgba(255,110,180,0.22); }
   .hint { font-size:.65rem; color:var(--muted); margin-top:.4rem; letter-spacing:.05em; }
+  .save-only { color: var(--gold); font-size: .6rem; letter-spacing:.1em; opacity:.7; margin-left:.4rem; text-transform:none; }
 
   .field-row { display:flex; gap:.5rem; align-items:stretch; }
   .field-row input { flex:1; min-width:0; }
@@ -51,9 +52,10 @@
   .editor.active { display:block; }
   .wf-container { width:100%; height:110px; cursor:pointer; }
   .wf-toolbar { display:flex; gap:.6rem; align-items:center; margin-top:.7rem; flex-wrap:wrap; }
-  .wf-btn { background:rgba(240,237,232,0.06); border:1px solid var(--line); color:var(--text); font-family:'DM Mono', monospace; font-size:.68rem; letter-spacing:.15em; text-transform:uppercase; padding:.5rem .85rem; border-radius:6px; cursor:pointer; transition: background .2s, border-color .2s; }
+  .wf-btn { background:rgba(240,237,232,0.06); border:1px solid var(--line); color:var(--text); font-family:'DM Mono', monospace; font-size:.68rem; letter-spacing:.15em; text-transform:uppercase; padding:.5rem .85rem; border-radius:6px; cursor:pointer; transition: background .2s, border-color .2s, color .2s; }
   .wf-btn:hover { background:rgba(240,237,232,0.12); border-color:rgba(240,237,232,0.3); }
   .wf-btn.primary { background:linear-gradient(90deg, rgba(255,110,180,0.2), rgba(199,125,255,0.2)); border-color:rgba(255,110,180,0.4); }
+  .wf-btn.active { background:linear-gradient(90deg, rgba(184,247,91,0.18), rgba(110,249,245,0.15)); border-color:rgba(184,247,91,0.5); color: var(--green); }
   .wf-btn:disabled { opacity:.35; cursor:not-allowed; }
   .wf-time { font-size:.72rem; color:var(--muted); letter-spacing:.08em; margin-left:auto; }
   .wf-time .now { color:var(--text); }
@@ -76,28 +78,33 @@
   input[type=checkbox]:checked + .toggle::after { transform: translateX(16px); }
   input[type=checkbox] { display:none; }
 
-  /* segmented control */
+  /* segmented */
   .seg { display:flex; gap:.3rem; margin-top:.4rem; }
   .seg button { flex:1; padding:.55rem .4rem; background:rgba(240,237,232,0.04); border:1px solid var(--line); color:var(--muted); font-family:'DM Mono', monospace; font-size:.66rem; letter-spacing:.15em; text-transform:uppercase; border-radius:6px; cursor:pointer; transition: background .15s, color .15s, border-color .15s; }
   .seg button.active { background:rgba(255,110,180,0.15); color:var(--text); border-color:rgba(255,110,180,0.45); }
   .seg button:hover { color:var(--text); }
 
-  /* EQ sliders */
-  .eq-row { display:flex; align-items:center; gap:.8rem; margin-top:.55rem; }
-  .eq-row > span:first-child { font-size:.65rem; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; width:42px; flex-shrink:0; }
-  .eq-row .eq-val { font-size:.7rem; color:var(--text); min-width:42px; text-align:right; font-variant-numeric:tabular-nums; }
+  /* slider row (range + value) */
+  .slider-row { display:flex; align-items:center; gap:.8rem; margin-top:.45rem; }
+  .slider-row > label { margin:0; flex-shrink:0; min-width:60px; }
+  .slider-row .val { font-size:.72rem; color:var(--text); min-width:54px; text-align:right; font-variant-numeric:tabular-nums; }
   input[type=range] { -webkit-appearance:none; appearance:none; flex:1; background:var(--line); height:3px; border-radius:2px; padding:0; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%; background:linear-gradient(135deg, var(--pink), var(--violet)); cursor:pointer; border:none; }
   input[type=range]::-moz-range-thumb { width:14px; height:14px; border-radius:50%; background:linear-gradient(135deg, var(--pink), var(--violet)); cursor:pointer; border:none; }
 
+  /* EQ */
+  .eq-row { display:flex; align-items:center; gap:.8rem; margin-top:.55rem; }
+  .eq-row > span:first-child { font-size:.65rem; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; width:42px; flex-shrink:0; }
+  .eq-row .eq-val { font-size:.7rem; color:var(--text); min-width:50px; text-align:right; font-variant-numeric:tabular-nums; }
+
   /* volume regions */
   .vol-list { margin-top:.6rem; }
-  .vol-row { display:flex; align-items:center; gap:.45rem; margin-top:.4rem; padding:.45rem .55rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:8px; flex-wrap:wrap; }
-  .vol-row .arr { color:var(--muted); font-size:.8rem; }
-  .vol-row .db { color:var(--muted); font-size:.7rem; }
-  .vol-row input[type=text] { width:78px; padding:.35rem .45rem; font-size:.72rem; flex-shrink:0; }
-  .vol-row input[type=number] { width:64px; padding:.35rem .45rem; font-size:.72rem; flex-shrink:0; }
-  .vol-row .rm { background:none; border:none; color:var(--red); font-size:1.1rem; cursor:pointer; padding:.1rem .35rem; opacity:.5; }
+  .vol-row { display:flex; align-items:center; gap:.5rem; margin-top:.45rem; padding:.5rem .55rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:8px; flex-wrap:wrap; }
+  .vol-row .arr { color:var(--muted); font-size:.8rem; flex-shrink:0; }
+  .vol-row input[type=text] { width:75px; padding:.35rem .45rem; font-size:.72rem; flex-shrink:0; }
+  .vol-row input[type=range] { flex:1; min-width:80px; }
+  .vol-row .gain-val { font-size:.7rem; color:var(--text); min-width:50px; text-align:right; flex-shrink:0; font-variant-numeric:tabular-nums; }
+  .vol-row .rm { background:none; border:none; color:var(--red); font-size:1.1rem; cursor:pointer; padding:.1rem .35rem; opacity:.5; flex-shrink:0; }
   .vol-row .rm:hover { opacity:1; }
   .vol-empty { font-size:.68rem; color:var(--muted); letter-spacing:.08em; padding:.7rem 0 .2rem; }
 
@@ -146,7 +153,6 @@
   details[open] summary::before { content:'▾ '; }
   details details { margin-top:.6rem; padding-left:.5rem; border-left:1px solid var(--line); }
 
-  /* WaveSurfer region label readability */
   ::part(region) { z-index: 2; }
   ::part(region-content) { background: rgba(8,8,16,0.7); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: 'DM Mono', monospace; }
 </style>
@@ -181,9 +187,10 @@
           <button type="button" class="wf-btn primary" data-act="play">▶ play</button>
           <button type="button" class="wf-btn" data-act="zoom-in">zoom +</button>
           <button type="button" class="wf-btn" data-act="zoom-out">zoom −</button>
+          <button type="button" class="wf-btn" data-act="fx">🔊 hear effects</button>
           <span class="wf-time"><span class="now">0:00</span> / <span class="total">--:--</span></span>
         </div>
-        <p class="hint">click waveform to seek · 📍 buttons mark trim/fade points · drag regions to set volume zones</p>
+        <p class="hint">click waveform to seek · 📍 captures position · drag waveform regions · "hear effects" applies most filters live (declip and normalize are <span class="save-only">save-only</span>)</p>
       </div>
 
       <label for="title">title</label>
@@ -207,20 +214,14 @@
         </div>
         <p class="hint">cut from start / end · format mm:ss or seconds</p>
 
-        <div class="row">
-          <div>
-            <label>fade in (s)</label>
-            <div class="field-row"><input type="number" min="0" step="0.5" data-f="fadeIn" value="0"><button type="button" class="mark-btn" data-mark="fadeIn" disabled>📍</button></div>
-          </div>
-          <div>
-            <label>fade out (s)</label>
-            <div class="field-row"><input type="number" min="0" step="0.5" data-f="fadeOut" value="0"><button type="button" class="mark-btn" data-mark="fadeOut" disabled>📍</button></div>
-          </div>
-        </div>
+        <label>fade in <span class="val-inline" data-for="fadeIn">0.0s</span></label>
+        <div class="slider-row"><input type="range" data-f="fadeIn" min="0" max="30" step="0.5" value="0"><button type="button" class="mark-btn" data-mark="fadeIn" disabled>📍</button></div>
+        <label>fade out <span class="val-inline" data-for="fadeOut">0.0s</span></label>
+        <div class="slider-row"><input type="range" data-f="fadeOut" min="0" max="30" step="0.5" value="0"><button type="button" class="mark-btn" data-mark="fadeOut" disabled>📍</button></div>
 
         <details open>
           <summary>cleanup</summary>
-          <label class="toggle-row"><span>de-clip · reconstruct saturated peaks</span><input type="checkbox" data-f="declip"><div class="toggle"></div></label>
+          <label class="toggle-row"><span>de-clip · reconstruct saturated peaks <span class="save-only">• save only</span></span><input type="checkbox" data-f="declip"><div class="toggle"></div></label>
           <label class="toggle-row"><span>high-pass · remove rumble below 80Hz</span><input type="checkbox" data-f="highpass"><div class="toggle"></div></label>
         </details>
 
@@ -234,7 +235,7 @@
             <button type="button" data-val="heavy">heavy</button>
           </div>
           <input type="hidden" data-f="compressor" value="">
-          <label class="toggle-row" style="margin-top:.7rem"><span>normalize loudness · -14 LUFS</span><input type="checkbox" data-f="normalize" checked><div class="toggle"></div></label>
+          <label class="toggle-row" style="margin-top:.7rem"><span>normalize loudness · -14 LUFS <span class="save-only">• save only</span></span><input type="checkbox" data-f="normalize" checked><div class="toggle"></div></label>
           <label class="toggle-row"><span>master limiter · prevent any final clipping</span><input type="checkbox" data-f="limiter"><div class="toggle"></div></label>
         </details>
 
@@ -250,7 +251,7 @@
         <summary>volume regions (boost / reduce specific parts)</summary>
         <button type="button" class="wf-btn" data-act="add-region" disabled>＋ region at current position (default −6dB, 10s)</button>
         <div class="vol-list" data-vol-list></div>
-        <p class="hint">each region is a time range with a gain in dB · drag on waveform to resize/move · negative reduces, positive boosts</p>
+        <p class="hint">each region is a time range with gain in dB · drag on waveform to resize/move · slider for gain</p>
       </details>
 
       <details data-section="presentation">
@@ -320,13 +321,83 @@
     return r.ok;
   }
 
-  // ===== WaveSurfer editor =====
-  // ctx = state object: { ws, regions, regionData, trimOffset, form, listEl, addBtn, cueBtn, markBtns, addCueWired, destroy }
+  // ===== Web Audio FX chain =====
+  // Single shared AudioContext (lazy)
+  let _ac = null;
+  function getAC() {
+    if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (_ac.state === 'suspended') _ac.resume();
+    return _ac;
+  }
+  function buildFxChain(audioEl) {
+    const ac = getAC();
+    let source;
+    try { source = ac.createMediaElementSource(audioEl); }
+    catch (e) { console.warn('createMediaElementSource failed', e); return null; }
+    const hp = ac.createBiquadFilter();      hp.type = 'highpass'; hp.frequency.value = 1; hp.Q.value = 0.707;
+    const comp = ac.createDynamicsCompressor(); comp.threshold.value = 0; comp.ratio.value = 1;
+    const gain = ac.createGain();            gain.gain.value = 1;
+    const eqLow = ac.createBiquadFilter();   eqLow.type = 'lowshelf';  eqLow.frequency.value = 200;  eqLow.gain.value = 0;
+    const eqMid = ac.createBiquadFilter();   eqMid.type = 'peaking';   eqMid.frequency.value = 1500; eqMid.Q.value = 1; eqMid.gain.value = 0;
+    const eqHigh = ac.createBiquadFilter();  eqHigh.type = 'highshelf'; eqHigh.frequency.value = 6000; eqHigh.gain.value = 0;
+    const limiter = ac.createDynamicsCompressor(); limiter.threshold.value = 0; limiter.ratio.value = 1;
+    source.connect(hp); hp.connect(comp); comp.connect(gain);
+    gain.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
+    eqHigh.connect(limiter); limiter.connect(ac.destination);
+    return { source, hp, comp, gain, eqLow, eqMid, eqHigh, limiter, audioEl, ac };
+  }
+  const COMP_PRESETS = {
+    subtle: { th: -12, ratio: 2, attack: 0.02, release: 0.2, knee: 6 },
+    medium: { th: -18, ratio: 4, attack: 0.01, release: 0.15, knee: 6 },
+    heavy:  { th: -24, ratio: 8, attack: 0.005, release: 0.1, knee: 6 }
+  };
+  function applyStaticFx(chain, opts, on) {
+    if (!chain) return;
+    if (!on) {
+      chain.hp.frequency.value = 1;
+      chain.comp.threshold.value = 0; chain.comp.ratio.value = 1;
+      chain.eqLow.gain.value = 0; chain.eqMid.gain.value = 0; chain.eqHigh.gain.value = 0;
+      chain.limiter.threshold.value = 0; chain.limiter.ratio.value = 1;
+      return;
+    }
+    chain.hp.frequency.value = opts.highpass ? 80 : 1;
+    const cp = COMP_PRESETS[opts.compressor];
+    if (cp) {
+      chain.comp.threshold.value = cp.th; chain.comp.ratio.value = cp.ratio;
+      chain.comp.attack.value = cp.attack; chain.comp.release.value = cp.release;
+      chain.comp.knee.value = cp.knee;
+    } else { chain.comp.threshold.value = 0; chain.comp.ratio.value = 1; }
+    chain.eqLow.gain.value = opts.eqLow || 0;
+    chain.eqMid.gain.value = opts.eqMid || 0;
+    chain.eqHigh.gain.value = opts.eqHigh || 0;
+    if (opts.limiter) {
+      chain.limiter.threshold.value = -1; chain.limiter.ratio.value = 20;
+      chain.limiter.attack.value = 0.001; chain.limiter.release.value = 0.05; chain.limiter.knee.value = 0;
+    } else { chain.limiter.threshold.value = 0; chain.limiter.ratio.value = 1; }
+  }
+  function updateDynamicGain(chain, opts, trimOffset, on) {
+    if (!chain) return;
+    if (!on) { chain.gain.gain.value = 1; return; }
+    const t = chain.audioEl.currentTime;
+    const dur = chain.audioEl.duration || 0;
+    let g = 1;
+    if (opts.fadeIn > 0 && t < opts.fadeIn) g *= Math.max(0, t / opts.fadeIn);
+    if (opts.fadeOut > 0 && dur > 0 && t > dur - opts.fadeOut) g *= Math.max(0, (dur - t) / opts.fadeOut);
+    for (const r of opts.volumeRegions || []) {
+      const ps = (r.start || 0) - trimOffset;
+      const pe = (r.end || 0) - trimOffset;
+      if (t >= ps && t <= pe) g *= Math.pow(10, (r.gainDb || 0) / 20);
+    }
+    chain.gain.gain.value = g;
+  }
+
+  // ===== editor (WaveSurfer + FX chain) =====
   function createEditor({ container, audioSrc, isBlob, trimOffset = 0, form, existingVolumeRegions = [] }) {
     const wsRoot = container.querySelector('.wf-container');
     const playBtn = container.querySelector('[data-act=play]');
     const zoomIn = container.querySelector('[data-act=zoom-in]');
     const zoomOut = container.querySelector('[data-act=zoom-out]');
+    const fxBtn = container.querySelector('[data-act=fx]');
     const nowEl = container.querySelector('.wf-time .now');
     const totalEl = container.querySelector('.wf-time .total');
 
@@ -338,23 +409,38 @@
       progressColor: '#c77dff',
       cursorColor: '#f0ede8',
       cursorWidth: 2,
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 1,
-      height: 110,
-      normalize: true,
-      minPxPerSec: 1,
+      barWidth: 2, barGap: 1, barRadius: 1,
+      height: 110, normalize: true, minPxPerSec: 1,
     });
-
     const regions = ws.registerPlugin(RegionsPlugin.create());
-    const regionData = new Map(); // id → { start, end, gainDb } in ORIGINAL time
-    const wsRegions = new Map();  // id → WaveSurfer Region instance
+    const regionData = new Map();
+    const wsRegions = new Map();
+
+    const ctx = { ws, regions, regionData, wsRegions, trimOffset, form, fxChain: null, fxOn: false, fxTimer: null,
+      destroy: () => {
+        try { ws.destroy(); } catch {}
+        if (ctx.fxTimer) clearInterval(ctx.fxTimer);
+        container.classList.remove('active');
+      }
+    };
 
     ws.on('decode', () => {
       wsRoot.querySelector('.wf-loading')?.remove();
       totalEl.textContent = fmtTime(ws.getDuration());
-      // restore existing volume regions on the waveform
       existingVolumeRegions.forEach(r => addVolumeRegion(ctx, { start: r.start, end: r.end, gainDb: r.gainDb }, false));
+    });
+    ws.on('ready', () => {
+      // build FX chain after waveform is ready (audio element exists)
+      try {
+        const audioEl = ws.getMediaElement();
+        if (audioEl) {
+          ctx.fxChain = buildFxChain(audioEl);
+          ctx.fxTimer = setInterval(() => {
+            const opts = readCurrentFxOpts(form, ctx);
+            updateDynamicGain(ctx.fxChain, opts, ctx.trimOffset, ctx.fxOn);
+          }, 25);
+        }
+      } catch (e) { console.warn('fx chain init failed', e); }
     });
     ws.on('timeupdate', (t) => { nowEl.textContent = fmtTime(t); });
     ws.on('play', () => { playBtn.textContent = '❚❚ pause'; });
@@ -365,20 +451,56 @@
     let zoomLevel = 0;
     zoomIn.addEventListener('click', () => { zoomLevel = Math.min(zoomLevel + 20, 200); ws.zoom(zoomLevel); });
     zoomOut.addEventListener('click', () => { zoomLevel = Math.max(zoomLevel - 20, 0); ws.zoom(zoomLevel); });
+    fxBtn.addEventListener('click', () => {
+      ctx.fxOn = !ctx.fxOn;
+      fxBtn.classList.toggle('active', ctx.fxOn);
+      fxBtn.textContent = ctx.fxOn ? '🔊 effects on' : '🔊 hear effects';
+      applyStaticFx(ctx.fxChain, readCurrentFxOpts(form, ctx), ctx.fxOn);
+    });
 
     if (isBlob) ws.loadBlob(audioSrc); else ws.load(audioSrc);
     container.classList.add('active');
 
-    const ctx = { ws, regions, regionData, wsRegions, trimOffset, form,
-      destroy: () => {
-        try { ws.destroy(); } catch {}
-        container.classList.remove('active');
-      }
-    };
     return ctx;
   }
 
-  // ===== mark buttons + cue button =====
+  function readCurrentFxOpts(form, ctx) {
+    const get = (f) => form.querySelector(`[data-f="${f}"]`);
+    return {
+      highpass: get('highpass')?.checked || false,
+      compressor: get('compressor')?.value || '',
+      limiter: get('limiter')?.checked || false,
+      eqLow: parseFloat(get('eqLow')?.value || '0') || 0,
+      eqMid: parseFloat(get('eqMid')?.value || '0') || 0,
+      eqHigh: parseFloat(get('eqHigh')?.value || '0') || 0,
+      fadeIn: parseFloat(get('fadeIn')?.value || '0') || 0,
+      fadeOut: parseFloat(get('fadeOut')?.value || '0') || 0,
+      volumeRegions: ctx ? [...ctx.regionData.values()] : []
+    };
+  }
+
+  function wireRealtimeFx(formScope, ctx) {
+    const inputs = formScope.querySelectorAll('[data-f]');
+    inputs.forEach(el => {
+      el.addEventListener('input', () => {
+        applyStaticFx(ctx.fxChain, readCurrentFxOpts(formScope, ctx), ctx.fxOn);
+        // refresh inline value displays
+        if (el.type === 'range') {
+          const valEl = formScope.querySelector(`[data-for="${el.dataset.f}"]`);
+          if (valEl) valEl.textContent = `${parseFloat(el.value).toFixed(1)}s`;
+          const eqVal = el.parentElement.querySelector('.eq-val');
+          if (eqVal) eqVal.textContent = `${parseFloat(el.value).toFixed(1)} dB`;
+        }
+      });
+      el.addEventListener('change', () => applyStaticFx(ctx.fxChain, readCurrentFxOpts(formScope, ctx), ctx.fxOn));
+    });
+    // segmented buttons too
+    formScope.querySelectorAll('.seg button').forEach(b => {
+      b.addEventListener('click', () => applyStaticFx(ctx.fxChain, readCurrentFxOpts(formScope, ctx), ctx.fxOn));
+    });
+  }
+
+  // ===== mark + cue buttons =====
   function wireMarkButtons(formScope, ctx) {
     formScope.querySelectorAll('.mark-btn').forEach(btn => {
       btn.disabled = false;
@@ -387,12 +509,13 @@
         const t = ctx.ws.getCurrentTime();
         const d = ctx.ws.getDuration() || 0;
         let val;
+        const curTrimEnd = parseTime(formScope.querySelector('[data-f=trimEnd]')?.value || '0');
         if (target === 'trimStart') val = ctx.trimOffset + t;
-        else if (target === 'trimEnd') val = (formScope.querySelector('[data-f=trimEnd]')._currentVal || 0) + (d - t);
+        else if (target === 'trimEnd') val = curTrimEnd + (d - t);
         else if (target === 'fadeIn') val = t;
         else if (target === 'fadeOut') val = d - t;
         const input = btn.parentElement.querySelector('input');
-        if (target === 'fadeIn' || target === 'fadeOut') input.value = val.toFixed(1);
+        if (input.type === 'range' || input.type === 'number') input.value = val.toFixed(1);
         else input.value = fmtTime(val);
         input.dispatchEvent(new Event('input', { bubbles: true }));
       };
@@ -428,14 +551,18 @@
       const r = ctx.regionData.get(id);
       const row = document.createElement('div');
       row.className = 'vol-row'; row.dataset.id = id;
+      const gNum = `${r.gainDb >= 0 ? '+' : ''}${r.gainDb.toFixed(1)} dB`;
       row.innerHTML = `
         <input type="text" data-vr="start" value="${fmtTime(r.start)}">
         <span class="arr">→</span>
         <input type="text" data-vr="end" value="${fmtTime(r.end)}">
-        <input type="number" data-vr="gainDb" value="${r.gainDb}" step="0.5" min="-30" max="30">
-        <span class="db">dB</span>
+        <input type="range" data-vr="gainDb" value="${r.gainDb}" step="0.5" min="-30" max="30">
+        <span class="gain-val">${gNum}</span>
         <button type="button" class="rm" title="remove">×</button>
       `;
+      const updateGainDisplay = (g) => {
+        row.querySelector('.gain-val').textContent = `${g >= 0 ? '+' : ''}${g.toFixed(1)} dB`;
+      };
       row.querySelector('[data-vr=start]').addEventListener('input', e => {
         const newStart = parseTime(e.target.value);
         const cur = ctx.regionData.get(id); cur.start = newStart;
@@ -451,6 +578,7 @@
       row.querySelector('[data-vr=gainDb]').addEventListener('input', e => {
         const g = parseFloat(e.target.value) || 0;
         const cur = ctx.regionData.get(id); cur.gainDb = g;
+        updateGainDisplay(g);
         const wr = ctx.wsRegions.get(id);
         if (wr) wr.setOptions({ color: regionColor(g), content: `${g >= 0 ? '+' : ''}${g}dB` });
       });
@@ -465,11 +593,7 @@
     const previewEnd = opts.end != null ? (opts.end - ctx.trimOffset) : Math.min(previewStart + 10, d);
     const gainDb = opts.gainDb != null ? opts.gainDb : -6;
     const id = uid();
-    const orig = {
-      start: previewStart + ctx.trimOffset,
-      end: previewEnd + ctx.trimOffset,
-      gainDb
-    };
+    const orig = { start: previewStart + ctx.trimOffset, end: previewEnd + ctx.trimOffset, gainDb };
     ctx.regionData.set(id, orig);
     const wr = ctx.regions.addRegion({
       start: previewStart, end: previewEnd,
@@ -488,10 +612,9 @@
         row.querySelector('[data-vr=end]').value = fmtTime(cur.end);
       }
     });
-    const listEl = ctx.form.querySelector('[data-vol-list]');
-    rebuildRegionList(ctx, listEl);
+    rebuildRegionList(ctx, ctx.form.querySelector('[data-vol-list]'));
     if (scrollIntoView) {
-      const row = listEl.querySelector(`.vol-row[data-id="${id}"]`);
+      const row = ctx.form.querySelector(`.vol-row[data-id="${id}"]`);
       row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }
@@ -502,13 +625,12 @@
     ctx.wsRegions.delete(id);
     rebuildRegionList(ctx, listEl);
   }
-
   function wireAddRegionButton(btn, ctx) {
     btn.disabled = false;
     btn.onclick = () => addVolumeRegion(ctx);
   }
 
-  // ===== segmented control + EQ slider value display =====
+  // ===== UI helpers =====
   function wireSegmentedControls(scope) {
     scope.querySelectorAll('.seg').forEach(seg => {
       const target = seg.dataset.seg;
@@ -516,29 +638,32 @@
       seg.querySelectorAll('button').forEach(b => {
         b.addEventListener('click', () => {
           seg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
-          if (hidden) hidden.value = b.dataset.val;
+          if (hidden) { hidden.value = b.dataset.val; hidden.dispatchEvent(new Event('input', { bubbles:true })); }
         });
       });
     });
   }
-  function wireEQSliders(scope) {
-    scope.querySelectorAll('input[type=range]').forEach(s => {
+  function wireSliderDisplays(scope) {
+    // EQ
+    scope.querySelectorAll('.eq-row input[type=range]').forEach(s => {
       const valEl = s.parentElement.querySelector('.eq-val');
       const update = () => { if (valEl) valEl.textContent = `${parseFloat(s.value).toFixed(1)} dB`; };
-      s.addEventListener('input', update);
-      update();
+      s.addEventListener('input', update); update();
+    });
+    // Fade in/out
+    scope.querySelectorAll('.slider-row input[type=range]').forEach(s => {
+      const valEl = scope.querySelector(`[data-for="${s.dataset.f}"]`);
+      const update = () => { if (valEl) valEl.textContent = `${parseFloat(s.value).toFixed(1)}s`; };
+      s.addEventListener('input', update); update();
     });
   }
 
-  // ===== form data collection =====
+  // ===== form data =====
   function collectEditFields(scope) {
     const get = (f) => scope.querySelector(`[data-f="${f}"]`);
-    const trimEnd = parseTime(get('trimEnd').value);
-    // store trim end on input for the mark-btn math
-    get('trimEnd')._currentVal = trimEnd;
     return {
       trimStart: parseTime(get('trimStart').value),
-      trimEnd,
+      trimEnd: parseTime(get('trimEnd').value),
       fadeIn: parseFloat(get('fadeIn').value) || 0,
       fadeOut: parseFloat(get('fadeOut').value) || 0,
       normalize: get('normalize').checked,
@@ -604,7 +729,7 @@
   $('date').value = new Date().toISOString().slice(0, 10);
   function checkReady() {
     const file = $('file').files[0];
-    const title = uploadForm.querySelector('[data-f=title]')?.value?.trim() || $('title')?.value?.trim() || '';
+    const title = $('title').value.trim();
     const date = $('date').value;
     $('uploadBtn').disabled = !(file && title && date);
   }
@@ -620,13 +745,13 @@
     wireAddCueButton(uploadForm.querySelector('[data-act=add-cue]'), uploadCtx, uploadForm.querySelector('[data-f=tracklist]'));
     wireAddRegionButton(uploadForm.querySelector('[data-act=add-region]'), uploadCtx);
     rebuildRegionList(uploadCtx, uploadForm.querySelector('[data-vol-list]'));
+    wireRealtimeFx(uploadForm, uploadCtx);
     checkReady();
   });
   $('title').addEventListener('input', checkReady);
   $('date').addEventListener('input', checkReady);
-  // wire segmented controls + sliders for upload form
   wireSegmentedControls(uploadForm);
-  wireEQSliders(uploadForm);
+  wireSliderDisplays(uploadForm);
 
   $('uploadBtn').addEventListener('click', () => {
     const file = $('file').files[0];
@@ -677,7 +802,7 @@
             if (el.type === 'checkbox') el.checked = el.dataset.f === 'normalize';
             else if (el.type === 'range') { el.value = 0; el.dispatchEvent(new Event('input')); }
             else if (el.type === 'hidden') el.value = '';
-            else if (el.tagName !== 'BUTTON') el.value = el.dataset.f.startsWith('trim') ? '0' : (el.dataset.f.startsWith('fade') || el.dataset.f.startsWith('eq') ? '0' : '');
+            else if (el.tagName !== 'BUTTON') el.value = el.dataset.f.startsWith('trim') ? '0' : '';
           });
           uploadForm.querySelectorAll('.seg button').forEach(b => b.classList.toggle('active', b.dataset.val === ''));
           $('date').value = new Date().toISOString().slice(0, 10);
@@ -704,7 +829,6 @@
 
   // ===== MANAGE / EDIT =====
   let editCtx = null;
-
   async function loadList() {
     const list = $('setList');
     list.innerHTML = '<p class="empty">loading...</p>';
@@ -773,9 +897,10 @@
           <button type="button" class="wf-btn primary" data-act="play">▶ play</button>
           <button type="button" class="wf-btn" data-act="zoom-in">zoom +</button>
           <button type="button" class="wf-btn" data-act="zoom-out">zoom −</button>
+          <button type="button" class="wf-btn" data-act="fx">🔊 hear effects</button>
           <span class="wf-time"><span class="now">0:00</span> / <span class="total">--:--</span></span>
         </div>
-        <p class="hint">previewing current mp3 (post-edits) · drag waveform regions to set volume zones · 📍 marks original-time values</p>
+        <p class="hint">previewing current mp3 (post-prior-edits) · "hear effects" applies new filters live · declip/normalize are <span class="save-only">save only</span></p>
       </div>
 
       <label>title</label><input type="text" data-f="title" value="${attr(set.title)}">
@@ -788,14 +913,15 @@
           <div><label>trim start</label><div class="field-row"><input type="text" data-f="trimStart" value="${attr(fmtTime(e.trimStart||0))}"><button type="button" class="mark-btn" data-mark="trimStart">📍</button></div></div>
           <div><label>trim end</label><div class="field-row"><input type="text" data-f="trimEnd" value="${attr(fmtTime(e.trimEnd||0))}"><button type="button" class="mark-btn" data-mark="trimEnd">📍</button></div></div>
         </div>
-        <div class="row">
-          <div><label>fade in (s)</label><div class="field-row"><input type="number" min="0" step="0.5" data-f="fadeIn" value="${e.fadeIn||0}"><button type="button" class="mark-btn" data-mark="fadeIn">📍</button></div></div>
-          <div><label>fade out (s)</label><div class="field-row"><input type="number" min="0" step="0.5" data-f="fadeOut" value="${e.fadeOut||0}"><button type="button" class="mark-btn" data-mark="fadeOut">📍</button></div></div>
-        </div>
+
+        <label>fade in <span class="val-inline" data-for="fadeIn">${(e.fadeIn||0).toFixed(1)}s</span></label>
+        <div class="slider-row"><input type="range" data-f="fadeIn" min="0" max="30" step="0.5" value="${e.fadeIn||0}"><button type="button" class="mark-btn" data-mark="fadeIn">📍</button></div>
+        <label>fade out <span class="val-inline" data-for="fadeOut">${(e.fadeOut||0).toFixed(1)}s</span></label>
+        <div class="slider-row"><input type="range" data-f="fadeOut" min="0" max="30" step="0.5" value="${e.fadeOut||0}"><button type="button" class="mark-btn" data-mark="fadeOut">📍</button></div>
 
         <details open>
           <summary>cleanup</summary>
-          <label class="toggle-row"><span>de-clip · reconstruct saturated peaks</span><input type="checkbox" data-f="declip" ${e.declip?'checked':''}><div class="toggle"></div></label>
+          <label class="toggle-row"><span>de-clip · reconstruct saturated peaks <span class="save-only">• save only</span></span><input type="checkbox" data-f="declip" ${e.declip?'checked':''}><div class="toggle"></div></label>
           <label class="toggle-row"><span>high-pass · remove rumble below 80Hz</span><input type="checkbox" data-f="highpass" ${e.highpass?'checked':''}><div class="toggle"></div></label>
         </details>
 
@@ -809,7 +935,7 @@
             <button type="button" data-val="heavy" class="${comp==='heavy'?'active':''}">heavy</button>
           </div>
           <input type="hidden" data-f="compressor" value="${attr(comp)}">
-          <label class="toggle-row" style="margin-top:.7rem"><span>normalize loudness · -14 LUFS</span><input type="checkbox" data-f="normalize" ${e.normalize?'checked':''}><div class="toggle"></div></label>
+          <label class="toggle-row" style="margin-top:.7rem"><span>normalize loudness · -14 LUFS <span class="save-only">• save only</span></span><input type="checkbox" data-f="normalize" ${e.normalize?'checked':''}><div class="toggle"></div></label>
           <label class="toggle-row"><span>master limiter · prevent any final clipping</span><input type="checkbox" data-f="limiter" ${e.limiter?'checked':''}><div class="toggle"></div></label>
         </details>
 
@@ -825,7 +951,7 @@
         <summary>volume regions</summary>
         <button type="button" class="wf-btn" data-act="add-region">＋ region at current position (default −6dB, 10s)</button>
         <div class="vol-list" data-vol-list></div>
-        <p class="hint">each region is a time range with gain in dB · drag on waveform to resize/move</p>
+        <p class="hint">each region is a time range with gain · drag waveform to resize/move · slider for gain</p>
       </details>
 
       <details>
@@ -843,7 +969,7 @@
     `;
 
     wireSegmentedControls(container);
-    wireEQSliders(container);
+    wireSliderDisplays(container);
 
     const editorEl = container.querySelector('[data-editor]');
     editCtx = createEditor({
@@ -857,6 +983,7 @@
     wireAddCueButton(container.querySelector('[data-act=add-cue]'), editCtx, container.querySelector('[data-f=tracklist]'));
     wireAddRegionButton(container.querySelector('[data-act=add-region]'), editCtx);
     rebuildRegionList(editCtx, container.querySelector('[data-vol-list]'));
+    wireRealtimeFx(container, editCtx);
 
     let removeArtwork = false;
     const rmBtn = container.querySelector('[data-act=remove-artwork]');
