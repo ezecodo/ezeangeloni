@@ -100,6 +100,17 @@ Re-renders are always **from the original**, so edits are non-destructive — ch
 
 **Nginx** in the `ezeangeloni.xyz` block proxies `/api/sets*` to `127.0.0.1:3010` and sets `client_max_body_size 320M;` plus `proxy_read_timeout 600s`. Detailed config in `apps/uploader/README.md`.
 
+**Available audio processing** (all applied non-destructively from the original on each save):
+- Trim start/end
+- Fade in/out
+- Loudness normalization to -14 LUFS
+- De-clipping (reconstruct saturated peaks)
+- High-pass filter at 80Hz (remove rumble)
+- Master limiter (prevent any final clipping)
+- Compressor presets (subtle / medium / heavy)
+- 3-band EQ (low shelf via `bass`, mid peak at 1.5kHz, high shelf via `treble`, ±12 dB each)
+- Volume regions: per-time-range gain (±30 dB), stored in original-time. Drag handles on the WaveSurfer waveform to define them; the ffmpeg filter chain applies `volume=<factor>:enable='between(t,start,end)'` for each region.
+
 **sets.json schema:**
 ```json
 {
@@ -111,7 +122,15 @@ Re-renders are always **from the original**, so edits are non-destructive — ch
       "audio": "/sets/set1.mp3",
       "duration": 1122,
       "originalExt": "wav",
-      "edits": { "trimStart": 0, "trimEnd": 0, "fadeIn": 0, "fadeOut": 0, "normalize": true },
+      "edits": {
+        "trimStart": 0, "trimEnd": 0,
+        "fadeIn": 0, "fadeOut": 0,
+        "normalize": true,
+        "declip": false, "limiter": false, "highpass": false,
+        "compressor": "",
+        "eqLow": 0, "eqMid": 0, "eqHigh": 0,
+        "volumeRegions": [{ "start": 30, "end": 45, "gainDb": -6 }]
+      },
       "artwork": "/sets/artworks/set1.jpg",
       "tracklist": [{ "at": 0, "label": "Intro" }, { "at": 330, "label": "Artist - Track" }]
     }

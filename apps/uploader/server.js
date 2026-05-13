@@ -45,12 +45,26 @@ async function getDurationSec(filepath) {
   return parseFloat(out) || 0;
 }
 
+const COMPRESSOR_PRESETS = {
+  subtle: 'acompressor=threshold=-12dB:ratio=2:attack=20:release=200:makeup=2',
+  medium: 'acompressor=threshold=-18dB:ratio=4:attack=10:release=150:makeup=4',
+  heavy:  'acompressor=threshold=-24dB:ratio=8:attack=5:release=100:makeup=6'
+};
+
 async function processAudio(input, output, opts = {}) {
   const trimStart = Math.max(0, Number(opts.trimStart) || 0);
   const trimEnd = Math.max(0, Number(opts.trimEnd) || 0);
   const fadeIn = Math.max(0, Number(opts.fadeIn) || 0);
   const fadeOut = Math.max(0, Number(opts.fadeOut) || 0);
   const normalize = !!opts.normalize;
+  const declip = !!opts.declip;
+  const limiter = !!opts.limiter;
+  const highpass = !!opts.highpass;
+  const compressor = COMPRESSOR_PRESETS[String(opts.compressor || '').toLowerCase()] || null;
+  const eqLow = Math.max(-12, Math.min(12, Number(opts.eqLow) || 0));
+  const eqMid = Math.max(-12, Math.min(12, Number(opts.eqMid) || 0));
+  const eqHigh = Math.max(-12, Math.min(12, Number(opts.eqHigh) || 0));
+  const volumeRegions = Array.isArray(opts.volumeRegions) ? opts.volumeRegions : [];
 
   const sourceDuration = await getDurationSec(input);
   const effectiveDuration = Math.max(0.5, sourceDuration - trimStart - trimEnd);
@@ -61,12 +75,46 @@ async function processAudio(input, output, opts = {}) {
   if (trimStart > 0 || trimEnd > 0) args.push('-t', String(effectiveDuration));
 
   const filters = [];
+
+  // cleanup first
+  if (highpass) filters.push('highpass=f=80');
+  if (declip) filters.push('adeclip');
+
+  // dynamics
+  if (compressor) filters.push(compressor);
+
+  // volume regions (stored in ORIGINAL time; convert to pipeline time = original - trimStart)
+  for (const reg of volumeRegions) {
+    const origStart = Number(reg.start) || 0;
+    const origEnd = Number(reg.end) || 0;
+    if (origEnd <= origStart) continue;
+    const pStart = origStart - trimStart;
+    const pEnd = origEnd - trimStart;
+    if (pEnd < 0 || pStart > effectiveDuration) continue;
+    const start = Math.max(0, pStart);
+    const end = Math.min(effectiveDuration, pEnd);
+    if (end <= start) continue;
+    const gainDb = Math.max(-30, Math.min(30, Number(reg.gainDb) || 0));
+    const factor = Math.pow(10, gainDb / 20);
+    filters.push(`volume=${factor.toFixed(4)}:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`);
+  }
+
+  // EQ
+  if (eqLow !== 0) filters.push(`bass=g=${eqLow}`);
+  if (eqMid !== 0) filters.push(`equalizer=f=1500:t=h:w=2000:g=${eqMid}`);
+  if (eqHigh !== 0) filters.push(`treble=g=${eqHigh}`);
+
+  // fades
   if (fadeIn > 0) filters.push(`afade=t=in:st=0:d=${fadeIn}`);
   if (fadeOut > 0) {
     const start = Math.max(0, effectiveDuration - fadeOut);
     filters.push(`afade=t=out:st=${start}:d=${fadeOut}`);
   }
+
+  // final stage
   if (normalize) filters.push('loudnorm=I=-14:LRA=11:TP=-1');
+  if (limiter) filters.push('alimiter=limit=0.97:attack=5:release=50');
+
   if (filters.length) args.push('-af', filters.join(','));
 
   args.push('-b:a', '192k', '-ar', '44100', '-ac', '2', output);
@@ -106,6 +154,38 @@ function parseTracklist(text) {
 
 function safeBool(v) {
   return v === 'true' || v === 'on' || v === '1' || v === true;
+}
+
+function parseVolumeRegions(raw) {
+  if (!raw) return [];
+  let arr;
+  try { arr = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
+  if (!Array.isArray(arr)) return [];
+  return arr.map(r => ({
+    start: Math.max(0, Number(r.start) || 0),
+    end: Math.max(0, Number(r.end) || 0),
+    gainDb: Math.max(-30, Math.min(30, Number(r.gainDb) || 0))
+  })).filter(r => r.end > r.start);
+}
+
+const ALLOWED_COMPRESSORS = ['', 'off', 'subtle', 'medium', 'heavy'];
+
+function parseEditsBody(body) {
+  return {
+    trimStart: parseFloat(body.trimStart || '0') || 0,
+    trimEnd: parseFloat(body.trimEnd || '0') || 0,
+    fadeIn: parseFloat(body.fadeIn || '0') || 0,
+    fadeOut: parseFloat(body.fadeOut || '0') || 0,
+    normalize: safeBool(body.normalize),
+    declip: safeBool(body.declip),
+    limiter: safeBool(body.limiter),
+    highpass: safeBool(body.highpass),
+    compressor: ALLOWED_COMPRESSORS.includes(String(body.compressor || '').toLowerCase()) ? String(body.compressor || '').toLowerCase() : '',
+    eqLow: parseFloat(body.eqLow || '0') || 0,
+    eqMid: parseFloat(body.eqMid || '0') || 0,
+    eqHigh: parseFloat(body.eqHigh || '0') || 0,
+    volumeRegions: parseVolumeRegions(body.volumeRegions)
+  };
 }
 
 async function loadSets() {
@@ -219,13 +299,7 @@ app.post('/api/sets', checkAuth, upload.fields([
   const title = (req.body.title || '').trim();
   const date = (req.body.date || '').trim();
   const tracklist = parseTracklist(req.body.tracklist || '');
-  const edits = {
-    trimStart: parseFloat(req.body.trimStart || '0') || 0,
-    trimEnd: parseFloat(req.body.trimEnd || '0') || 0,
-    fadeIn: parseFloat(req.body.fadeIn || '0') || 0,
-    fadeOut: parseFloat(req.body.fadeOut || '0') || 0,
-    normalize: safeBool(req.body.normalize)
-  };
+  const edits = parseEditsBody(req.body);
 
   if (!title) { await cleanupTmp(); return res.status(400).json({ error: 'title required' }); }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { await cleanupTmp(); return res.status(400).json({ error: 'date must be YYYY-MM-DD' }); }
@@ -322,7 +396,7 @@ app.patch('/api/sets/:slug', checkAuth, upload.fields([
   }
 
   // audio edits → re-process from original
-  const editFields = ['trimStart', 'trimEnd', 'fadeIn', 'fadeOut', 'normalize'];
+  const editFields = ['trimStart','trimEnd','fadeIn','fadeOut','normalize','declip','limiter','highpass','compressor','eqLow','eqMid','eqHigh','volumeRegions'];
   const hasAudioEdit = editFields.some(f => req.body[f] !== undefined);
   if (hasAudioEdit) {
     const originalPath = path.join(ORIGINALS_DIR, `${slug}.${set.originalExt || 'bin'}`);
@@ -330,12 +404,12 @@ app.patch('/api/sets/:slug', checkAuth, upload.fields([
       await cleanupTmp();
       return res.status(400).json({ error: 'original file missing; cannot re-process audio' });
     }
+    // merge: start with current edits, override with anything provided in body
+    const parsed = parseEditsBody(req.body);
     const newEdits = { ...(set.edits || {}) };
-    editFields.forEach(f => {
-      if (req.body[f] !== undefined) {
-        newEdits[f] = f === 'normalize' ? safeBool(req.body[f]) : (parseFloat(req.body[f]) || 0);
-      }
-    });
+    for (const f of editFields) {
+      if (req.body[f] !== undefined) newEdits[f] = parsed[f];
+    }
     const tmpMp3 = `/tmp/${slug}-${Date.now()}.mp3`;
     let duration = 0;
     try {
