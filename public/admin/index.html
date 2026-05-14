@@ -42,7 +42,7 @@
 
   .editor { margin-top:1.2rem; padding:.9rem; background:rgba(240,237,232,0.025); border:1px solid var(--line); border-radius:12px; display:none; }
   .editor.active { display:block; }
-  .wf-container { width:100%; height:100px; cursor:pointer; }
+  .wf-container { width:100%; height:100px; cursor:crosshair; touch-action:none; }
   .wf-toolbar { display:flex; gap:.5rem; align-items:center; margin-top:.6rem; flex-wrap:wrap; }
   .wf-btn { background:rgba(240,237,232,0.06); border:1px solid var(--line); color:var(--text); font-family:'DM Mono', monospace; font-size:.65rem; letter-spacing:.15em; text-transform:uppercase; padding:.45rem .75rem; border-radius:6px; cursor:pointer; transition: background .2s, border-color .2s, color .2s; }
   .wf-btn:hover { background:rgba(240,237,232,0.12); border-color:rgba(240,237,232,0.3); }
@@ -771,6 +771,88 @@
     ctx.wsRegions.delete(id);
     rebuildRegionList(ctx, listEl);
   }
+  function installManualDragSelect(wsRoot, ws, ctx) {
+    function getTimeAt(clientX) {
+      const rect = wsRoot.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+      const dur = ws.getDuration() || 0;
+      return (x / rect.width) * dur;
+    }
+    let drag = null;
+    const THRESHOLD = 6;
+
+    const onDown = (e) => {
+      // ignore if interacting with an existing wsregion element
+      let t = e.target;
+      while (t && t !== wsRoot) {
+        const tag = (t.tagName || '').toLowerCase();
+        if (tag === 'wsregion' || (t.getAttribute && t.getAttribute('part') === 'region')) return;
+        t = t.parentNode;
+      }
+      drag = { startX: e.clientX, startTime: getTimeAt(e.clientX), tmpRegion: null, pointerId: e.pointerId };
+      try { wsRoot.setPointerCapture(e.pointerId); } catch {}
+    };
+
+    const onMove = (e) => {
+      if (!drag) return;
+      const dx = Math.abs(e.clientX - drag.startX);
+      if (dx < THRESHOLD && !drag.tmpRegion) return;
+      const cur = getTimeAt(e.clientX);
+      const start = Math.min(drag.startTime, cur);
+      const end = Math.max(drag.startTime, cur);
+      if (!drag.tmpRegion) {
+        ctx.creatingProgrammatically = true;
+        drag.tmpRegion = ctx.regions.addRegion({
+          start, end,
+          color: 'rgba(255,110,180,0.22)',
+          drag: false, resize: false,
+        });
+        ctx.creatingProgrammatically = false;
+      } else {
+        drag.tmpRegion.setOptions({ start, end });
+      }
+    };
+
+    const onUp = (e) => {
+      if (!drag) return;
+      const d = drag; drag = null;
+      try { wsRoot.releasePointerCapture(d.pointerId); } catch {}
+      if (!d.tmpRegion) return; // just a click, let ws handle seek
+      const region = d.tmpRegion;
+      // finalize: register with type
+      const id = uid();
+      const type = ctx.armedType || 'volume';
+      const params = defaultParams(type);
+      ctx.regionData.set(id, { type, start: region.start + ctx.trimOffset, end: region.end + ctx.trimOffset, params });
+      ctx.wsRegions.set(id, region);
+      region.setOptions({
+        color: regionColor(type, params),
+        content: regionLabel(type, params),
+        drag: true, resize: true,
+      });
+      region.on('update', () => {
+        const cur = ctx.regionData.get(id);
+        cur.start = region.start + ctx.trimOffset;
+        cur.end = region.end + ctx.trimOffset;
+        const row = ctx.form.querySelector(`.reg-row[data-id="${id}"]`);
+        if (row) {
+          row.querySelector('[data-vr=start]').value = fmtTime(cur.start);
+          row.querySelector('[data-vr=end]').value = fmtTime(cur.end);
+        }
+      });
+      if (ctx.armedType) {
+        ctx.armedType = null;
+        ctx.form.querySelectorAll('[data-act=add-region]').forEach(b => b.classList.remove('armed'));
+      }
+      rebuildRegionList(ctx, ctx.form.querySelector('[data-vol-list]'));
+    };
+
+    wsRoot.addEventListener('pointerdown', onDown);
+    wsRoot.addEventListener('pointermove', onMove);
+    wsRoot.addEventListener('pointerup', onUp);
+    wsRoot.addEventListener('pointercancel', onUp);
+  }
+
   function wireAddRegionButtons(scope, ctx) {
     const btns = scope.querySelectorAll('[data-act=add-region]');
     btns.forEach(btn => {
@@ -847,8 +929,8 @@
       existingRegions.forEach(r => addEffectRegion(ctx, r, false));
     });
     ws.on('ready', () => {
-      // enable drag-on-waveform AFTER ws is ready (must be set up post-decode for proper bindings)
-      try { regions.enableDragSelection({ color: 'rgba(255,110,180,0.18)' }); } catch (e) { console.warn('enableDragSelection failed', e); }
+      // manual drag-to-create region (WaveSurfer's enableDragSelection has timing issues)
+      installManualDragSelect(wsRoot, ws, ctx);
       try {
         const audioEl = ws.getMediaElement();
         if (audioEl) {
