@@ -69,6 +69,11 @@ async function processAudio(input, output, opts = {}) {
   const delayAmount = Math.max(0, Math.min(100, Number(opts.delayAmount) || 0));
   const delayTime = Math.max(50, Math.min(1000, Number(opts.delayTime) || 300));
   const volumeRegions = Array.isArray(opts.volumeRegions) ? opts.volumeRegions : [];
+  const effectRegions = Array.isArray(opts.effectRegions) ? opts.effectRegions : [];
+  // legacy volumeRegions get folded into effectRegions
+  const allEffectRegions = effectRegions.concat(
+    volumeRegions.map(r => ({ type: 'volume', start: r.start, end: r.end, params: { gainDb: r.gainDb } }))
+  );
 
   const sourceDuration = await getDurationSec(input);
   const effectiveDuration = Math.max(0.5, sourceDuration - trimStart - trimEnd);
@@ -87,8 +92,8 @@ async function processAudio(input, output, opts = {}) {
   // dynamics
   if (compressor) filters.push(compressor);
 
-  // volume regions (stored in ORIGINAL time; convert to pipeline time = original - trimStart)
-  for (const reg of volumeRegions) {
+  // effect regions (stored in ORIGINAL time; convert to pipeline time = original - trimStart)
+  for (const reg of allEffectRegions) {
     const origStart = Number(reg.start) || 0;
     const origEnd = Number(reg.end) || 0;
     if (origEnd <= origStart) continue;
@@ -98,9 +103,29 @@ async function processAudio(input, output, opts = {}) {
     const start = Math.max(0, pStart);
     const end = Math.min(effectiveDuration, pEnd);
     if (end <= start) continue;
-    const gainDb = Math.max(-30, Math.min(30, Number(reg.gainDb) || 0));
-    const factor = Math.pow(10, gainDb / 20);
-    filters.push(`volume=${factor.toFixed(4)}:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`);
+    const enable = `:enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`;
+    const p = reg.params || {};
+    if (reg.type === 'volume') {
+      const gDb = Math.max(-30, Math.min(30, Number(p.gainDb) || 0));
+      const factor = Math.pow(10, gDb / 20);
+      filters.push(`volume=${factor.toFixed(4)}${enable}`);
+    } else if (reg.type === 'lowpass') {
+      const f = Math.max(20, Math.min(20000, Number(p.cutoff) || 1000));
+      filters.push(`lowpass=f=${f}${enable}`);
+    } else if (reg.type === 'highpass') {
+      const f = Math.max(20, Math.min(20000, Number(p.cutoff) || 100));
+      filters.push(`highpass=f=${f}${enable}`);
+    } else if (reg.type === 'eq') {
+      const f = Math.max(20, Math.min(20000, Number(p.freq) || 1000));
+      const g = Math.max(-24, Math.min(24, Number(p.gain) || 0));
+      const q = Math.max(0.1, Math.min(10, Number(p.q) || 1));
+      const w = Math.max(50, f / q);
+      filters.push(`equalizer=f=${f}:t=h:w=${w.toFixed(1)}:g=${g}${enable}`);
+    } else if (reg.type === 'saturation') {
+      const drive = Math.max(1, Math.min(10, Number(p.drive) || 2));
+      const norm = Math.tanh(drive);
+      filters.push(`aeval=tanh(${drive}*val(0))/${norm.toFixed(4)}:channel_layout=stereo${enable}`);
+    }
   }
 
   // EQ
@@ -192,6 +217,39 @@ function parseVolumeRegions(raw) {
   })).filter(r => r.end > r.start);
 }
 
+function parseEffectRegions(raw) {
+  if (!raw) return [];
+  let arr;
+  try { arr = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return []; }
+  if (!Array.isArray(arr)) return [];
+  return arr.map(r => {
+    const type = String(r.type || 'volume').toLowerCase();
+    const start = Math.max(0, Number(r.start) || 0);
+    const end = Math.max(0, Number(r.end) || 0);
+    if (end <= start) return null;
+    const p = r.params || {};
+    let params;
+    if (type === 'volume') {
+      params = { gainDb: Math.max(-30, Math.min(30, Number(p.gainDb) || 0)) };
+    } else if (type === 'lowpass') {
+      params = { cutoff: Math.max(20, Math.min(20000, Number(p.cutoff) || 1000)) };
+    } else if (type === 'highpass') {
+      params = { cutoff: Math.max(20, Math.min(20000, Number(p.cutoff) || 100)) };
+    } else if (type === 'eq') {
+      params = {
+        freq: Math.max(20, Math.min(20000, Number(p.freq) || 1000)),
+        gain: Math.max(-24, Math.min(24, Number(p.gain) || 0)),
+        q: Math.max(0.1, Math.min(10, Number(p.q) || 1))
+      };
+    } else if (type === 'saturation') {
+      params = { drive: Math.max(1, Math.min(10, Number(p.drive) || 2)) };
+    } else {
+      return null;
+    }
+    return { type, start, end, params };
+  }).filter(Boolean);
+}
+
 const ALLOWED_COMPRESSORS = ['', 'off', 'subtle', 'medium', 'heavy'];
 
 function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
@@ -214,7 +272,8 @@ function parseEditsBody(body) {
     stereoWidth: clamp(parseFloat(body.stereoWidth || '0') || 0, -100, 100),
     delayAmount: clamp(parseFloat(body.delayAmount || '0') || 0, 0, 100),
     delayTime: clamp(parseFloat(body.delayTime || '300') || 300, 50, 1000),
-    volumeRegions: parseVolumeRegions(body.volumeRegions)
+    volumeRegions: parseVolumeRegions(body.volumeRegions),
+    effectRegions: parseEffectRegions(body.effectRegions)
   };
 }
 
@@ -426,7 +485,7 @@ app.patch('/api/sets/:slug', checkAuth, upload.fields([
   }
 
   // audio edits → re-process from original
-  const editFields = ['trimStart','trimEnd','fadeIn','fadeOut','normalize','declip','limiter','highpass','compressor','eqLow','eqMid','eqHigh','reverb','stereoWidth','delayAmount','delayTime','volumeRegions'];
+  const editFields = ['trimStart','trimEnd','fadeIn','fadeOut','normalize','declip','limiter','highpass','compressor','eqLow','eqMid','eqHigh','reverb','stereoWidth','delayAmount','delayTime','volumeRegions','effectRegions'];
   const hasAudioEdit = editFields.some(f => req.body[f] !== undefined);
   if (hasAudioEdit) {
     const originalPath = path.join(ORIGINALS_DIR, `${slug}.${set.originalExt || 'bin'}`);
