@@ -48,6 +48,8 @@
   .wf-btn:hover { background:rgba(240,237,232,0.12); border-color:rgba(240,237,232,0.3); }
   .wf-btn.primary { background:linear-gradient(90deg, rgba(255,110,180,0.2), rgba(199,125,255,0.2)); border-color:rgba(255,110,180,0.4); }
   .wf-btn.active { background:linear-gradient(90deg, rgba(184,247,91,0.18), rgba(110,249,245,0.15)); border-color:rgba(184,247,91,0.5); color: var(--green); }
+  .wf-btn.armed { background:linear-gradient(90deg, rgba(255,110,180,0.25), rgba(199,125,255,0.2)); border-color:var(--pink); color:var(--text); box-shadow: 0 0 8px rgba(255,110,180,0.3); animation: armedPulse 1.4s ease-in-out infinite; }
+  @keyframes armedPulse { 0%,100% { box-shadow: 0 0 8px rgba(255,110,180,0.3); } 50% { box-shadow: 0 0 14px rgba(255,110,180,0.6); } }
   .wf-btn:disabled { opacity:.35; cursor:not-allowed; }
   .wf-time { font-size:.7rem; color:var(--muted); margin-left:auto; font-variant-numeric:tabular-nums; }
   .wf-time .now { color:var(--text); }
@@ -234,7 +236,7 @@
           <button type="button" class="wf-btn" data-act="add-region" data-reg-type="saturation" disabled>＋ saturate</button>
         </div>
         <div class="vol-list" data-vol-list></div>
-        <p class="hint">each region = a time range with one effect · drag handles on waveform · slider for params</p>
+        <p class="hint">1) pick an effect type below → 2) drag on the waveform to select the range → done.<br>or just drag on the waveform without picking type and it defaults to "volume" (change via dropdown).</p>
       </details>
 
       <details data-section="presentation">
@@ -730,12 +732,14 @@
     const id = uid();
     const orig = { type, start: previewStart + ctx.trimOffset, end: previewEnd + ctx.trimOffset, params };
     ctx.regionData.set(id, orig);
+    ctx.creatingProgrammatically = true;
     const wr = ctx.regions.addRegion({
       start: previewStart, end: previewEnd,
       color: regionColor(type, params),
       content: regionLabel(type, params),
       drag: true, resize: true,
     });
+    ctx.creatingProgrammatically = false;
     ctx.wsRegions.set(id, wr);
     wr.on('update', () => {
       const cur = ctx.regionData.get(id);
@@ -761,9 +765,14 @@
     rebuildRegionList(ctx, listEl);
   }
   function wireAddRegionButtons(scope, ctx) {
-    scope.querySelectorAll('[data-act=add-region]').forEach(btn => {
+    const btns = scope.querySelectorAll('[data-act=add-region]');
+    btns.forEach(btn => {
       btn.disabled = false;
-      btn.onclick = () => addEffectRegion(ctx, { type: btn.dataset.regType });
+      btn.onclick = () => {
+        const wasArmed = ctx.armedType === btn.dataset.regType;
+        ctx.armedType = wasArmed ? null : btn.dataset.regType;
+        btns.forEach(b => b.classList.toggle('armed', b === btn && !wasArmed));
+      };
     });
   }
 
@@ -794,9 +803,37 @@
     const regionData = new Map();
     const wsRegions = new Map();
 
-    const ctx = { ws, regions, regionData, wsRegions, trimOffset, form, fxChain: null, fxOn: false, fxTimer: null, knobs: {}, faders: {},
+    const ctx = { ws, regions, regionData, wsRegions, trimOffset, form, fxChain: null, fxOn: false, fxTimer: null, knobs: {}, faders: {}, creatingProgrammatically: false, armedType: null,
       destroy: () => { try { ws.destroy(); } catch {} if (ctx.fxTimer) clearInterval(ctx.fxTimer); container.classList.remove('active'); }
     };
+
+    // enable drag-on-waveform to select a range and create a region
+    regions.enableDragSelection({ color: 'rgba(255,110,180,0.18)' });
+    regions.on('region-created', (region) => {
+      if (ctx.creatingProgrammatically) return;
+      const id = uid();
+      const type = ctx.armedType || 'volume';
+      const params = defaultParams(type);
+      ctx.regionData.set(id, { type, start: region.start + ctx.trimOffset, end: region.end + ctx.trimOffset, params });
+      ctx.wsRegions.set(id, region);
+      region.setOptions({ color: regionColor(type, params), content: regionLabel(type, params) });
+      region.on('update', () => {
+        const cur = ctx.regionData.get(id);
+        cur.start = region.start + ctx.trimOffset;
+        cur.end = region.end + ctx.trimOffset;
+        const row = ctx.form.querySelector(`.reg-row[data-id="${id}"]`);
+        if (row) {
+          row.querySelector('[data-vr=start]').value = fmtTime(cur.start);
+          row.querySelector('[data-vr=end]').value = fmtTime(cur.end);
+        }
+      });
+      // reset armed type and visual state
+      if (ctx.armedType) {
+        ctx.armedType = null;
+        ctx.form.querySelectorAll('[data-act=add-region]').forEach(b => b.classList.remove('armed'));
+      }
+      rebuildRegionList(ctx, ctx.form.querySelector('[data-vol-list]'));
+    });
 
     ws.on('decode', () => {
       wsRoot.querySelector('.wf-loading')?.remove();
