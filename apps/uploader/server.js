@@ -64,6 +64,10 @@ async function processAudio(input, output, opts = {}) {
   const eqLow = Math.max(-12, Math.min(12, Number(opts.eqLow) || 0));
   const eqMid = Math.max(-12, Math.min(12, Number(opts.eqMid) || 0));
   const eqHigh = Math.max(-12, Math.min(12, Number(opts.eqHigh) || 0));
+  const reverb = Math.max(0, Math.min(100, Number(opts.reverb) || 0));
+  const stereoWidth = Math.max(-100, Math.min(100, Number(opts.stereoWidth) || 0));
+  const delayAmount = Math.max(0, Math.min(100, Number(opts.delayAmount) || 0));
+  const delayTime = Math.max(50, Math.min(1000, Number(opts.delayTime) || 300));
   const volumeRegions = Array.isArray(opts.volumeRegions) ? opts.volumeRegions : [];
 
   const sourceDuration = await getDurationSec(input);
@@ -103,6 +107,26 @@ async function processAudio(input, output, opts = {}) {
   if (eqLow !== 0) filters.push(`bass=g=${eqLow}`);
   if (eqMid !== 0) filters.push(`equalizer=f=1500:t=h:w=2000:g=${eqMid}`);
   if (eqHigh !== 0) filters.push(`treble=g=${eqHigh}`);
+
+  // stereo width (0=mono, 1=normal, >1=wider) — map -100..+100 to 0..3
+  if (stereoWidth !== 0) {
+    const m = stereoWidth >= 0 ? (1 + (stereoWidth / 100) * 2) : (1 + stereoWidth / 100);
+    filters.push(`extrastereo=m=${m.toFixed(3)}:c=true`);
+  }
+
+  // delay / echo
+  if (delayAmount > 0) {
+    const wet = (delayAmount / 100) * 0.6; // limit max wet to 60%
+    filters.push(`aecho=0.8:${wet.toFixed(3)}:${delayTime}:${(wet * 0.5).toFixed(3)}`);
+  }
+
+  // reverb (multi-tap echo approximation)
+  if (reverb > 0) {
+    const amt = reverb / 100;
+    const taps = '40|97|143|211|283|389';
+    const decays = [0.7, 0.5, 0.4, 0.3, 0.22, 0.16].map(d => (d * amt).toFixed(3)).join('|');
+    filters.push(`aecho=0.7:${(0.9 * amt).toFixed(3)}:${taps}:${decays}`);
+  }
 
   // fades
   if (fadeIn > 0) filters.push(`afade=t=in:st=0:d=${fadeIn}`);
@@ -170,6 +194,8 @@ function parseVolumeRegions(raw) {
 
 const ALLOWED_COMPRESSORS = ['', 'off', 'subtle', 'medium', 'heavy'];
 
+function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+
 function parseEditsBody(body) {
   return {
     trimStart: parseFloat(body.trimStart || '0') || 0,
@@ -181,9 +207,13 @@ function parseEditsBody(body) {
     limiter: safeBool(body.limiter),
     highpass: safeBool(body.highpass),
     compressor: ALLOWED_COMPRESSORS.includes(String(body.compressor || '').toLowerCase()) ? String(body.compressor || '').toLowerCase() : '',
-    eqLow: parseFloat(body.eqLow || '0') || 0,
-    eqMid: parseFloat(body.eqMid || '0') || 0,
-    eqHigh: parseFloat(body.eqHigh || '0') || 0,
+    eqLow: clamp(parseFloat(body.eqLow || '0') || 0, -12, 12),
+    eqMid: clamp(parseFloat(body.eqMid || '0') || 0, -12, 12),
+    eqHigh: clamp(parseFloat(body.eqHigh || '0') || 0, -12, 12),
+    reverb: clamp(parseFloat(body.reverb || '0') || 0, 0, 100),
+    stereoWidth: clamp(parseFloat(body.stereoWidth || '0') || 0, -100, 100),
+    delayAmount: clamp(parseFloat(body.delayAmount || '0') || 0, 0, 100),
+    delayTime: clamp(parseFloat(body.delayTime || '300') || 300, 50, 1000),
     volumeRegions: parseVolumeRegions(body.volumeRegions)
   };
 }
@@ -396,7 +426,7 @@ app.patch('/api/sets/:slug', checkAuth, upload.fields([
   }
 
   // audio edits → re-process from original
-  const editFields = ['trimStart','trimEnd','fadeIn','fadeOut','normalize','declip','limiter','highpass','compressor','eqLow','eqMid','eqHigh','volumeRegions'];
+  const editFields = ['trimStart','trimEnd','fadeIn','fadeOut','normalize','declip','limiter','highpass','compressor','eqLow','eqMid','eqHigh','reverb','stereoWidth','delayAmount','delayTime','volumeRegions'];
   const hasAudioEdit = editFields.some(f => req.body[f] !== undefined);
   if (hasAudioEdit) {
     const originalPath = path.join(ORIGINALS_DIR, `${slug}.${set.originalExt || 'bin'}`);

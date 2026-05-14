@@ -12,114 +12,132 @@
   *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
   :root { --bg:#080810; --text:#f0ede8; --muted:rgba(240,237,232,0.45); --line:rgba(240,237,232,0.12); --pink:#ff6eb4; --violet:#c77dff; --green:#b8f75b; --red:#ff3f3f; --cyan:#6ef9f5; --gold:#ffd166; }
   html, body { width:100%; min-height:100vh; background:var(--bg); color:var(--text); font-family:'DM Mono', monospace; -webkit-font-smoothing:antialiased; }
-  body { padding:2rem 1rem; background: radial-gradient(ellipse at center, #11111f 0%, var(--bg) 70%); }
-  main { width:100%; max-width:720px; margin:0 auto; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:18px; padding:2.5rem 2rem; backdrop-filter: blur(8px); }
-  h1 { font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:clamp(1.8rem, 5vw, 2.6rem); letter-spacing:.02em; text-align:center; margin-bottom:.4rem; }
-  .accent { width:32px; height:1px; background:var(--pink); margin:0 auto 1.2rem; opacity:.6; }
-  .subtitle { text-align:center; font-size:.7rem; letter-spacing:.25em; text-transform:uppercase; color:var(--muted); margin-bottom:2rem; }
+  body { padding:1.5rem 1rem; background: radial-gradient(ellipse at center, #11111f 0%, var(--bg) 70%); }
+  main { width:100%; max-width:860px; margin:0 auto; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:18px; padding:2rem 1.6rem; backdrop-filter: blur(8px); }
+  h1 { font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:clamp(1.6rem, 4vw, 2.2rem); letter-spacing:.02em; text-align:center; margin-bottom:.3rem; }
+  .accent { width:32px; height:1px; background:var(--pink); margin:0 auto 1rem; opacity:.6; }
+  .subtitle { text-align:center; font-size:.65rem; letter-spacing:.25em; text-transform:uppercase; color:var(--muted); margin-bottom:1.5rem; }
 
-  label { display:block; font-size:.65rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin: 1.1rem 0 .4rem; }
+  label { display:block; font-size:.6rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin: .8rem 0 .3rem; }
   input[type=text], input[type=password], input[type=date], input[type=number], input[type=file], textarea {
     width:100%; background:rgba(240,237,232,0.04); border:1px solid var(--line); border-radius:8px;
-    color:var(--text); font-family:'DM Mono', monospace; font-size:.85rem; padding:.7rem .9rem;
+    color:var(--text); font-family:'DM Mono', monospace; font-size:.82rem; padding:.6rem .8rem;
     outline:none; transition: border-color .2s;
   }
-  textarea { resize:vertical; min-height:90px; line-height:1.6; }
+  textarea { resize:vertical; min-height:80px; line-height:1.6; }
   input:focus, textarea:focus { border-color: rgba(240,237,232,0.35); }
-  input[type=file] { padding:.6rem .9rem; cursor:pointer; }
-  input[type=file]::file-selector-button {
-    background:rgba(255,110,180,0.12); border:1px solid rgba(255,110,180,0.3); color:var(--text);
-    font-family:'DM Mono',monospace; font-size:.7rem; letter-spacing:.15em; text-transform:uppercase;
-    padding:.45rem .9rem; border-radius:6px; cursor:pointer; margin-right:.9rem; transition: background .2s;
-  }
+  input[type=file] { padding:.5rem .8rem; cursor:pointer; }
+  input[type=file]::file-selector-button { background:rgba(255,110,180,0.12); border:1px solid rgba(255,110,180,0.3); color:var(--text); font-family:'DM Mono',monospace; font-size:.65rem; letter-spacing:.15em; text-transform:uppercase; padding:.4rem .8rem; border-radius:6px; cursor:pointer; margin-right:.8rem; transition: background .2s; }
   input[type=file]::file-selector-button:hover { background:rgba(255,110,180,0.22); }
-  .hint { font-size:.65rem; color:var(--muted); margin-top:.4rem; letter-spacing:.05em; }
-  .save-only { color: var(--gold); font-size: .6rem; letter-spacing:.1em; opacity:.7; margin-left:.4rem; text-transform:none; }
-
-  .field-row { display:flex; gap:.5rem; align-items:stretch; }
-  .field-row input { flex:1; min-width:0; }
-  .mark-btn {
-    background:rgba(255,110,180,0.1); border:1px solid rgba(255,110,180,0.3); color:var(--text);
-    font-size:.95rem; padding:.5rem .8rem; border-radius:8px; cursor:pointer;
-    transition: background .15s; flex-shrink:0; white-space:nowrap;
-  }
-  .mark-btn:hover { background:rgba(255,110,180,0.25); }
-  .mark-btn:disabled { opacity:.35; cursor:not-allowed; }
-  .row { display:flex; gap:.8rem; }
+  .hint { font-size:.6rem; color:var(--muted); margin-top:.3rem; letter-spacing:.05em; }
+  .save-only { color: var(--gold); font-size:.55rem; letter-spacing:.1em; opacity:.7; text-transform:none; }
+  .row { display:flex; gap:.7rem; }
   .row > * { flex:1; min-width:0; }
 
-  .editor { margin-top:1.4rem; padding:1rem; background:rgba(240,237,232,0.025); border:1px solid var(--line); border-radius:12px; display:none; }
+  .field-row { display:flex; gap:.4rem; align-items:stretch; }
+  .field-row input { flex:1; min-width:0; }
+  .mark-btn { background:rgba(255,110,180,0.1); border:1px solid rgba(255,110,180,0.3); color:var(--text); font-size:.85rem; padding:.4rem .65rem; border-radius:6px; cursor:pointer; transition: background .15s; flex-shrink:0; }
+  .mark-btn:hover { background:rgba(255,110,180,0.25); }
+  .mark-btn:disabled { opacity:.35; cursor:not-allowed; }
+
+  /* ===== EDITOR / WAVEFORM ===== */
+  .editor { margin-top:1.2rem; padding:.9rem; background:rgba(240,237,232,0.025); border:1px solid var(--line); border-radius:12px; display:none; }
   .editor.active { display:block; }
-  .wf-container { width:100%; height:110px; cursor:pointer; }
-  .wf-toolbar { display:flex; gap:.6rem; align-items:center; margin-top:.7rem; flex-wrap:wrap; }
-  .wf-btn { background:rgba(240,237,232,0.06); border:1px solid var(--line); color:var(--text); font-family:'DM Mono', monospace; font-size:.68rem; letter-spacing:.15em; text-transform:uppercase; padding:.5rem .85rem; border-radius:6px; cursor:pointer; transition: background .2s, border-color .2s, color .2s; }
+  .wf-container { width:100%; height:100px; cursor:pointer; }
+  .wf-toolbar { display:flex; gap:.5rem; align-items:center; margin-top:.6rem; flex-wrap:wrap; }
+  .wf-btn { background:rgba(240,237,232,0.06); border:1px solid var(--line); color:var(--text); font-family:'DM Mono', monospace; font-size:.65rem; letter-spacing:.15em; text-transform:uppercase; padding:.45rem .75rem; border-radius:6px; cursor:pointer; transition: background .2s, border-color .2s, color .2s; }
   .wf-btn:hover { background:rgba(240,237,232,0.12); border-color:rgba(240,237,232,0.3); }
   .wf-btn.primary { background:linear-gradient(90deg, rgba(255,110,180,0.2), rgba(199,125,255,0.2)); border-color:rgba(255,110,180,0.4); }
   .wf-btn.active { background:linear-gradient(90deg, rgba(184,247,91,0.18), rgba(110,249,245,0.15)); border-color:rgba(184,247,91,0.5); color: var(--green); }
   .wf-btn:disabled { opacity:.35; cursor:not-allowed; }
-  .wf-time { font-size:.72rem; color:var(--muted); letter-spacing:.08em; margin-left:auto; }
+  .wf-time { font-size:.7rem; color:var(--muted); margin-left:auto; font-variant-numeric:tabular-nums; }
   .wf-time .now { color:var(--text); }
-  .wf-loading { font-size:.68rem; color:var(--muted); letter-spacing:.15em; text-align:center; padding:2rem; text-transform:uppercase; }
+  .wf-loading { font-size:.65rem; color:var(--muted); letter-spacing:.15em; text-align:center; padding:2rem; text-transform:uppercase; }
 
-  button.primary { width:100%; margin-top:1.6rem; padding:.9rem; background:linear-gradient(90deg, var(--pink), var(--violet)); border:none; color:#080810; font-family:'DM Mono', monospace; font-size:.75rem; letter-spacing:.25em; text-transform:uppercase; border-radius:8px; cursor:pointer; font-weight:600; transition: opacity .2s, transform .2s; }
+  /* ===== CHANNEL STRIP ===== */
+  .strip { margin-top:1rem; display:grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap:.5rem; }
+  .panel { background:rgba(240,237,232,0.025); border:1px solid var(--line); border-radius:10px; padding:.7rem .55rem .8rem; display:flex; flex-direction:column; gap:.45rem; min-width:0; }
+  .panel h4 { font-size:.55rem; letter-spacing:.25em; text-transform:uppercase; color:var(--muted); text-align:center; margin:0 0 .25rem; padding-bottom:.35rem; border-bottom:1px solid var(--line); }
+  .panel .row-sub { display:flex; gap:.4rem; align-items:flex-end; justify-content:center; }
+  .panel-toggle { display:flex; align-items:center; gap:.4rem; justify-content:space-between; padding:.3rem .4rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:6px; cursor:pointer; }
+  .panel-toggle span { font-size:.6rem; letter-spacing:.05em; }
+  .panel-toggle .toggle { width:28px; height:16px; }
+  .panel-toggle .toggle::after { width:12px; height:12px; }
+  .panel-toggle input[type=checkbox]:checked + .toggle::after { transform: translateX(12px); }
+
+  /* ===== KNOB ===== */
+  .knob { display:flex; flex-direction:column; align-items:center; gap:.25rem; user-select:none; touch-action:none; flex:1; min-width:0; }
+  .knob-dial { width:48px; height:48px; border-radius:50%; background: radial-gradient(circle at 30% 30%, #1c1c2a 0%, #0e0e18 70%, #06060c 100%); border:1px solid rgba(240,237,232,0.15); position:relative; cursor:ns-resize; box-shadow: inset 0 1px 2px rgba(255,255,255,0.05), 0 2px 6px rgba(0,0,0,0.4); transition: border-color .2s; }
+  .knob-dial:hover { border-color: rgba(255,110,180,0.45); }
+  .knob-dial::after { content:''; position:absolute; inset: 6px; border-radius:50%; background: radial-gradient(circle at 30% 30%, #2a2a40 0%, #181826 100%); }
+  .knob-indicator { position:absolute; left:50%; top:5px; width:2.5px; height:13px; background: linear-gradient(to bottom, var(--pink), var(--violet)); transform-origin: 50% 19px; transform: translateX(-50%) rotate(-135deg); border-radius:1px; z-index:1; box-shadow: 0 0 6px rgba(255,110,180,0.6); }
+  .knob-label { font-size:.55rem; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; line-height:1; }
+  .knob-value { font-size:.62rem; color:var(--text); font-variant-numeric:tabular-nums; line-height:1; min-height:.62rem; }
+  .knob:active .knob-dial, .knob.dragging .knob-dial { border-color: var(--pink); box-shadow: inset 0 1px 2px rgba(255,255,255,0.05), 0 0 12px rgba(255,110,180,0.4); }
+
+  /* ===== FADER (vertical) ===== */
+  .fader { display:flex; flex-direction:column; align-items:center; gap:.2rem; flex:1; min-width:0; }
+  .fader-track { position:relative; width:24px; height:90px; background: rgba(240,237,232,0.06); border:1px solid var(--line); border-radius:4px; cursor:ns-resize; touch-action:none; user-select:none; }
+  .fader-track::before { content:''; position:absolute; left:50%; top:6px; bottom:6px; width:2px; background:rgba(240,237,232,0.15); transform:translateX(-50%); }
+  .fader-fill { position:absolute; left:50%; bottom:0; width:2px; background:linear-gradient(to top, var(--pink), var(--violet)); transform:translateX(-50%); }
+  .fader-thumb { position:absolute; left:50%; transform: translate(-50%, 50%); width:20px; height:8px; background: linear-gradient(180deg, #f0ede8 0%, #b8b2a7 100%); border-radius:2px; box-shadow: 0 1px 3px rgba(0,0,0,0.5); cursor:ns-resize; }
+  .fader-row { display:flex; gap:.35rem; align-items:flex-end; justify-content:center; }
+  .fader-label { font-size:.55rem; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; }
+  .fader-value { font-size:.6rem; color:var(--text); font-variant-numeric:tabular-nums; }
+
+  /* ===== TOGGLE ===== */
+  .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:.5rem .7rem; margin-top:.3rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:7px; cursor:pointer; }
+  .toggle-row span { font-size:.68rem; letter-spacing:.05em; }
+  .toggle { width:32px; height:18px; background:rgba(240,237,232,0.15); border-radius:10px; position:relative; transition: background .2s; flex-shrink:0; }
+  .toggle::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--text); transition: transform .2s; }
+  input[type=checkbox]:checked + .toggle { background: linear-gradient(90deg, var(--pink), var(--violet)); }
+  input[type=checkbox]:checked + .toggle::after { transform: translateX(14px); }
+  input[type=checkbox] { display:none; }
+
+  /* ===== SEGMENTED ===== */
+  .seg { display:flex; gap:.2rem; }
+  .seg button { flex:1; padding:.4rem .25rem; background:rgba(240,237,232,0.04); border:1px solid var(--line); color:var(--muted); font-family:'DM Mono', monospace; font-size:.55rem; letter-spacing:.12em; text-transform:uppercase; border-radius:4px; cursor:pointer; transition: background .15s, color .15s, border-color .15s; }
+  .seg button.active { background:rgba(255,110,180,0.18); color:var(--text); border-color:rgba(255,110,180,0.45); }
+  .seg button:hover { color:var(--text); }
+  .seg-label { font-size:.55rem; letter-spacing:.18em; color:var(--muted); text-transform:uppercase; text-align:center; margin-bottom:.25rem; }
+
+  /* ===== VOLUME REGIONS ===== */
+  .vol-list { margin-top:.6rem; }
+  .vol-row { display:flex; align-items:center; gap:.45rem; margin-top:.4rem; padding:.45rem .55rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:7px; flex-wrap:wrap; }
+  .vol-row .arr { color:var(--muted); font-size:.75rem; flex-shrink:0; }
+  .vol-row input[type=text] { width:72px; padding:.3rem .4rem; font-size:.68rem; flex-shrink:0; }
+  .vol-row input[type=range] { -webkit-appearance:none; appearance:none; flex:1; min-width:80px; background:var(--line); height:3px; border-radius:2px; padding:0; }
+  .vol-row input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:linear-gradient(135deg, var(--pink), var(--violet)); cursor:pointer; border:none; }
+  .vol-row input[type=range]::-moz-range-thumb { width:14px; height:14px; border-radius:50%; background:linear-gradient(135deg, var(--pink), var(--violet)); cursor:pointer; border:none; }
+  .vol-row .gain-val { font-size:.66rem; color:var(--text); min-width:50px; text-align:right; flex-shrink:0; font-variant-numeric:tabular-nums; }
+  .vol-row .rm { background:none; border:none; color:var(--red); font-size:1rem; cursor:pointer; padding:.1rem .35rem; opacity:.5; flex-shrink:0; }
+  .vol-row .rm:hover { opacity:1; }
+  .vol-empty { font-size:.65rem; color:var(--muted); padding:.5rem 0 .2rem; }
+
+  /* ===== BUTTONS ===== */
+  button.primary { width:100%; margin-top:1.4rem; padding:.85rem; background:linear-gradient(90deg, var(--pink), var(--violet)); border:none; color:#080810; font-family:'DM Mono', monospace; font-size:.72rem; letter-spacing:.25em; text-transform:uppercase; border-radius:8px; cursor:pointer; font-weight:600; transition: opacity .2s, transform .2s; }
   button.primary:hover { opacity:.92; }
   button.primary:active { transform: scale(.98); }
   button.primary:disabled { opacity:.4; cursor:not-allowed; transform:none; }
-  button.ghost { background:none; border:1px solid var(--line); color:var(--text); font-family:'DM Mono', monospace; font-size:.65rem; letter-spacing:.18em; text-transform:uppercase; padding:.45rem .8rem; border-radius:6px; cursor:pointer; transition: background .2s, border-color .2s; }
+  button.ghost { background:none; border:1px solid var(--line); color:var(--text); font-family:'DM Mono', monospace; font-size:.62rem; letter-spacing:.18em; text-transform:uppercase; padding:.4rem .75rem; border-radius:6px; cursor:pointer; transition: background .2s, border-color .2s; }
   button.ghost:hover { background:rgba(240,237,232,0.04); border-color:rgba(240,237,232,0.3); }
   button.ghost.danger { color:var(--red); border-color:rgba(255,63,63,0.25); }
   button.ghost.danger:hover { background:rgba(255,63,63,0.08); border-color:rgba(255,63,63,0.5); }
 
-  .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:.65rem .85rem; margin-top:.4rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:8px; cursor:pointer; }
-  .toggle-row span { font-size:.72rem; letter-spacing:.05em; }
-  .toggle { width:36px; height:20px; background:rgba(240,237,232,0.15); border-radius:10px; position:relative; transition: background .2s; flex-shrink:0; }
-  .toggle::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--text); transition: transform .2s; }
-  input[type=checkbox]:checked + .toggle { background: linear-gradient(90deg, var(--pink), var(--violet)); }
-  input[type=checkbox]:checked + .toggle::after { transform: translateX(16px); }
-  input[type=checkbox] { display:none; }
-
-  /* segmented */
-  .seg { display:flex; gap:.3rem; margin-top:.4rem; }
-  .seg button { flex:1; padding:.55rem .4rem; background:rgba(240,237,232,0.04); border:1px solid var(--line); color:var(--muted); font-family:'DM Mono', monospace; font-size:.66rem; letter-spacing:.15em; text-transform:uppercase; border-radius:6px; cursor:pointer; transition: background .15s, color .15s, border-color .15s; }
-  .seg button.active { background:rgba(255,110,180,0.15); color:var(--text); border-color:rgba(255,110,180,0.45); }
-  .seg button:hover { color:var(--text); }
-
-  /* slider row (range + value) */
-  .slider-row { display:flex; align-items:center; gap:.8rem; margin-top:.45rem; }
-  .slider-row > label { margin:0; flex-shrink:0; min-width:60px; }
-  .slider-row .val { font-size:.72rem; color:var(--text); min-width:54px; text-align:right; font-variant-numeric:tabular-nums; }
-  input[type=range] { -webkit-appearance:none; appearance:none; flex:1; background:var(--line); height:3px; border-radius:2px; padding:0; }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%; background:linear-gradient(135deg, var(--pink), var(--violet)); cursor:pointer; border:none; }
-  input[type=range]::-moz-range-thumb { width:14px; height:14px; border-radius:50%; background:linear-gradient(135deg, var(--pink), var(--violet)); cursor:pointer; border:none; }
-
-  /* EQ */
-  .eq-row { display:flex; align-items:center; gap:.8rem; margin-top:.55rem; }
-  .eq-row > span:first-child { font-size:.65rem; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; width:42px; flex-shrink:0; }
-  .eq-row .eq-val { font-size:.7rem; color:var(--text); min-width:50px; text-align:right; font-variant-numeric:tabular-nums; }
-
-  /* volume regions */
-  .vol-list { margin-top:.6rem; }
-  .vol-row { display:flex; align-items:center; gap:.5rem; margin-top:.45rem; padding:.5rem .55rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:8px; flex-wrap:wrap; }
-  .vol-row .arr { color:var(--muted); font-size:.8rem; flex-shrink:0; }
-  .vol-row input[type=text] { width:75px; padding:.35rem .45rem; font-size:.72rem; flex-shrink:0; }
-  .vol-row input[type=range] { flex:1; min-width:80px; }
-  .vol-row .gain-val { font-size:.7rem; color:var(--text); min-width:50px; text-align:right; flex-shrink:0; font-variant-numeric:tabular-nums; }
-  .vol-row .rm { background:none; border:none; color:var(--red); font-size:1.1rem; cursor:pointer; padding:.1rem .35rem; opacity:.5; flex-shrink:0; }
-  .vol-row .rm:hover { opacity:1; }
-  .vol-empty { font-size:.68rem; color:var(--muted); letter-spacing:.08em; padding:.7rem 0 .2rem; }
-
-  .progress { margin-top:1.4rem; height:3px; background:var(--line); border-radius:3px; overflow:hidden; display:none; }
+  /* ===== UPLOAD STATUS ===== */
+  .progress { margin-top:1.2rem; height:3px; background:var(--line); border-radius:3px; overflow:hidden; display:none; }
   .progress.show { display:block; }
   .progress-bar { height:100%; width:0%; background:linear-gradient(90deg, var(--pink), var(--violet)); transition: width .15s ease; }
-  .status { margin-top:1rem; font-size:.72rem; letter-spacing:.05em; color:var(--muted); text-align:center; min-height:1em; }
+  .status { margin-top:.8rem; font-size:.7rem; letter-spacing:.05em; color:var(--muted); text-align:center; min-height:1em; }
   .status.error { color:var(--red); }
   .status.ok { color:var(--green); }
-  .share-url { margin-top:.8rem; padding:.7rem; background:rgba(184,247,91,0.06); border:1px solid rgba(184,247,91,0.2); border-radius:8px; font-size:.72rem; word-break:break-all; text-align:center; color:var(--green); cursor:pointer; transition: background .2s; }
+  .share-url { margin-top:.7rem; padding:.65rem; background:rgba(184,247,91,0.06); border:1px solid rgba(184,247,91,0.2); border-radius:8px; font-size:.7rem; word-break:break-all; text-align:center; color:var(--green); cursor:pointer; transition: background .2s; }
   .share-url:hover { background:rgba(184,247,91,0.1); }
-  .share-url small { display:block; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; font-size:.6rem; margin-bottom:.3rem; }
+  .share-url small { display:block; color:var(--muted); letter-spacing:.2em; text-transform:uppercase; font-size:.55rem; margin-bottom:.3rem; }
 
-  .tabs { display:flex; gap:.4rem; margin-bottom:1.6rem; border-bottom:1px solid var(--line); padding-bottom:.6rem; }
-  .tabs button { flex:1; background:none; border:none; color:var(--muted); font-family:'DM Mono',monospace; font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; padding:.7rem; cursor:pointer; border-radius:6px; transition: color .2s, background .2s; }
+  /* ===== TABS / LIST ===== */
+  .tabs { display:flex; gap:.4rem; margin-bottom:1.2rem; border-bottom:1px solid var(--line); padding-bottom:.5rem; }
+  .tabs button { flex:1; background:none; border:none; color:var(--muted); font-family:'DM Mono',monospace; font-size:.68rem; letter-spacing:.2em; text-transform:uppercase; padding:.6rem; cursor:pointer; border-radius:6px; transition: color .2s, background .2s; }
   .tabs button:hover { color:var(--text); }
   .tabs button.active { color:var(--text); background:rgba(255,110,180,0.08); }
   section.tab { display:none; }
@@ -132,13 +150,13 @@
   .set-thumb img { width:100%; height:100%; object-fit:cover; }
   .set-thumb-placeholder { color: var(--pink); font-size:1.1rem; }
   .set-info { flex:1; min-width:0; }
-  .set-info h3 { font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:1.2rem; letter-spacing:.02em; line-height:1.2; }
-  .set-info .meta { font-size:.65rem; color:var(--muted); letter-spacing:.1em; margin-top:.2rem; }
+  .set-info h3 { font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:1.15rem; letter-spacing:.02em; line-height:1.2; }
+  .set-info .meta { font-size:.62rem; color:var(--muted); letter-spacing:.1em; margin-top:.2rem; }
   .set-actions { display:flex; gap:.35rem; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; }
   .set-edit { display:none; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--line); }
   .set-row.editing .set-edit { display:block; }
-  .empty { text-align:center; color:var(--muted); font-size:.75rem; padding:2rem 1rem; letter-spacing:.1em; }
-  .back { display:inline-block; margin-top:1.5rem; font-size:.65rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); text-decoration:none; }
+  .empty { text-align:center; color:var(--muted); font-size:.7rem; padding:2rem 1rem; letter-spacing:.1em; }
+  .back { display:inline-block; margin-top:1.3rem; font-size:.62rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); text-decoration:none; }
   .back:hover { color:var(--text); }
   .center { text-align:center; }
   .logout { float:right; margin-top:-.3rem; }
@@ -146,15 +164,19 @@
   #login, #app { display:none; }
   body[data-view=login] #login, body[data-view=app] #app { display:block; }
 
-  details { margin-top:1.2rem; }
-  details summary { font-size:.65rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); cursor:pointer; padding:.4rem 0; }
+  details { margin-top:1rem; }
+  details summary { font-size:.62rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); cursor:pointer; padding:.35rem 0; }
   details summary::-webkit-details-marker { display:none; }
   details summary::before { content:'▸ '; }
   details[open] summary::before { content:'▾ '; }
-  details details { margin-top:.6rem; padding-left:.5rem; border-left:1px solid var(--line); }
 
   ::part(region) { z-index: 2; }
   ::part(region-content) { background: rgba(8,8,16,0.7); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: 'DM Mono', monospace; }
+
+  @media (max-width: 640px) {
+    .strip { grid-template-columns: repeat(2, 1fr); }
+    main { padding: 1.5rem 1.1rem; }
+  }
 </style>
 </head>
 <body data-view="login">
@@ -172,7 +194,7 @@
 
   <div id="app">
     <nav class="tabs">
-      <button data-tab="upload" class="active">upload new</button>
+      <button data-tab="upload" class="active">new set</button>
       <button data-tab="manage">manage</button>
     </nav>
 
@@ -185,12 +207,119 @@
         <div class="wf-container"></div>
         <div class="wf-toolbar">
           <button type="button" class="wf-btn primary" data-act="play">▶ play</button>
-          <button type="button" class="wf-btn" data-act="zoom-in">zoom +</button>
-          <button type="button" class="wf-btn" data-act="zoom-out">zoom −</button>
+          <button type="button" class="wf-btn" data-act="zoom-in">+</button>
+          <button type="button" class="wf-btn" data-act="zoom-out">−</button>
           <button type="button" class="wf-btn" data-act="fx">🔊 hear effects</button>
           <span class="wf-time"><span class="now">0:00</span> / <span class="total">--:--</span></span>
         </div>
-        <p class="hint">click waveform to seek · 📍 captures position · drag waveform regions · "hear effects" applies most filters live (declip and normalize are <span class="save-only">save-only</span>)</p>
+
+        <!-- CHANNEL STRIP -->
+        <div class="strip" data-strip>
+
+          <div class="panel">
+            <h4>trim</h4>
+            <label style="margin:0;text-align:center">start</label>
+            <div class="field-row"><input type="text" data-f="trimStart" value="0"><button type="button" class="mark-btn" data-mark="trimStart" disabled>📍</button></div>
+            <label style="margin:0;text-align:center">end</label>
+            <div class="field-row"><input type="text" data-f="trimEnd" value="0"><button type="button" class="mark-btn" data-mark="trimEnd" disabled>📍</button></div>
+          </div>
+
+          <div class="panel">
+            <h4>fades</h4>
+            <div class="fader-row">
+              <div class="fader" data-fader="fadeIn">
+                <div class="fader-track"><div class="fader-fill"></div><div class="fader-thumb"></div></div>
+                <span class="fader-value">0.0s</span>
+                <span class="fader-label">in</span>
+              </div>
+              <div class="fader" data-fader="fadeOut">
+                <div class="fader-track"><div class="fader-fill"></div><div class="fader-thumb"></div></div>
+                <span class="fader-value">0.0s</span>
+                <span class="fader-label">out</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:.3rem;justify-content:center">
+              <button type="button" class="mark-btn" data-mark="fadeIn" disabled title="set fade in to current pos">📍in</button>
+              <button type="button" class="mark-btn" data-mark="fadeOut" disabled title="set fade out from current pos">📍out</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h4>cleanup</h4>
+            <label class="panel-toggle"><span>de-clip <span class="save-only">●</span></span><input type="checkbox" data-f="declip"><div class="toggle"></div></label>
+            <label class="panel-toggle"><span>HPF 80Hz</span><input type="checkbox" data-f="highpass"><div class="toggle"></div></label>
+            <label class="panel-toggle"><span>normalize <span class="save-only">●</span></span><input type="checkbox" data-f="normalize" checked><div class="toggle"></div></label>
+            <label class="panel-toggle"><span>limiter</span><input type="checkbox" data-f="limiter"><div class="toggle"></div></label>
+          </div>
+
+          <div class="panel">
+            <h4>compressor</h4>
+            <div class="seg-label">preset</div>
+            <div class="seg" data-seg="compressor">
+              <button type="button" data-val="" class="active">off</button>
+              <button type="button" data-val="subtle">sub</button>
+              <button type="button" data-val="medium">med</button>
+              <button type="button" data-val="heavy">hvy</button>
+            </div>
+            <input type="hidden" data-f="compressor" value="">
+          </div>
+
+          <div class="panel">
+            <h4>EQ</h4>
+            <div class="row-sub">
+              <div class="knob" data-f="eqLow" data-min="-12" data-max="12" data-step="0.5" data-value="0" data-format="db" data-reset="0">
+                <div class="knob-dial"><div class="knob-indicator"></div></div>
+                <span class="knob-value">0</span>
+                <span class="knob-label">low</span>
+              </div>
+              <div class="knob" data-f="eqMid" data-min="-12" data-max="12" data-step="0.5" data-value="0" data-format="db" data-reset="0">
+                <div class="knob-dial"><div class="knob-indicator"></div></div>
+                <span class="knob-value">0</span>
+                <span class="knob-label">mid</span>
+              </div>
+              <div class="knob" data-f="eqHigh" data-min="-12" data-max="12" data-step="0.5" data-value="0" data-format="db" data-reset="0">
+                <div class="knob-dial"><div class="knob-indicator"></div></div>
+                <span class="knob-value">0</span>
+                <span class="knob-label">hi</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h4>space</h4>
+            <div class="row-sub">
+              <div class="knob" data-f="reverb" data-min="0" data-max="100" data-step="1" data-value="0" data-format="pct" data-reset="0">
+                <div class="knob-dial"><div class="knob-indicator"></div></div>
+                <span class="knob-value">0</span>
+                <span class="knob-label">verb</span>
+              </div>
+              <div class="knob" data-f="stereoWidth" data-min="-100" data-max="100" data-step="1" data-value="0" data-format="pct-signed" data-reset="0">
+                <div class="knob-dial"><div class="knob-indicator"></div></div>
+                <span class="knob-value">0</span>
+                <span class="knob-label">width</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h4>delay</h4>
+            <div class="row-sub">
+              <div class="knob" data-f="delayAmount" data-min="0" data-max="100" data-step="1" data-value="0" data-format="pct" data-reset="0">
+                <div class="knob-dial"><div class="knob-indicator"></div></div>
+                <span class="knob-value">0</span>
+                <span class="knob-label">amt</span>
+              </div>
+              <div class="knob" data-f="delayTime" data-min="50" data-max="1000" data-step="10" data-value="300" data-format="ms" data-reset="300">
+                <div class="knob-dial"><div class="knob-indicator"></div></div>
+                <span class="knob-value">300</span>
+                <span class="knob-label">time</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <p class="hint">drag knobs ↕ to adjust · double-click to reset · 📍 marks position · <span class="save-only">●</span> = applied only on save</p>
       </div>
 
       <label for="title">title</label>
@@ -199,74 +328,24 @@
       <label for="date">date</label>
       <input id="date" type="date">
 
-      <details open data-section="processing">
-        <summary>audio processing</summary>
-
-        <div class="row">
-          <div>
-            <label>trim start</label>
-            <div class="field-row"><input type="text" data-f="trimStart" placeholder="0:05" value="0"><button type="button" class="mark-btn" data-mark="trimStart" disabled>📍</button></div>
-          </div>
-          <div>
-            <label>trim end</label>
-            <div class="field-row"><input type="text" data-f="trimEnd" placeholder="0:30" value="0"><button type="button" class="mark-btn" data-mark="trimEnd" disabled>📍</button></div>
-          </div>
-        </div>
-        <p class="hint">cut from start / end · format mm:ss or seconds</p>
-
-        <label>fade in <span class="val-inline" data-for="fadeIn">0.0s</span></label>
-        <div class="slider-row"><input type="range" data-f="fadeIn" min="0" max="30" step="0.5" value="0"><button type="button" class="mark-btn" data-mark="fadeIn" disabled>📍</button></div>
-        <label>fade out <span class="val-inline" data-for="fadeOut">0.0s</span></label>
-        <div class="slider-row"><input type="range" data-f="fadeOut" min="0" max="30" step="0.5" value="0"><button type="button" class="mark-btn" data-mark="fadeOut" disabled>📍</button></div>
-
-        <details open>
-          <summary>cleanup</summary>
-          <label class="toggle-row"><span>de-clip · reconstruct saturated peaks <span class="save-only">• save only</span></span><input type="checkbox" data-f="declip"><div class="toggle"></div></label>
-          <label class="toggle-row"><span>high-pass · remove rumble below 80Hz</span><input type="checkbox" data-f="highpass"><div class="toggle"></div></label>
-        </details>
-
-        <details open>
-          <summary>dynamics</summary>
-          <label>compressor</label>
-          <div class="seg" data-seg="compressor">
-            <button type="button" data-val="" class="active">off</button>
-            <button type="button" data-val="subtle">subtle</button>
-            <button type="button" data-val="medium">medium</button>
-            <button type="button" data-val="heavy">heavy</button>
-          </div>
-          <input type="hidden" data-f="compressor" value="">
-          <label class="toggle-row" style="margin-top:.7rem"><span>normalize loudness · -14 LUFS <span class="save-only">• save only</span></span><input type="checkbox" data-f="normalize" checked><div class="toggle"></div></label>
-          <label class="toggle-row"><span>master limiter · prevent any final clipping</span><input type="checkbox" data-f="limiter"><div class="toggle"></div></label>
-        </details>
-
-        <details>
-          <summary>EQ (3 bands, ±12 dB)</summary>
-          <div class="eq-row"><span>low</span><input type="range" data-f="eqLow" min="-12" max="12" step="0.5" value="0"><span class="eq-val">0 dB</span></div>
-          <div class="eq-row"><span>mid</span><input type="range" data-f="eqMid" min="-12" max="12" step="0.5" value="0"><span class="eq-val">0 dB</span></div>
-          <div class="eq-row"><span>high</span><input type="range" data-f="eqHigh" min="-12" max="12" step="0.5" value="0"><span class="eq-val">0 dB</span></div>
-        </details>
-      </details>
-
       <details data-section="volume">
         <summary>volume regions (boost / reduce specific parts)</summary>
-        <button type="button" class="wf-btn" data-act="add-region" disabled>＋ region at current position (default −6dB, 10s)</button>
+        <button type="button" class="wf-btn" data-act="add-region" disabled>＋ region at current position (−6dB, 10s)</button>
         <div class="vol-list" data-vol-list></div>
-        <p class="hint">each region is a time range with gain in dB · drag on waveform to resize/move · slider for gain</p>
+        <p class="hint">drag handles on waveform · slider for gain in dB</p>
       </details>
 
       <details data-section="presentation">
         <summary>presentation</summary>
         <label>artwork (optional)</label>
         <input type="file" data-f="artwork" accept="image/*">
-        <p class="hint">square image works best · shown in the player</p>
-
         <label>tracklist (optional)</label>
         <button type="button" class="wf-btn" data-act="add-cue" disabled style="margin-bottom:.5rem">＋ cue at current position</button>
-        <textarea data-f="tracklist" rows="6" placeholder="00:00 Intro&#10;05:30 Artist - Track"></textarea>
-        <p class="hint">one per line · format <code>mm:ss Label</code> or <code>h:mm:ss Label</code></p>
+        <textarea data-f="tracklist" rows="5" placeholder="00:00 Intro&#10;05:30 Artist - Track"></textarea>
+        <p class="hint">one per line · <code>mm:ss Label</code></p>
       </details>
 
-      <button class="primary" id="uploadBtn" disabled>upload</button>
+      <button class="primary" id="uploadBtn" disabled>upload new set</button>
 
       <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
       <p id="status" class="status"></p>
@@ -312,6 +391,13 @@
   function attr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function uid() { return 'r' + Math.random().toString(36).slice(2, 9); }
+  function fmtKnob(v, format) {
+    if (format === 'db') return `${v >= 0 ? '+' : ''}${v.toFixed(1)} dB`;
+    if (format === 'pct') return `${Math.round(v)}%`;
+    if (format === 'pct-signed') return `${v > 0 ? '+' : ''}${Math.round(v)}%`;
+    if (format === 'ms') return `${Math.round(v)} ms`;
+    return String(v);
+  }
 
   async function api(path, opts = {}) {
     return fetch(path, { ...opts, headers: { 'X-Auth': password, ...(opts.headers || {}) } });
@@ -321,42 +407,217 @@
     return r.ok;
   }
 
+  // ===== KNOB component =====
+  function makeKnob(el, onChange) {
+    const min = parseFloat(el.dataset.min);
+    const max = parseFloat(el.dataset.max);
+    const step = parseFloat(el.dataset.step || '1');
+    const format = el.dataset.format || 'number';
+    const indicator = el.querySelector('.knob-indicator');
+    const valEl = el.querySelector('.knob-value');
+    let value = parseFloat(el.dataset.value || '0');
+
+    function set(v, silent) {
+      v = Math.max(min, Math.min(max, Math.round(v / step) * step));
+      // avoid -0
+      if (Object.is(v, -0)) v = 0;
+      value = v;
+      el.dataset.value = v;
+      const pct = (v - min) / (max - min);
+      const angle = -135 + pct * 270;
+      indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+      if (valEl) valEl.textContent = fmtKnob(v, format);
+      if (!silent && onChange) onChange(v);
+    }
+    set(value, true);
+
+    let dragging = false, startY = 0, startVal = 0, shift = false;
+    el.addEventListener('pointerdown', e => {
+      dragging = true;
+      startY = e.clientY;
+      startVal = value;
+      shift = e.shiftKey;
+      el.classList.add('dragging');
+      el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const dy = startY - e.clientY;
+      const range = max - min;
+      const sensitivity = (e.shiftKey || shift) ? 400 : 140; // shift = fine
+      set(startVal + (dy / sensitivity) * range);
+    });
+    const stop = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      el.classList.remove('dragging');
+      try { el.releasePointerCapture(e.pointerId); } catch {}
+    };
+    el.addEventListener('pointerup', stop);
+    el.addEventListener('pointercancel', stop);
+    el.addEventListener('dblclick', () => {
+      set(parseFloat(el.dataset.reset || '0'));
+    });
+
+    return { get: () => value, set, el };
+  }
+
+  // ===== FADER (vertical) =====
+  function makeFader(el, opts, onChange) {
+    const min = opts.min, max = opts.max, step = opts.step || 0.5;
+    const track = el.querySelector('.fader-track');
+    const fill = el.querySelector('.fader-fill');
+    const thumb = el.querySelector('.fader-thumb');
+    const valEl = el.querySelector('.fader-value');
+    let value = opts.value || 0;
+
+    function set(v, silent) {
+      v = Math.max(min, Math.min(max, Math.round(v / step) * step));
+      value = v;
+      el.dataset.value = v;
+      const pct = (v - min) / (max - min);
+      fill.style.height = (pct * 100) + '%';
+      thumb.style.bottom = (pct * 100) + '%';
+      if (valEl) valEl.textContent = `${v.toFixed(1)}s`;
+      if (!silent && onChange) onChange(v);
+    }
+    set(value, true);
+
+    let dragging = false;
+    track.addEventListener('pointerdown', e => {
+      dragging = true;
+      track.setPointerCapture(e.pointerId);
+      updateFromY(e.clientY);
+      e.preventDefault();
+    });
+    track.addEventListener('pointermove', e => { if (dragging) updateFromY(e.clientY); });
+    const stop = e => {
+      if (!dragging) return;
+      dragging = false;
+      try { track.releasePointerCapture(e.pointerId); } catch {}
+    };
+    track.addEventListener('pointerup', stop);
+    track.addEventListener('pointercancel', stop);
+
+    function updateFromY(clientY) {
+      const rect = track.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, 1 - (clientY - rect.top) / rect.height));
+      set(min + pct * (max - min));
+    }
+    return { get: () => value, set, el };
+  }
+
   // ===== Web Audio FX chain =====
-  // Single shared AudioContext (lazy)
   let _ac = null;
   function getAC() {
     if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
     if (_ac.state === 'suspended') _ac.resume();
     return _ac;
   }
+  function makeReverbIR(ac, duration = 2.4, decay = 2.8) {
+    const len = Math.floor(ac.sampleRate * duration);
+    const ir = ac.createBuffer(2, len, ac.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      }
+    }
+    return ir;
+  }
   function buildFxChain(audioEl) {
     const ac = getAC();
     let source;
     try { source = ac.createMediaElementSource(audioEl); }
     catch (e) { console.warn('createMediaElementSource failed', e); return null; }
+
     const hp = ac.createBiquadFilter();      hp.type = 'highpass'; hp.frequency.value = 1; hp.Q.value = 0.707;
     const comp = ac.createDynamicsCompressor(); comp.threshold.value = 0; comp.ratio.value = 1;
     const gain = ac.createGain();            gain.gain.value = 1;
-    const eqLow = ac.createBiquadFilter();   eqLow.type = 'lowshelf';  eqLow.frequency.value = 200;  eqLow.gain.value = 0;
-    const eqMid = ac.createBiquadFilter();   eqMid.type = 'peaking';   eqMid.frequency.value = 1500; eqMid.Q.value = 1; eqMid.gain.value = 0;
-    const eqHigh = ac.createBiquadFilter();  eqHigh.type = 'highshelf'; eqHigh.frequency.value = 6000; eqHigh.gain.value = 0;
+    const eqLow = ac.createBiquadFilter();   eqLow.type = 'lowshelf';  eqLow.frequency.value = 200;
+    const eqMid = ac.createBiquadFilter();   eqMid.type = 'peaking';   eqMid.frequency.value = 1500; eqMid.Q.value = 1;
+    const eqHigh = ac.createBiquadFilter();  eqHigh.type = 'highshelf'; eqHigh.frequency.value = 6000;
+
+    // stereo width (mid/side matrix via channel splitter + 4 gain nodes)
+    const splitter = ac.createChannelSplitter(2);
+    const merger = ac.createChannelMerger(2);
+    const llGain = ac.createGain(); llGain.gain.value = 1;
+    const lrGain = ac.createGain(); lrGain.gain.value = 0;
+    const rlGain = ac.createGain(); rlGain.gain.value = 0;
+    const rrGain = ac.createGain(); rrGain.gain.value = 1;
+
+    // delay
+    const delayNode = ac.createDelay(2.0);
+    delayNode.delayTime.value = 0.3;
+    const delayFeedback = ac.createGain(); delayFeedback.gain.value = 0;
+    const delayWet = ac.createGain(); delayWet.gain.value = 0;
+    const delayDry = ac.createGain(); delayDry.gain.value = 1;
+
+    // reverb
+    const convolver = ac.createConvolver();
+    convolver.buffer = makeReverbIR(ac);
+    const reverbWet = ac.createGain(); reverbWet.gain.value = 0;
+    const reverbDry = ac.createGain(); reverbDry.gain.value = 1;
+
     const limiter = ac.createDynamicsCompressor(); limiter.threshold.value = 0; limiter.ratio.value = 1;
-    source.connect(hp); hp.connect(comp); comp.connect(gain);
+
+    // routing
+    // source → hp → comp → gain → eqLow → eqMid → eqHigh → [stereo width] → [delay split] → [reverb split] → limiter → dest
+    source.connect(hp);
+    hp.connect(comp);
+    comp.connect(gain);
     gain.connect(eqLow); eqLow.connect(eqMid); eqMid.connect(eqHigh);
-    eqHigh.connect(limiter); limiter.connect(ac.destination);
-    return { source, hp, comp, gain, eqLow, eqMid, eqHigh, limiter, audioEl, ac };
+
+    // stereo width matrix
+    eqHigh.connect(splitter);
+    splitter.connect(llGain, 0); splitter.connect(lrGain, 0);
+    splitter.connect(rlGain, 1); splitter.connect(rrGain, 1);
+    llGain.connect(merger, 0, 0); rlGain.connect(merger, 0, 0);
+    lrGain.connect(merger, 0, 1); rrGain.connect(merger, 0, 1);
+
+    // delay + dry
+    merger.connect(delayDry);
+    merger.connect(delayNode);
+    delayNode.connect(delayFeedback); delayFeedback.connect(delayNode);
+    delayNode.connect(delayWet);
+
+    // mix delay
+    const delayMix = ac.createGain();
+    delayDry.connect(delayMix);
+    delayWet.connect(delayMix);
+
+    // reverb + dry
+    delayMix.connect(reverbDry);
+    delayMix.connect(convolver);
+    convolver.connect(reverbWet);
+
+    const reverbMix = ac.createGain();
+    reverbDry.connect(reverbMix);
+    reverbWet.connect(reverbMix);
+
+    reverbMix.connect(limiter);
+    limiter.connect(ac.destination);
+
+    return { source, hp, comp, gain, eqLow, eqMid, eqHigh, llGain, lrGain, rlGain, rrGain, delayNode, delayFeedback, delayWet, delayDry, convolver, reverbWet, reverbDry, limiter, audioEl, ac };
   }
+
   const COMP_PRESETS = {
     subtle: { th: -12, ratio: 2, attack: 0.02, release: 0.2, knee: 6 },
     medium: { th: -18, ratio: 4, attack: 0.01, release: 0.15, knee: 6 },
     heavy:  { th: -24, ratio: 8, attack: 0.005, release: 0.1, knee: 6 }
   };
+
   function applyStaticFx(chain, opts, on) {
     if (!chain) return;
     if (!on) {
       chain.hp.frequency.value = 1;
       chain.comp.threshold.value = 0; chain.comp.ratio.value = 1;
       chain.eqLow.gain.value = 0; chain.eqMid.gain.value = 0; chain.eqHigh.gain.value = 0;
+      chain.llGain.gain.value = 1; chain.lrGain.gain.value = 0;
+      chain.rlGain.gain.value = 0; chain.rrGain.gain.value = 1;
+      chain.delayWet.gain.value = 0; chain.delayDry.gain.value = 1; chain.delayFeedback.gain.value = 0;
+      chain.reverbWet.gain.value = 0; chain.reverbDry.gain.value = 1;
       chain.limiter.threshold.value = 0; chain.limiter.ratio.value = 1;
       return;
     }
@@ -370,11 +631,33 @@
     chain.eqLow.gain.value = opts.eqLow || 0;
     chain.eqMid.gain.value = opts.eqMid || 0;
     chain.eqHigh.gain.value = opts.eqHigh || 0;
+
+    // stereo width: -100=mono (w=0), 0=normal (w=1), +100=wide (w=2)
+    const w = 1 + ((opts.stereoWidth || 0) / 100);
+    chain.llGain.gain.value = (1 + w) / 2;
+    chain.rrGain.gain.value = (1 + w) / 2;
+    chain.lrGain.gain.value = (1 - w) / 2;
+    chain.rlGain.gain.value = (1 - w) / 2;
+
+    // delay
+    const da = (opts.delayAmount || 0) / 100;
+    const dt = ((opts.delayTime || 300) / 1000);
+    chain.delayNode.delayTime.value = dt;
+    chain.delayWet.gain.value = da * 0.7;
+    chain.delayDry.gain.value = 1;
+    chain.delayFeedback.gain.value = da * 0.45;
+
+    // reverb
+    const rv = (opts.reverb || 0) / 100;
+    chain.reverbWet.gain.value = rv * 0.7;
+    chain.reverbDry.gain.value = 1 - rv * 0.3;
+
     if (opts.limiter) {
       chain.limiter.threshold.value = -1; chain.limiter.ratio.value = 20;
       chain.limiter.attack.value = 0.001; chain.limiter.release.value = 0.05; chain.limiter.knee.value = 0;
     } else { chain.limiter.threshold.value = 0; chain.limiter.ratio.value = 1; }
   }
+
   function updateDynamicGain(chain, opts, trimOffset, on) {
     if (!chain) return;
     if (!on) { chain.gain.gain.value = 1; return; }
@@ -391,8 +674,8 @@
     chain.gain.gain.value = g;
   }
 
-  // ===== editor (WaveSurfer + FX chain) =====
-  function createEditor({ container, audioSrc, isBlob, trimOffset = 0, form, existingVolumeRegions = [] }) {
+  // ===== EDITOR =====
+  function createEditor({ container, audioSrc, isBlob, trimOffset = 0, form, existingVolumeRegions = [], initial = {} }) {
     const wsRoot = container.querySelector('.wf-container');
     const playBtn = container.querySelector('[data-act=play]');
     const zoomIn = container.querySelector('[data-act=zoom-in]');
@@ -410,13 +693,13 @@
       cursorColor: '#f0ede8',
       cursorWidth: 2,
       barWidth: 2, barGap: 1, barRadius: 1,
-      height: 110, normalize: true, minPxPerSec: 1,
+      height: 100, normalize: true, minPxPerSec: 1,
     });
     const regions = ws.registerPlugin(RegionsPlugin.create());
     const regionData = new Map();
     const wsRegions = new Map();
 
-    const ctx = { ws, regions, regionData, wsRegions, trimOffset, form, fxChain: null, fxOn: false, fxTimer: null,
+    const ctx = { ws, regions, regionData, wsRegions, trimOffset, form, fxChain: null, fxOn: false, fxTimer: null, knobs: {}, faders: {},
       destroy: () => {
         try { ws.destroy(); } catch {}
         if (ctx.fxTimer) clearInterval(ctx.fxTimer);
@@ -430,7 +713,6 @@
       existingVolumeRegions.forEach(r => addVolumeRegion(ctx, { start: r.start, end: r.end, gainDb: r.gainDb }, false));
     });
     ws.on('ready', () => {
-      // build FX chain after waveform is ready (audio element exists)
       try {
         const audioEl = ws.getMediaElement();
         if (audioEl) {
@@ -454,9 +736,32 @@
     fxBtn.addEventListener('click', () => {
       ctx.fxOn = !ctx.fxOn;
       fxBtn.classList.toggle('active', ctx.fxOn);
-      fxBtn.textContent = ctx.fxOn ? '🔊 effects on' : '🔊 hear effects';
+      fxBtn.textContent = ctx.fxOn ? '🔊 fx on' : '🔊 hear effects';
       applyStaticFx(ctx.fxChain, readCurrentFxOpts(form, ctx), ctx.fxOn);
     });
+
+    // wire knobs + faders within form scope
+    const refresh = () => applyStaticFx(ctx.fxChain, readCurrentFxOpts(form, ctx), ctx.fxOn);
+
+    form.querySelectorAll('.knob[data-f]').forEach(el => {
+      const initVal = initial[el.dataset.f];
+      if (initVal !== undefined) el.dataset.value = initVal;
+      const k = makeKnob(el, refresh);
+      ctx.knobs[el.dataset.f] = k;
+    });
+    form.querySelectorAll('.fader[data-fader]').forEach(el => {
+      const f = el.dataset.fader;
+      const initVal = initial[f];
+      const fader = makeFader(el, { min: 0, max: 30, step: 0.5, value: initVal !== undefined ? initVal : 0 }, refresh);
+      ctx.faders[f] = fader;
+    });
+
+    // wire other inputs
+    form.querySelectorAll('[data-f]:not(.knob)').forEach(el => {
+      el.addEventListener('input', refresh);
+      el.addEventListener('change', refresh);
+    });
+    form.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', refresh));
 
     if (isBlob) ws.loadBlob(audioSrc); else ws.load(audioSrc);
     container.classList.add('active');
@@ -466,58 +771,46 @@
 
   function readCurrentFxOpts(form, ctx) {
     const get = (f) => form.querySelector(`[data-f="${f}"]`);
+    const knobVal = (f) => ctx?.knobs?.[f] ? ctx.knobs[f].get() : parseFloat(get(f)?.dataset?.value || '0') || 0;
+    const faderVal = (f) => ctx?.faders?.[f] ? ctx.faders[f].get() : parseFloat(get(f)?.dataset?.value || '0') || 0;
     return {
       highpass: get('highpass')?.checked || false,
       compressor: get('compressor')?.value || '',
       limiter: get('limiter')?.checked || false,
-      eqLow: parseFloat(get('eqLow')?.value || '0') || 0,
-      eqMid: parseFloat(get('eqMid')?.value || '0') || 0,
-      eqHigh: parseFloat(get('eqHigh')?.value || '0') || 0,
-      fadeIn: parseFloat(get('fadeIn')?.value || '0') || 0,
-      fadeOut: parseFloat(get('fadeOut')?.value || '0') || 0,
+      eqLow: knobVal('eqLow'),
+      eqMid: knobVal('eqMid'),
+      eqHigh: knobVal('eqHigh'),
+      reverb: knobVal('reverb'),
+      stereoWidth: knobVal('stereoWidth'),
+      delayAmount: knobVal('delayAmount'),
+      delayTime: knobVal('delayTime'),
+      fadeIn: faderVal('fadeIn'),
+      fadeOut: faderVal('fadeOut'),
       volumeRegions: ctx ? [...ctx.regionData.values()] : []
     };
   }
 
-  function wireRealtimeFx(formScope, ctx) {
-    const inputs = formScope.querySelectorAll('[data-f]');
-    inputs.forEach(el => {
-      el.addEventListener('input', () => {
-        applyStaticFx(ctx.fxChain, readCurrentFxOpts(formScope, ctx), ctx.fxOn);
-        // refresh inline value displays
-        if (el.type === 'range') {
-          const valEl = formScope.querySelector(`[data-for="${el.dataset.f}"]`);
-          if (valEl) valEl.textContent = `${parseFloat(el.value).toFixed(1)}s`;
-          const eqVal = el.parentElement.querySelector('.eq-val');
-          if (eqVal) eqVal.textContent = `${parseFloat(el.value).toFixed(1)} dB`;
-        }
-      });
-      el.addEventListener('change', () => applyStaticFx(ctx.fxChain, readCurrentFxOpts(formScope, ctx), ctx.fxOn));
-    });
-    // segmented buttons too
-    formScope.querySelectorAll('.seg button').forEach(b => {
-      b.addEventListener('click', () => applyStaticFx(ctx.fxChain, readCurrentFxOpts(formScope, ctx), ctx.fxOn));
-    });
-  }
-
-  // ===== mark + cue buttons =====
+  // ===== mark + cue =====
   function wireMarkButtons(formScope, ctx) {
-    formScope.querySelectorAll('.mark-btn').forEach(btn => {
+    formScope.querySelectorAll('.mark-btn[data-mark]').forEach(btn => {
       btn.disabled = false;
       btn.onclick = () => {
         const target = btn.dataset.mark;
         const t = ctx.ws.getCurrentTime();
         const d = ctx.ws.getDuration() || 0;
-        let val;
         const curTrimEnd = parseTime(formScope.querySelector('[data-f=trimEnd]')?.value || '0');
-        if (target === 'trimStart') val = ctx.trimOffset + t;
-        else if (target === 'trimEnd') val = curTrimEnd + (d - t);
-        else if (target === 'fadeIn') val = t;
-        else if (target === 'fadeOut') val = d - t;
-        const input = btn.parentElement.querySelector('input');
-        if (input.type === 'range' || input.type === 'number') input.value = val.toFixed(1);
-        else input.value = fmtTime(val);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        if (target === 'trimStart') {
+          const val = ctx.trimOffset + t;
+          formScope.querySelector('[data-f=trimStart]').value = fmtTime(val);
+        } else if (target === 'trimEnd') {
+          const val = curTrimEnd + (d - t);
+          formScope.querySelector('[data-f=trimEnd]').value = fmtTime(val);
+        } else if (target === 'fadeIn') {
+          if (ctx.faders.fadeIn) ctx.faders.fadeIn.set(t);
+        } else if (target === 'fadeOut') {
+          if (ctx.faders.fadeOut) ctx.faders.fadeOut.set(d - t);
+        }
+        applyStaticFx(ctx.fxChain, readCurrentFxOpts(formScope, ctx), ctx.fxOn);
       };
     });
   }
@@ -543,8 +836,7 @@
     listEl.innerHTML = '';
     if (ctx.regionData.size === 0) {
       const e = document.createElement('p'); e.className = 'vol-empty'; e.textContent = 'no regions yet';
-      listEl.appendChild(e);
-      return;
+      listEl.appendChild(e); return;
     }
     const ids = [...ctx.regionData.keys()].sort((a, b) => ctx.regionData.get(a).start - ctx.regionData.get(b).start);
     for (const id of ids) {
@@ -560,27 +852,22 @@
         <span class="gain-val">${gNum}</span>
         <button type="button" class="rm" title="remove">×</button>
       `;
-      const updateGainDisplay = (g) => {
-        row.querySelector('.gain-val').textContent = `${g >= 0 ? '+' : ''}${g.toFixed(1)} dB`;
-      };
+      const updateGainDisplay = (g) => { row.querySelector('.gain-val').textContent = `${g >= 0 ? '+' : ''}${g.toFixed(1)} dB`; };
       row.querySelector('[data-vr=start]').addEventListener('input', e => {
-        const newStart = parseTime(e.target.value);
-        const cur = ctx.regionData.get(id); cur.start = newStart;
-        const wr = ctx.wsRegions.get(id);
-        if (wr) wr.setOptions({ start: cur.start - ctx.trimOffset, end: cur.end - ctx.trimOffset });
+        const ns = parseTime(e.target.value);
+        const cur = ctx.regionData.get(id); cur.start = ns;
+        const wr = ctx.wsRegions.get(id); if (wr) wr.setOptions({ start: cur.start - ctx.trimOffset, end: cur.end - ctx.trimOffset });
       });
       row.querySelector('[data-vr=end]').addEventListener('input', e => {
-        const newEnd = parseTime(e.target.value);
-        const cur = ctx.regionData.get(id); cur.end = newEnd;
-        const wr = ctx.wsRegions.get(id);
-        if (wr) wr.setOptions({ start: cur.start - ctx.trimOffset, end: cur.end - ctx.trimOffset });
+        const ne = parseTime(e.target.value);
+        const cur = ctx.regionData.get(id); cur.end = ne;
+        const wr = ctx.wsRegions.get(id); if (wr) wr.setOptions({ start: cur.start - ctx.trimOffset, end: cur.end - ctx.trimOffset });
       });
       row.querySelector('[data-vr=gainDb]').addEventListener('input', e => {
         const g = parseFloat(e.target.value) || 0;
         const cur = ctx.regionData.get(id); cur.gainDb = g;
         updateGainDisplay(g);
-        const wr = ctx.wsRegions.get(id);
-        if (wr) wr.setOptions({ color: regionColor(g), content: `${g >= 0 ? '+' : ''}${g}dB` });
+        const wr = ctx.wsRegions.get(id); if (wr) wr.setOptions({ color: regionColor(g), content: `${g >= 0 ? '+' : ''}${g}dB` });
       });
       row.querySelector('.rm').addEventListener('click', () => removeVolumeRegion(ctx, listEl, id));
       listEl.appendChild(row);
@@ -625,12 +912,9 @@
     ctx.wsRegions.delete(id);
     rebuildRegionList(ctx, listEl);
   }
-  function wireAddRegionButton(btn, ctx) {
-    btn.disabled = false;
-    btn.onclick = () => addVolumeRegion(ctx);
-  }
+  function wireAddRegionButton(btn, ctx) { btn.disabled = false; btn.onclick = () => addVolumeRegion(ctx); }
 
-  // ===== UI helpers =====
+  // ===== Segmented control =====
   function wireSegmentedControls(scope) {
     scope.querySelectorAll('.seg').forEach(seg => {
       const target = seg.dataset.seg;
@@ -643,48 +927,36 @@
       });
     });
   }
-  function wireSliderDisplays(scope) {
-    // EQ
-    scope.querySelectorAll('.eq-row input[type=range]').forEach(s => {
-      const valEl = s.parentElement.querySelector('.eq-val');
-      const update = () => { if (valEl) valEl.textContent = `${parseFloat(s.value).toFixed(1)} dB`; };
-      s.addEventListener('input', update); update();
-    });
-    // Fade in/out
-    scope.querySelectorAll('.slider-row input[type=range]').forEach(s => {
-      const valEl = scope.querySelector(`[data-for="${s.dataset.f}"]`);
-      const update = () => { if (valEl) valEl.textContent = `${parseFloat(s.value).toFixed(1)}s`; };
-      s.addEventListener('input', update); update();
-    });
-  }
 
   // ===== form data =====
-  function collectEditFields(scope) {
+  function collectEditFields(scope, ctx) {
     const get = (f) => scope.querySelector(`[data-f="${f}"]`);
     return {
       trimStart: parseTime(get('trimStart').value),
       trimEnd: parseTime(get('trimEnd').value),
-      fadeIn: parseFloat(get('fadeIn').value) || 0,
-      fadeOut: parseFloat(get('fadeOut').value) || 0,
+      fadeIn: ctx?.faders?.fadeIn?.get() || 0,
+      fadeOut: ctx?.faders?.fadeOut?.get() || 0,
       normalize: get('normalize').checked,
       declip: get('declip').checked,
       limiter: get('limiter').checked,
       highpass: get('highpass').checked,
       compressor: get('compressor').value || '',
-      eqLow: parseFloat(get('eqLow').value) || 0,
-      eqMid: parseFloat(get('eqMid').value) || 0,
-      eqHigh: parseFloat(get('eqHigh').value) || 0
+      eqLow: ctx?.knobs?.eqLow?.get() || 0,
+      eqMid: ctx?.knobs?.eqMid?.get() || 0,
+      eqHigh: ctx?.knobs?.eqHigh?.get() || 0,
+      reverb: ctx?.knobs?.reverb?.get() || 0,
+      stereoWidth: ctx?.knobs?.stereoWidth?.get() || 0,
+      delayAmount: ctx?.knobs?.delayAmount?.get() || 0,
+      delayTime: ctx?.knobs?.delayTime?.get() || 300
     };
   }
-  function regionsToArray(ctx) {
-    return [...ctx.regionData.values()].map(r => ({ start: r.start, end: r.end, gainDb: r.gainDb }));
-  }
+  function regionsToArray(ctx) { return [...ctx.regionData.values()].map(r => ({ start: r.start, end: r.end, gainDb: r.gainDb })); }
   function appendEditFieldsToForm(form, fields, regions) {
     for (const [k, v] of Object.entries(fields)) form.append(k, typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v));
     form.append('volumeRegions', JSON.stringify(regions));
   }
 
-  // ===== LOGIN =====
+  // ===== LOGIN / TABS =====
   async function tryAutoLogin() {
     if (!password) return;
     try { if (await verify(password)) { setView('app'); loadList(); } } catch {}
@@ -696,25 +968,13 @@
     $('loginStatus').className = 'status';
     try {
       const ok = await verify(p);
-      if (ok) {
-        password = p; localStorage.setItem(PASS_KEY, p);
-        $('loginStatus').textContent = '';
-        setView('app'); loadList();
-      } else {
-        $('loginStatus').textContent = 'wrong password';
-        $('loginStatus').className = 'status error';
-      }
-    } catch {
-      $('loginStatus').textContent = 'connection error';
-      $('loginStatus').className = 'status error';
-    }
+      if (ok) { password = p; localStorage.setItem(PASS_KEY, p); $('loginStatus').textContent = ''; setView('app'); loadList(); }
+      else { $('loginStatus').textContent = 'wrong password'; $('loginStatus').className = 'status error'; }
+    } catch { $('loginStatus').textContent = 'connection error'; $('loginStatus').className = 'status error'; }
   });
   $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
-  $('logoutBtn').addEventListener('click', () => {
-    localStorage.removeItem(PASS_KEY); password = ''; setView('login'); $('pass').value = '';
-  });
+  $('logoutBtn').addEventListener('click', () => { localStorage.removeItem(PASS_KEY); password = ''; setView('login'); $('pass').value = ''; });
 
-  // ===== TABS =====
   document.querySelectorAll('.tabs button').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b === btn));
@@ -723,7 +983,7 @@
     });
   });
 
-  // ===== UPLOAD FORM =====
+  // ===== UPLOAD =====
   const uploadForm = $('tab-upload');
   let uploadCtx = null;
   $('date').value = new Date().toISOString().slice(0, 10);
@@ -739,19 +999,17 @@
     if (uploadCtx) uploadCtx.destroy();
     uploadCtx = createEditor({
       container: $('upload-editor'), audioSrc: file, isBlob: true,
-      trimOffset: 0, form: uploadForm, existingVolumeRegions: []
+      trimOffset: 0, form: uploadForm, existingVolumeRegions: [], initial: {}
     });
     wireMarkButtons(uploadForm, uploadCtx);
     wireAddCueButton(uploadForm.querySelector('[data-act=add-cue]'), uploadCtx, uploadForm.querySelector('[data-f=tracklist]'));
     wireAddRegionButton(uploadForm.querySelector('[data-act=add-region]'), uploadCtx);
     rebuildRegionList(uploadCtx, uploadForm.querySelector('[data-vol-list]'));
-    wireRealtimeFx(uploadForm, uploadCtx);
     checkReady();
   });
   $('title').addEventListener('input', checkReady);
   $('date').addEventListener('input', checkReady);
   wireSegmentedControls(uploadForm);
-  wireSliderDisplays(uploadForm);
 
   $('uploadBtn').addEventListener('click', () => {
     const file = $('file').files[0];
@@ -763,8 +1021,7 @@
     form.append('audio', file);
     form.append('title', title);
     form.append('date', date);
-    const fields = collectEditFields(uploadForm);
-    appendEditFieldsToForm(form, fields, uploadCtx ? regionsToArray(uploadCtx) : []);
+    appendEditFieldsToForm(form, collectEditFields(uploadForm, uploadCtx), uploadCtx ? regionsToArray(uploadCtx) : []);
     const tracklist = uploadForm.querySelector('[data-f=tracklist]').value.trim();
     if (tracklist) form.append('tracklist', tracklist);
     const artwork = uploadForm.querySelector('[data-f=artwork]').files[0];
@@ -782,7 +1039,7 @@
       if (!e.lengthComputable) return;
       const pct = (e.loaded / e.total) * 100;
       $('progressBar').style.width = pct + '%';
-      if (pct >= 100) $('status').textContent = 'processing audio on server (may take 1-3 min for long sets)...';
+      if (pct >= 100) $('status').textContent = 'processing on server (1-3 min)...';
     });
     xhr.addEventListener('load', () => {
       $('uploadBtn').disabled = false;
@@ -797,13 +1054,19 @@
           shareEl.onclick = () => navigator.clipboard.writeText(data.shareUrl).then(() => {
             shareEl.innerHTML = '<small>copied ✦</small>' + data.shareUrl;
           });
+          // reset
           $('file').value = ''; $('title').value = '';
           uploadForm.querySelectorAll('[data-f]').forEach(el => {
+            if (el.classList.contains('knob')) return;
+            if (el.classList.contains('fader')) return;
             if (el.type === 'checkbox') el.checked = el.dataset.f === 'normalize';
-            else if (el.type === 'range') { el.value = 0; el.dispatchEvent(new Event('input')); }
             else if (el.type === 'hidden') el.value = '';
-            else if (el.tagName !== 'BUTTON') el.value = el.dataset.f.startsWith('trim') ? '0' : '';
+            else if (el.tagName !== 'BUTTON') el.value = el.dataset.f?.startsWith('trim') ? '0' : '';
           });
+          if (uploadCtx) {
+            Object.values(uploadCtx.knobs).forEach(k => k.set(parseFloat(k.el.dataset.reset || '0')));
+            Object.values(uploadCtx.faders).forEach(f => f.set(0));
+          }
           uploadForm.querySelectorAll('.seg button').forEach(b => b.classList.toggle('active', b.dataset.val === ''));
           $('date').value = new Date().toISOString().slice(0, 10);
           if (uploadCtx) { uploadCtx.destroy(); uploadCtx = null; }
@@ -817,17 +1080,13 @@
         $('status').className = 'status error';
       }
     });
-    xhr.addEventListener('error', () => {
-      $('uploadBtn').disabled = false;
-      $('status').textContent = 'connection error';
-      $('status').className = 'status error';
-    });
+    xhr.addEventListener('error', () => { $('uploadBtn').disabled = false; $('status').textContent = 'connection error'; $('status').className = 'status error'; });
     xhr.open('POST', '/api/sets');
     xhr.setRequestHeader('X-Auth', password);
     xhr.send(form);
   });
 
-  // ===== MANAGE / EDIT =====
+  // ===== MANAGE =====
   let editCtx = null;
   async function loadList() {
     const list = $('setList');
@@ -837,19 +1096,15 @@
       if (!r.ok) throw new Error('http ' + r.status);
       const data = await r.json();
       renderList(data.sets || []);
-    } catch (e) {
-      list.innerHTML = '<p class="empty">could not load: ' + e.message + '</p>';
-    }
+    } catch (e) { list.innerHTML = '<p class="empty">could not load: ' + e.message + '</p>'; }
   }
   function tracklistToText(tl) { if (!Array.isArray(tl)) return ''; return tl.map(t => `${fmtTime(t.at)} ${t.label}`).join('\n'); }
-
   function renderList(sets) {
     const list = $('setList');
     if (!sets.length) { list.innerHTML = '<p class="empty">no sets yet</p>'; return; }
     list.innerHTML = '';
     sets.forEach(s => list.appendChild(setRowEl(s)));
   }
-
   function setRowEl(set) {
     const el = document.createElement('div');
     el.className = 'set-row';
@@ -887,71 +1142,95 @@
     return el;
   }
 
+  function buildStripHTML(e) {
+    const comp = e.compressor || '';
+    return `
+      <div class="strip" data-strip>
+        <div class="panel">
+          <h4>trim</h4>
+          <label style="margin:0;text-align:center">start</label>
+          <div class="field-row"><input type="text" data-f="trimStart" value="${attr(fmtTime(e.trimStart||0))}"><button type="button" class="mark-btn" data-mark="trimStart">📍</button></div>
+          <label style="margin:0;text-align:center">end</label>
+          <div class="field-row"><input type="text" data-f="trimEnd" value="${attr(fmtTime(e.trimEnd||0))}"><button type="button" class="mark-btn" data-mark="trimEnd">📍</button></div>
+        </div>
+        <div class="panel">
+          <h4>fades</h4>
+          <div class="fader-row">
+            <div class="fader" data-fader="fadeIn"><div class="fader-track"><div class="fader-fill"></div><div class="fader-thumb"></div></div><span class="fader-value">0.0s</span><span class="fader-label">in</span></div>
+            <div class="fader" data-fader="fadeOut"><div class="fader-track"><div class="fader-fill"></div><div class="fader-thumb"></div></div><span class="fader-value">0.0s</span><span class="fader-label">out</span></div>
+          </div>
+          <div style="display:flex;gap:.3rem;justify-content:center">
+            <button type="button" class="mark-btn" data-mark="fadeIn">📍in</button>
+            <button type="button" class="mark-btn" data-mark="fadeOut">📍out</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h4>cleanup</h4>
+          <label class="panel-toggle"><span>de-clip <span class="save-only">●</span></span><input type="checkbox" data-f="declip" ${e.declip?'checked':''}><div class="toggle"></div></label>
+          <label class="panel-toggle"><span>HPF 80Hz</span><input type="checkbox" data-f="highpass" ${e.highpass?'checked':''}><div class="toggle"></div></label>
+          <label class="panel-toggle"><span>normalize <span class="save-only">●</span></span><input type="checkbox" data-f="normalize" ${e.normalize?'checked':''}><div class="toggle"></div></label>
+          <label class="panel-toggle"><span>limiter</span><input type="checkbox" data-f="limiter" ${e.limiter?'checked':''}><div class="toggle"></div></label>
+        </div>
+        <div class="panel">
+          <h4>compressor</h4>
+          <div class="seg-label">preset</div>
+          <div class="seg" data-seg="compressor">
+            <button type="button" data-val="" class="${comp===''?'active':''}">off</button>
+            <button type="button" data-val="subtle" class="${comp==='subtle'?'active':''}">sub</button>
+            <button type="button" data-val="medium" class="${comp==='medium'?'active':''}">med</button>
+            <button type="button" data-val="heavy" class="${comp==='heavy'?'active':''}">hvy</button>
+          </div>
+          <input type="hidden" data-f="compressor" value="${attr(comp)}">
+        </div>
+        <div class="panel">
+          <h4>EQ</h4>
+          <div class="row-sub">
+            <div class="knob" data-f="eqLow" data-min="-12" data-max="12" data-step="0.5" data-value="${e.eqLow||0}" data-format="db" data-reset="0"><div class="knob-dial"><div class="knob-indicator"></div></div><span class="knob-value">0</span><span class="knob-label">low</span></div>
+            <div class="knob" data-f="eqMid" data-min="-12" data-max="12" data-step="0.5" data-value="${e.eqMid||0}" data-format="db" data-reset="0"><div class="knob-dial"><div class="knob-indicator"></div></div><span class="knob-value">0</span><span class="knob-label">mid</span></div>
+            <div class="knob" data-f="eqHigh" data-min="-12" data-max="12" data-step="0.5" data-value="${e.eqHigh||0}" data-format="db" data-reset="0"><div class="knob-dial"><div class="knob-indicator"></div></div><span class="knob-value">0</span><span class="knob-label">hi</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h4>space</h4>
+          <div class="row-sub">
+            <div class="knob" data-f="reverb" data-min="0" data-max="100" data-step="1" data-value="${e.reverb||0}" data-format="pct" data-reset="0"><div class="knob-dial"><div class="knob-indicator"></div></div><span class="knob-value">0</span><span class="knob-label">verb</span></div>
+            <div class="knob" data-f="stereoWidth" data-min="-100" data-max="100" data-step="1" data-value="${e.stereoWidth||0}" data-format="pct-signed" data-reset="0"><div class="knob-dial"><div class="knob-indicator"></div></div><span class="knob-value">0</span><span class="knob-label">width</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h4>delay</h4>
+          <div class="row-sub">
+            <div class="knob" data-f="delayAmount" data-min="0" data-max="100" data-step="1" data-value="${e.delayAmount||0}" data-format="pct" data-reset="0"><div class="knob-dial"><div class="knob-indicator"></div></div><span class="knob-value">0</span><span class="knob-label">amt</span></div>
+            <div class="knob" data-f="delayTime" data-min="50" data-max="1000" data-step="10" data-value="${e.delayTime||300}" data-format="ms" data-reset="300"><div class="knob-dial"><div class="knob-indicator"></div></div><span class="knob-value">300</span><span class="knob-label">time</span></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function renderEditForm(container, set) {
     const e = set.edits || {};
-    const comp = e.compressor || '';
     container.innerHTML = `
       <div class="editor active" data-editor>
         <div class="wf-container"></div>
         <div class="wf-toolbar">
           <button type="button" class="wf-btn primary" data-act="play">▶ play</button>
-          <button type="button" class="wf-btn" data-act="zoom-in">zoom +</button>
-          <button type="button" class="wf-btn" data-act="zoom-out">zoom −</button>
+          <button type="button" class="wf-btn" data-act="zoom-in">+</button>
+          <button type="button" class="wf-btn" data-act="zoom-out">−</button>
           <button type="button" class="wf-btn" data-act="fx">🔊 hear effects</button>
           <span class="wf-time"><span class="now">0:00</span> / <span class="total">--:--</span></span>
         </div>
-        <p class="hint">previewing current mp3 (post-prior-edits) · "hear effects" applies new filters live · declip/normalize are <span class="save-only">save only</span></p>
+        ${buildStripHTML(e)}
+        <p class="hint">drag knobs ↕ · double-click to reset · <span class="save-only">●</span> = save-only</p>
       </div>
 
       <label>title</label><input type="text" data-f="title" value="${attr(set.title)}">
       <label>date</label><input type="date" data-f="date" value="${attr(set.date)}">
 
-      <details open>
-        <summary>audio processing (re-renders from original)</summary>
-
-        <div class="row">
-          <div><label>trim start</label><div class="field-row"><input type="text" data-f="trimStart" value="${attr(fmtTime(e.trimStart||0))}"><button type="button" class="mark-btn" data-mark="trimStart">📍</button></div></div>
-          <div><label>trim end</label><div class="field-row"><input type="text" data-f="trimEnd" value="${attr(fmtTime(e.trimEnd||0))}"><button type="button" class="mark-btn" data-mark="trimEnd">📍</button></div></div>
-        </div>
-
-        <label>fade in <span class="val-inline" data-for="fadeIn">${(e.fadeIn||0).toFixed(1)}s</span></label>
-        <div class="slider-row"><input type="range" data-f="fadeIn" min="0" max="30" step="0.5" value="${e.fadeIn||0}"><button type="button" class="mark-btn" data-mark="fadeIn">📍</button></div>
-        <label>fade out <span class="val-inline" data-for="fadeOut">${(e.fadeOut||0).toFixed(1)}s</span></label>
-        <div class="slider-row"><input type="range" data-f="fadeOut" min="0" max="30" step="0.5" value="${e.fadeOut||0}"><button type="button" class="mark-btn" data-mark="fadeOut">📍</button></div>
-
-        <details open>
-          <summary>cleanup</summary>
-          <label class="toggle-row"><span>de-clip · reconstruct saturated peaks <span class="save-only">• save only</span></span><input type="checkbox" data-f="declip" ${e.declip?'checked':''}><div class="toggle"></div></label>
-          <label class="toggle-row"><span>high-pass · remove rumble below 80Hz</span><input type="checkbox" data-f="highpass" ${e.highpass?'checked':''}><div class="toggle"></div></label>
-        </details>
-
-        <details open>
-          <summary>dynamics</summary>
-          <label>compressor</label>
-          <div class="seg" data-seg="compressor">
-            <button type="button" data-val="" class="${comp===''?'active':''}">off</button>
-            <button type="button" data-val="subtle" class="${comp==='subtle'?'active':''}">subtle</button>
-            <button type="button" data-val="medium" class="${comp==='medium'?'active':''}">medium</button>
-            <button type="button" data-val="heavy" class="${comp==='heavy'?'active':''}">heavy</button>
-          </div>
-          <input type="hidden" data-f="compressor" value="${attr(comp)}">
-          <label class="toggle-row" style="margin-top:.7rem"><span>normalize loudness · -14 LUFS <span class="save-only">• save only</span></span><input type="checkbox" data-f="normalize" ${e.normalize?'checked':''}><div class="toggle"></div></label>
-          <label class="toggle-row"><span>master limiter · prevent any final clipping</span><input type="checkbox" data-f="limiter" ${e.limiter?'checked':''}><div class="toggle"></div></label>
-        </details>
-
-        <details>
-          <summary>EQ (3 bands, ±12 dB)</summary>
-          <div class="eq-row"><span>low</span><input type="range" data-f="eqLow" min="-12" max="12" step="0.5" value="${e.eqLow||0}"><span class="eq-val">0 dB</span></div>
-          <div class="eq-row"><span>mid</span><input type="range" data-f="eqMid" min="-12" max="12" step="0.5" value="${e.eqMid||0}"><span class="eq-val">0 dB</span></div>
-          <div class="eq-row"><span>high</span><input type="range" data-f="eqHigh" min="-12" max="12" step="0.5" value="${e.eqHigh||0}"><span class="eq-val">0 dB</span></div>
-        </details>
-      </details>
-
       <details ${Array.isArray(e.volumeRegions) && e.volumeRegions.length ? 'open' : ''}>
         <summary>volume regions</summary>
-        <button type="button" class="wf-btn" data-act="add-region">＋ region at current position (default −6dB, 10s)</button>
+        <button type="button" class="wf-btn" data-act="add-region">＋ region at current position</button>
         <div class="vol-list" data-vol-list></div>
-        <p class="hint">each region is a time range with gain · drag waveform to resize/move · slider for gain</p>
       </details>
 
       <details>
@@ -964,26 +1243,24 @@
         ${set.artwork ? `<button type="button" class="ghost" data-act="remove-artwork" style="margin-top:.4rem">remove current artwork</button>` : ''}
       </details>
 
-      <button class="primary" data-act="save">save changes</button>
+      <button class="primary" data-act="save">save &amp; re-render</button>
       <p class="status edit-status"></p>
     `;
 
     wireSegmentedControls(container);
-    wireSliderDisplays(container);
 
     const editorEl = container.querySelector('[data-editor]');
     editCtx = createEditor({
-      container: editorEl,
-      audioSrc: set.audio, isBlob: false,
+      container: editorEl, audioSrc: set.audio, isBlob: false,
       trimOffset: e.trimStart || 0,
       form: container,
-      existingVolumeRegions: Array.isArray(e.volumeRegions) ? e.volumeRegions : []
+      existingVolumeRegions: Array.isArray(e.volumeRegions) ? e.volumeRegions : [],
+      initial: { fadeIn: e.fadeIn || 0, fadeOut: e.fadeOut || 0 }
     });
     wireMarkButtons(container, editCtx);
     wireAddCueButton(container.querySelector('[data-act=add-cue]'), editCtx, container.querySelector('[data-f=tracklist]'));
     wireAddRegionButton(container.querySelector('[data-act=add-region]'), editCtx);
     rebuildRegionList(editCtx, container.querySelector('[data-vol-list]'));
-    wireRealtimeFx(container, editCtx);
 
     let removeArtwork = false;
     const rmBtn = container.querySelector('[data-act=remove-artwork]');
@@ -998,15 +1275,14 @@
       const get = (f) => container.querySelector(`[data-f="${f}"]`);
       form.append('title', get('title').value);
       form.append('date', get('date').value);
-      const fields = collectEditFields(container);
-      appendEditFieldsToForm(form, fields, regionsToArray(editCtx));
+      appendEditFieldsToForm(form, collectEditFields(container, editCtx), regionsToArray(editCtx));
       form.append('tracklist', get('tracklist').value);
       const art = get('artwork').files[0];
       if (art) form.append('artwork', art);
       if (removeArtwork) form.append('removeArtwork', 'true');
 
       const statusEl = container.querySelector('.edit-status');
-      statusEl.textContent = 'saving (re-processing audio if changed)...';
+      statusEl.textContent = 'saving · re-rendering audio...';
       statusEl.className = 'status edit-status';
       try {
         const r = await api(`/api/sets/${encodeURIComponent(set.slug)}`, { method: 'PATCH', body: form });
@@ -1027,13 +1303,12 @@
   }
 
   async function deleteSet(set) {
-    if (!confirm(`Delete "${set.title}"? this removes the mp3, original, and artwork. cannot be undone.`)) return;
+    if (!confirm(`Delete "${set.title}"? cannot be undone.`)) return;
     try {
       const r = await api(`/api/sets/${encodeURIComponent(set.slug)}`, { method: 'DELETE' });
       if (r.ok) loadList(); else alertMsg('delete failed');
     } catch { alertMsg('connection error'); }
   }
-
   function alertMsg(m) {
     const s = $('status');
     s.textContent = m; s.className = 'status';

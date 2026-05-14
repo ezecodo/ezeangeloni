@@ -103,13 +103,18 @@ Re-renders are always **from the original**, so edits are non-destructive — ch
 **Available audio processing** (all applied non-destructively from the original on each save):
 - Trim start/end
 - Fade in/out
-- Loudness normalization to -14 LUFS
-- De-clipping (reconstruct saturated peaks)
+- Loudness normalization to -14 LUFS (save-only, not previewed)
+- De-clipping — reconstruct saturated peaks (save-only)
 - High-pass filter at 80Hz (remove rumble)
 - Master limiter (prevent any final clipping)
 - Compressor presets (subtle / medium / heavy)
 - 3-band EQ (low shelf via `bass`, mid peak at 1.5kHz, high shelf via `treble`, ±12 dB each)
-- Volume regions: per-time-range gain (±30 dB), stored in original-time. Drag handles on the WaveSurfer waveform to define them; the ffmpeg filter chain applies `volume=<factor>:enable='between(t,start,end)'` for each region.
+- **Reverb** (0-100%) — multi-tap echo approximation on server, ConvolverNode w/ synthesized IR in browser preview
+- **Stereo width** (-100% to +100%) — `extrastereo` filter on server, mid/side matrix via ChannelSplitter/Merger in preview
+- **Delay** (amount 0-100% + time 50-1000ms) — `aecho` on server, DelayNode with feedback in preview
+- Volume regions — per-time-range gain (±30 dB), stored in original-time. Drag handles on the WaveSurfer waveform to define them; the ffmpeg filter chain applies `volume=<factor>:enable='between(t,start,end)'` for each region.
+
+**Admin UI is channel-strip style**: side-by-side panels (trim, fades, cleanup, compressor, EQ, space, delay) above the volume-regions section. Custom knobs (CSS+JS, drag vertically to adjust, double-click to reset, shift+drag for fine control) and vertical faders for level controls. Real-time preview toggle "🔊 hear effects" routes audio through a Web Audio chain that mirrors the server's filter ordering. The two save-only effects (de-clip, normalize) are flagged with a yellow ● marker.
 
 **sets.json schema:**
 ```json
