@@ -232,7 +232,7 @@
               <button type="button" class="wf-btn" data-act="add-region" data-reg-type="saturation">sat</button>
             </div>
           </div>
-          <p class="hint" style="margin-top:.2rem">1) click a type to arm it → 2) drag on the waveform ↕ to select the range. or just drag without arming = volume.</p>
+          <p class="hint" style="margin-top:.2rem">arm a type → either drag a range on the waveform · OR click a start point and click again for the end. esc cancels.</p>
           <div class="vol-list" data-vol-list></div>
         </div>
 
@@ -877,6 +877,38 @@
       liveTip.style.left = Math.max(0, Math.min(wRect.width - liveTip.offsetWidth, midX - liveTip.offsetWidth / 2)) + 'px';
     };
 
+    function finalizeRegionFromTimes(start, end) {
+      const id = uid();
+      const type = ctx.armedType || 'volume';
+      const params = defaultParams(type);
+      ctx.creatingProgrammatically = true;
+      const region = ctx.regions.addRegion({
+        start, end,
+        color: regionColor(type, params),
+        content: regionLabel(type, params),
+        drag: true, resize: true,
+      });
+      ctx.creatingProgrammatically = false;
+      ctx.regionData.set(id, { type, start: start + ctx.trimOffset, end: end + ctx.trimOffset, params });
+      ctx.wsRegions.set(id, region);
+      region.on('update', () => {
+        const cur = ctx.regionData.get(id);
+        cur.start = region.start + ctx.trimOffset;
+        cur.end = region.end + ctx.trimOffset;
+        const row = ctx.form.querySelector(`.reg-row[data-id="${id}"]`);
+        if (row) {
+          row.querySelector('[data-vr=start]').value = fmtTime(cur.start);
+          row.querySelector('[data-vr=end]').value = fmtTime(cur.end);
+        }
+      });
+      // un-arm
+      if (ctx.armedType) {
+        ctx.armedType = null;
+        ctx.form.querySelectorAll('[data-act=add-region]').forEach(b => b.classList.remove('armed'));
+      }
+      rebuildRegionList(ctx, ctx.form.querySelector('[data-vol-list]'));
+    }
+
     const onUp = (e) => {
       if (!drag) return;
       const d = drag; drag = null;
@@ -884,14 +916,42 @@
         try { wsRoot.releasePointerCapture(d.pointerId); } catch {}
       }
       if (liveTip) { liveTip.remove(); liveTip = null; }
+
+      const dur = ws.getDuration() || 0;
+
       if (!d.tmpRegion) {
-        // pure click — seek WaveSurfer to that position
-        const dur = ws.getDuration() || 0;
-        if (dur > 0) {
-          try { ws.seekTo(Math.max(0, Math.min(1, d.startTime / dur))); } catch {}
+        // pure click — always seek
+        if (dur > 0) { try { ws.seekTo(Math.max(0, Math.min(1, d.startTime / dur))); } catch {} }
+        // click-click region mode: when an effect is armed, two clicks define the region
+        if (ctx.armedType) {
+          if (ctx.firstMarker == null) {
+            // first click — set the start marker
+            ctx.firstMarker = d.startTime;
+            const params = defaultParams(ctx.armedType);
+            ctx.creatingProgrammatically = true;
+            ctx.firstMarkerRegion = ctx.regions.addRegion({
+              start: d.startTime,
+              end: d.startTime + Math.max(0.08, dur * 0.0008),
+              color: regionColor(ctx.armedType, params),
+              content: 'start ▸ click again for end',
+              drag: false, resize: false,
+            });
+            ctx.creatingProgrammatically = false;
+          } else {
+            // second click — create real region from first marker to here
+            const a = Math.min(ctx.firstMarker, d.startTime);
+            const b = Math.max(ctx.firstMarker, d.startTime);
+            // remove temp marker
+            if (ctx.firstMarkerRegion) { try { ctx.firstMarkerRegion.remove(); } catch {} ctx.firstMarkerRegion = null; }
+            ctx.firstMarker = null;
+            if (b - a >= 0.05) finalizeRegionFromTimes(a, b);
+          }
         }
         return;
       }
+      // drag flow — supersedes any pending first marker
+      if (ctx.firstMarkerRegion) { try { ctx.firstMarkerRegion.remove(); } catch {} ctx.firstMarkerRegion = null; }
+      ctx.firstMarker = null;
       const region = d.tmpRegion;
       const id = uid();
       const type = ctx.armedType || 'volume';
@@ -924,8 +984,15 @@
     wsRoot.addEventListener('pointermove', onMove);
     wsRoot.addEventListener('pointerup', onUp);
     wsRoot.addEventListener('pointercancel', onUp);
+    // Esc cancels a pending click-click first marker
+    wsRoot.addEventListener('keydown', (e) => { if (e.key === 'Escape') clearFirstMarker(ctx); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ctx.firstMarker != null) clearFirstMarker(ctx); });
   }
 
+  function clearFirstMarker(ctx) {
+    if (ctx.firstMarkerRegion) { try { ctx.firstMarkerRegion.remove(); } catch {} ctx.firstMarkerRegion = null; }
+    ctx.firstMarker = null;
+  }
   function wireAddRegionButtons(scope, ctx) {
     const btns = scope.querySelectorAll('[data-act=add-region]');
     btns.forEach(btn => {
@@ -934,6 +1001,7 @@
         const wasArmed = ctx.armedType === btn.dataset.regType;
         ctx.armedType = wasArmed ? null : btn.dataset.regType;
         btns.forEach(b => b.classList.toggle('armed', b === btn && !wasArmed));
+        clearFirstMarker(ctx); // changing/un-arming clears any pending start marker
       };
     });
   }
@@ -1327,7 +1395,7 @@
               <button type="button" class="wf-btn" data-act="add-region" data-reg-type="saturation">sat</button>
             </div>
           </div>
-          <p class="hint" style="margin-top:.2rem">1) click a type to arm it → 2) drag on the waveform ↕ to select the range</p>
+          <p class="hint" style="margin-top:.2rem">arm a type → either drag a range on the waveform · OR click a start point and click again for the end. esc cancels.</p>
           <div class="vol-list" data-vol-list></div>
         </div>
 
