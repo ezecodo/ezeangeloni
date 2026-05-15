@@ -54,6 +54,12 @@
   .wf-time { font-size:.7rem; color:var(--muted); margin-left:auto; font-variant-numeric:tabular-nums; }
   .wf-time .now { color:var(--text); }
   .wf-loading { font-size:.65rem; color:var(--muted); letter-spacing:.15em; text-align:center; padding:2rem; text-transform:uppercase; }
+  .wf-tempo { display:flex; align-items:center; gap:.5rem; margin-top:.5rem; padding:.45rem .6rem; background:rgba(110,249,245,0.04); border:1px solid rgba(110,249,245,0.18); border-radius:7px; flex-wrap:wrap; }
+  .wf-tempo label { margin:0; font-size:.55rem; letter-spacing:.18em; color:var(--muted); text-transform:uppercase; }
+  .wf-tempo input[type=number] { width:64px; padding:.3rem .4rem; font-size:.7rem; }
+  .wf-tempo input[type=text] { width:60px; padding:.3rem .4rem; font-size:.7rem; }
+  .wf-tempo .sep { color:var(--muted); opacity:.4; }
+  .wf-grid-canvas { position:absolute; top:0; left:0; pointer-events:none; z-index:3; }
 
   .strip { margin-top:1rem; display:grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap:.5rem; }
   .panel { background:rgba(240,237,232,0.025); border:1px solid var(--line); border-radius:10px; padding:.7rem .55rem .8rem; display:flex; flex-direction:column; gap:.45rem; min-width:0; }
@@ -220,6 +226,20 @@
           <button type="button" class="wf-btn" data-act="zoom-out">−</button>
           <button type="button" class="wf-btn" data-act="fx">🔊 hear effects</button>
           <span class="wf-time"><span class="now">0:00</span> / <span class="total">--:--</span></span>
+        </div>
+
+        <div class="wf-tempo">
+          <label>BPM</label>
+          <input type="number" data-f="bpm" min="0" max="400" step="0.1" placeholder="0">
+          <span class="sep">·</span>
+          <label>offset</label>
+          <input type="text" data-f="bpmOffset" placeholder="0.0s" value="0">
+          <button type="button" class="wf-btn" data-act="detect-bpm">🎯 detect</button>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;margin-left:auto">
+            <span>show grid</span>
+            <input type="checkbox" data-show-grid>
+            <div class="toggle"></div>
+          </label>
         </div>
 
         <div class="region-zone">
@@ -1150,6 +1170,119 @@
     wsRoot.addEventListener('gesturestart', (e) => { e.preventDefault(); gestureBaseZoom = ctx.zoomLevel || 30; });
     wsRoot.addEventListener('gesturechange', (e) => { e.preventDefault(); applyZoom(gestureBaseZoom * e.scale); });
     wsRoot.addEventListener('gestureend', (e) => { e.preventDefault(); });
+
+    // ===== BPM grid overlay =====
+    wsRoot.style.position = wsRoot.style.position || 'relative';
+    const gridCanvas = document.createElement('canvas');
+    gridCanvas.className = 'wf-grid-canvas';
+    wsRoot.appendChild(gridCanvas);
+    const gctx = gridCanvas.getContext('2d');
+    ctx.gridCanvas = gridCanvas;
+    ctx.gridShown = false;
+
+    function resizeGrid() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = wsRoot.getBoundingClientRect();
+      gridCanvas.style.width = rect.width + 'px';
+      gridCanvas.style.height = rect.height + 'px';
+      gridCanvas.width = Math.floor(rect.width * dpr);
+      gridCanvas.height = Math.floor(rect.height * dpr);
+    }
+    function drawGrid() {
+      const dpr = window.devicePixelRatio || 1;
+      gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const w = gridCanvas.width / dpr, h = gridCanvas.height / dpr;
+      gctx.clearRect(0, 0, w, h);
+      if (!ctx.gridShown) return;
+      const bpm = parseFloat(form.querySelector('[data-f=bpm]')?.value || '0') || 0;
+      const offset = parseTime(form.querySelector('[data-f=bpmOffset]')?.value || '0') || 0;
+      if (bpm <= 0) return;
+      const dur = ws.getDuration() || 0;
+      if (!dur) return;
+      const sc = ws.renderer && ws.renderer.scrollContainer;
+      const totalWidth = sc ? sc.scrollWidth : w;
+      const scrollLeft = sc ? sc.scrollLeft : 0;
+      const pxPerSec = totalWidth / dur;
+      const beatInterval = 60 / bpm;
+      const visibleStart = scrollLeft / pxPerSec;
+      const visibleEnd = (scrollLeft + w) / pxPerSec;
+      let beatIdx = Math.max(0, Math.floor((visibleStart - offset) / beatInterval));
+      let t = offset + beatIdx * beatInterval;
+      while (t < visibleStart) { t += beatInterval; beatIdx++; }
+      gctx.lineWidth = 1;
+      while (t <= visibleEnd && t <= dur) {
+        const x = t * pxPerSec - scrollLeft;
+        const isDownbeat = beatIdx % 4 === 0;
+        gctx.strokeStyle = isDownbeat ? 'rgba(110,249,245,0.35)' : 'rgba(255,255,255,0.07)';
+        gctx.beginPath();
+        gctx.moveTo(Math.round(x) + 0.5, 0);
+        gctx.lineTo(Math.round(x) + 0.5, h);
+        gctx.stroke();
+        t += beatInterval; beatIdx++;
+      }
+    }
+    ctx.drawGrid = drawGrid;
+    ctx.resizeGrid = resizeGrid;
+
+    // Wire BPM/offset/show toggle inputs
+    const bpmInput = form.querySelector('[data-f=bpm]');
+    const offsetInput = form.querySelector('[data-f=bpmOffset]');
+    const showGridChk = form.querySelector('[data-show-grid]');
+    if (bpmInput) bpmInput.addEventListener('input', drawGrid);
+    if (offsetInput) offsetInput.addEventListener('input', drawGrid);
+    if (showGridChk) showGridChk.addEventListener('change', () => {
+      ctx.gridShown = showGridChk.checked;
+      drawGrid();
+    });
+
+    // Detect BPM button (lazy-load the library)
+    const detectBtn = form.querySelector('[data-act=detect-bpm]');
+    if (detectBtn) detectBtn.addEventListener('click', async () => {
+      detectBtn.disabled = true;
+      const orig = detectBtn.textContent;
+      detectBtn.textContent = '🎯 analyzing…';
+      try {
+        const mod = await import('https://esm.sh/web-audio-beat-detector@8.2.21');
+        const ac = getAC();
+        let arrBuf;
+        if (isBlob && audioSrc) arrBuf = await audioSrc.arrayBuffer();
+        else arrBuf = await fetch(audioSrc).then(r => r.arrayBuffer());
+        const audioBuf = await ac.decodeAudioData(arrBuf.slice(0));
+        // analyze full track for BPM; offset detection from `guess`
+        let bpm = 0, off = 0;
+        try {
+          const g = await mod.guess(audioBuf);
+          bpm = g.bpm || g.tempo || 0;
+          off = g.offset || 0;
+        } catch {
+          bpm = await mod.analyze(audioBuf);
+        }
+        if (bpm > 0) {
+          if (bpmInput) bpmInput.value = Number(bpm).toFixed(1);
+          if (offsetInput) offsetInput.value = Number(off).toFixed(2);
+          if (showGridChk && !showGridChk.checked) { showGridChk.checked = true; ctx.gridShown = true; }
+          drawGrid();
+          detectBtn.textContent = '✓ ' + Number(bpm).toFixed(1) + ' bpm';
+          setTimeout(() => { detectBtn.textContent = orig; }, 2200);
+        } else {
+          detectBtn.textContent = '✗ no bpm';
+          setTimeout(() => { detectBtn.textContent = orig; }, 2200);
+        }
+      } catch (e) {
+        console.error('BPM detect failed', e);
+        detectBtn.textContent = '✗ failed';
+        setTimeout(() => { detectBtn.textContent = orig; }, 2200);
+      } finally {
+        detectBtn.disabled = false;
+      }
+    });
+
+    // Redraw grid on WS events
+    ws.on('zoom', drawGrid);
+    ws.on('scroll', drawGrid);
+    ws.on('decode', () => { resizeGrid(); drawGrid(); });
+    ws.on('redraw', drawGrid);
+    window.addEventListener('resize', () => { resizeGrid(); drawGrid(); });
     fxBtn.addEventListener('click', () => {
       ctx.fxOn = !ctx.fxOn;
       fxBtn.classList.toggle('active', ctx.fxOn);
@@ -1251,7 +1384,9 @@
       reverb: ctx?.knobs?.reverb?.get() || 0,
       stereoWidth: ctx?.knobs?.stereoWidth?.get() || 0,
       delayAmount: ctx?.knobs?.delayAmount?.get() || 0,
-      delayTime: ctx?.knobs?.delayTime?.get() || 300
+      delayTime: ctx?.knobs?.delayTime?.get() || 300,
+      bpm: parseFloat(scope.querySelector('[data-f=bpm]')?.value || '0') || 0,
+      bpmOffset: parseTime(scope.querySelector('[data-f=bpmOffset]')?.value || '0') || 0
     };
   }
   function regionsToArray(ctx) {
@@ -1442,6 +1577,20 @@
           <span class="wf-time"><span class="now">0:00</span> / <span class="total">--:--</span></span>
         </div>
 
+        <div class="wf-tempo">
+          <label>BPM</label>
+          <input type="number" data-f="bpm" min="0" max="400" step="0.1" placeholder="0">
+          <span class="sep">·</span>
+          <label>offset</label>
+          <input type="text" data-f="bpmOffset" placeholder="0.0s" value="0">
+          <button type="button" class="wf-btn" data-act="detect-bpm">🎯 detect</button>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;margin-left:auto">
+            <span>show grid</span>
+            <input type="checkbox" data-show-grid>
+            <div class="toggle"></div>
+          </label>
+        </div>
+
         <div class="region-zone">
           <div class="region-zone-head">
             <span class="region-zone-title">effect regions</span>
@@ -1490,6 +1639,11 @@
     wireAddCueButton(container.querySelector('[data-act=add-cue]'), editCtx, container.querySelector('[data-f=tracklist]'));
     wireAddRegionButtons(container, editCtx);
     rebuildRegionList(editCtx, container.querySelector('[data-vol-list]'));
+    // pre-fill bpm/offset from existing edits
+    const bpmEl = container.querySelector('[data-f=bpm]');
+    const offEl = container.querySelector('[data-f=bpmOffset]');
+    if (bpmEl && (e.bpm || 0) > 0) bpmEl.value = e.bpm;
+    if (offEl) offEl.value = (e.bpmOffset || 0).toString();
 
     let removeArtwork = false;
     const rmBtn = container.querySelector('[data-act=remove-artwork]');

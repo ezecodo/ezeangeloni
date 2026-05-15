@@ -272,6 +272,8 @@ function parseEditsBody(body) {
     stereoWidth: clamp(parseFloat(body.stereoWidth || '0') || 0, -100, 100),
     delayAmount: clamp(parseFloat(body.delayAmount || '0') || 0, 0, 100),
     delayTime: clamp(parseFloat(body.delayTime || '300') || 300, 50, 1000),
+    bpm: clamp(parseFloat(body.bpm || '0') || 0, 0, 400),
+    bpmOffset: Math.max(0, parseFloat(body.bpmOffset || '0') || 0),
     volumeRegions: parseVolumeRegions(body.volumeRegions),
     effectRegions: parseEffectRegions(body.effectRegions)
   };
@@ -485,7 +487,7 @@ app.patch('/api/sets/:slug', checkAuth, upload.fields([
   }
 
   // audio edits → re-process from original
-  const editFields = ['trimStart','trimEnd','fadeIn','fadeOut','normalize','declip','limiter','highpass','compressor','eqLow','eqMid','eqHigh','reverb','stereoWidth','delayAmount','delayTime','volumeRegions','effectRegions'];
+  const editFields = ['trimStart','trimEnd','fadeIn','fadeOut','normalize','declip','limiter','highpass','compressor','eqLow','eqMid','eqHigh','reverb','stereoWidth','delayAmount','delayTime','bpm','bpmOffset','volumeRegions','effectRegions'];
   const hasAudioEdit = editFields.some(f => req.body[f] !== undefined);
   if (hasAudioEdit) {
     const originalPath = path.join(ORIGINALS_DIR, `${slug}.${set.originalExt || 'bin'}`);
