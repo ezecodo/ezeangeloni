@@ -99,12 +99,13 @@
 
   /* ===== EFFECT REGIONS ===== */
   .vol-list { margin-top:.6rem; }
-  .reg-row { margin-top:.45rem; padding:.55rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:8px; }
+  .reg-row { margin-top:.45rem; padding:.55rem; background:rgba(240,237,232,0.03); border:1px solid var(--line); border-radius:8px; transition: background .2s, border-color .2s, box-shadow .2s; }
   .reg-row.type-volume     { border-left: 3px solid var(--cyan); }
   .reg-row.type-lowpass    { border-left: 3px solid var(--violet); }
   .reg-row.type-highpass   { border-left: 3px solid var(--cyan); }
   .reg-row.type-eq         { border-left: 3px solid var(--orange); }
   .reg-row.type-saturation { border-left: 3px solid var(--red); }
+  .reg-row.selected { background: rgba(255,110,180,0.10); border-color: rgba(255,110,180,0.55); box-shadow: 0 0 14px rgba(255,110,180,0.25); }
   .reg-row-top { display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; }
   .reg-row-top select.reg-type { width:auto; min-width:90px; padding:.3rem .5rem; font-size:.65rem; flex-shrink:0; }
   .reg-row-top input[type=text] { width:74px; padding:.3rem .4rem; font-size:.68rem; flex-shrink:0; }
@@ -725,7 +726,17 @@
         });
       });
       // remove
-      row.querySelector('.rm').addEventListener('click', () => removeEffectRegion(ctx, listEl, id));
+      row.querySelector('.rm').addEventListener('click', (ev) => { ev.stopPropagation(); removeEffectRegion(ctx, listEl, id); });
+      // clicking the row (outside of inputs/buttons) → highlight + seek to region start
+      row.addEventListener('click', (ev) => {
+        const tag = (ev.target.tagName || '').toLowerCase();
+        if (['input', 'select', 'button', 'option', 'textarea'].includes(tag)) return;
+        listEl.querySelectorAll('.reg-row').forEach(r => r.classList.toggle('selected', r === row));
+        const cur = ctx.regionData.get(id);
+        const dur = ctx.ws.getDuration() || 0;
+        const seekT = Math.max(0, cur.start - ctx.trimOffset);
+        if (dur > 0) { try { ctx.ws.seekTo(Math.min(1, seekT / dur)); } catch {} }
+      });
       listEl.appendChild(row);
     }
   }
@@ -1036,6 +1047,21 @@
     const ctx = { ws, regions, regionData, wsRegions, trimOffset, form, fxChain: null, fxOn: false, fxTimer: null, knobs: {}, faders: {}, creatingProgrammatically: false, armedType: null,
       destroy: () => { try { ws.destroy(); } catch {} if (ctx.fxTimer) clearInterval(ctx.fxTimer); container.classList.remove('active'); }
     };
+
+    // click on a region in the waveform → highlight + scroll the matching row
+    function selectRegionById(id) {
+      ctx.form.querySelectorAll('.reg-row').forEach(r => r.classList.toggle('selected', r.dataset.id === id));
+      const row = ctx.form.querySelector(`.reg-row[data-id="${id}"]`);
+      row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    ctx.selectRegionById = selectRegionById;
+    regions.on('region-clicked', (region) => {
+      let foundId = null;
+      for (const [id, wr] of ctx.wsRegions.entries()) {
+        if (wr === region) { foundId = id; break; }
+      }
+      if (foundId) selectRegionById(foundId);
+    });
 
     // region-created handler (fired by drag-selection OR programmatic add)
     regions.on('region-created', (region) => {
