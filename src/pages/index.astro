@@ -416,7 +416,11 @@ import Layout from '../layouts/Layout.astro';
     function openSetModal(meta: SetMeta){
       currentSet = meta;
       setTitle.textContent = meta.title;
-      setDate.textContent = meta.date || '';
+      const meta_extras: string[] = [];
+      if (meta.date) meta_extras.push(meta.date);
+      if (meta.bpm && meta.bpm > 0) meta_extras.push(meta.bpm.toFixed(1) + ' BPM');
+      if (meta.musicalKey) meta_extras.push(meta.musicalKey);
+      setDate.textContent = meta_extras.join(' · ');
       if(meta.artwork){
         setArtworkImg.src = meta.artwork;
         setArtwork.classList.add('show');
@@ -534,7 +538,7 @@ import Layout from '../layouts/Layout.astro';
     // Load frases from JSON — handles text and images
     const IMAGES = new Map<number, HTMLImageElement>();
     interface TrackPoint { at: number; label: string; }
-    interface SetMeta { slug: string; title: string; date: string; audio: string; artwork?: string; tracklist?: TrackPoint[]; duration?: number; }
+    interface SetMeta { slug: string; title: string; date: string; audio: string; artwork?: string; tracklist?: TrackPoint[]; duration?: number; bpm?: number; musicalKey?: string; }
     const SETS = new Map<number, SetMeta>();
     const SETS_BY_SLUG = new Map<string, SetMeta>();
     let pendingSetSlug: string | null = null;
