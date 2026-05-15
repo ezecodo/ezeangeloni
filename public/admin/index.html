@@ -829,7 +829,7 @@
     const THRESHOLD = 4;
 
     const onDown = (e) => {
-      lastDownX = e.clientX; // for click calibration
+      lastDownX = e.clientX;
       // skip if clicking on a region element
       let t = e.target;
       while (t && t !== wsRoot && t !== document) {
@@ -837,17 +837,20 @@
         if (tag === 'wsregion' || (t.getAttribute && t.getAttribute('part') === 'region')) return;
         t = t.parentNode || (t.host || null);
       }
-      // also skip if click time falls inside an existing region (catches shadow-DOM cases the DOM walk misses)
       const timeAtClick = getTimeAt(e.clientX);
       if (clickInsideExistingRegion(timeAtClick)) return;
-      drag = { startX: e.clientX, startTime: timeAtClick, tmpRegion: null, pointerId: e.pointerId };
-      try { wsRoot.setPointerCapture(e.pointerId); } catch {}
+      // Don't capture pointer yet — only when threshold is crossed (so pure clicks fall through to seek)
+      drag = { startX: e.clientX, startTime: timeAtClick, tmpRegion: null, pointerId: e.pointerId, captured: false };
     };
 
     const onMove = (e) => {
       if (!drag) return;
       const dx = Math.abs(e.clientX - drag.startX);
       if (dx < THRESHOLD && !drag.tmpRegion) return;
+      if (!drag.captured) {
+        try { wsRoot.setPointerCapture(drag.pointerId); } catch {}
+        drag.captured = true;
+      }
       const cur = getTimeAt(e.clientX);
       const start = Math.min(drag.startTime, cur);
       const end = Math.max(drag.startTime, cur);
@@ -877,9 +880,18 @@
     const onUp = (e) => {
       if (!drag) return;
       const d = drag; drag = null;
-      try { wsRoot.releasePointerCapture(d.pointerId); } catch {}
+      if (d.captured) {
+        try { wsRoot.releasePointerCapture(d.pointerId); } catch {}
+      }
       if (liveTip) { liveTip.remove(); liveTip = null; }
-      if (!d.tmpRegion) return;
+      if (!d.tmpRegion) {
+        // pure click — seek WaveSurfer to that position
+        const dur = ws.getDuration() || 0;
+        if (dur > 0) {
+          try { ws.seekTo(Math.max(0, Math.min(1, d.startTime / dur))); } catch {}
+        }
+        return;
+      }
       const region = d.tmpRegion;
       const id = uid();
       const type = ctx.armedType || 'volume';
