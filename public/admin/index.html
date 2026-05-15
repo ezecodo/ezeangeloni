@@ -772,31 +772,53 @@
     rebuildRegionList(ctx, listEl);
   }
   function installManualDragSelect(wsRoot, ws, ctx) {
-    // calibration captured from WaveSurfer's own click event; guaranteed to match WS coordinate system
-    let cal = null;
-    ws.on('click', (relativeX, e) => {
-      if (!e || typeof e.clientX !== 'number') return;
-      const rect = wsRoot.getBoundingClientRect();
-      const waveLeft = e.clientX - relativeX * rect.width;
-      cal = { left: waveLeft, width: rect.width };
-    });
-    // also try to find the actual rendered wave via shadow DOM as fallback
-    function findShadowWaveRect() {
+    // Best-effort access to the WaveSurfer-rendered wave element so coordinates match exactly
+    function getWaveBounds() {
+      try {
+        if (ws.renderer && ws.renderer.wrapper) return ws.renderer.wrapper.getBoundingClientRect();
+      } catch {}
+      try {
+        if (ws.renderer && ws.renderer.scrollContainer) return ws.renderer.scrollContainer.getBoundingClientRect();
+      } catch {}
       const first = wsRoot.firstElementChild;
-      if (!first || !first.shadowRoot) return null;
-      const el = first.shadowRoot.querySelector('.scroll, .wrapper, canvas, [part=scroll]');
-      return el ? el.getBoundingClientRect() : null;
+      if (first && first.shadowRoot) {
+        const inner = first.shadowRoot.firstElementChild;
+        if (inner) return inner.getBoundingClientRect();
+      }
+      return wsRoot.getBoundingClientRect();
     }
+    // Calibration via WS click — overrides bounds calc when available (zero error)
+    let cal = null;
+    ws.on('click', (relativeX) => {
+      // WS 7 click signature: (relativeX, relativeY) — both numbers 0..1
+      if (typeof relativeX !== 'number') return;
+      // We need to derive cal from the next pointerdown; use last-known clientX
+      if (lastDownX != null) {
+        const bounds = getWaveBounds();
+        const waveLeft = lastDownX - relativeX * bounds.width;
+        cal = { left: waveLeft, width: bounds.width };
+      }
+    });
+    let lastDownX = null;
     function getTimeAt(clientX) {
       const dur = ws.getDuration() || 0;
       if (cal) {
         const x = Math.max(0, Math.min(cal.width, clientX - cal.left));
         return (x / cal.width) * dur;
       }
-      const rect = findShadowWaveRect() || wsRoot.getBoundingClientRect();
+      const rect = getWaveBounds();
       const w = Math.max(1, rect.width);
       const x = Math.max(0, Math.min(w, clientX - rect.left));
       return (x / w) * dur;
+    }
+    // Check if a click at this time is inside any existing region — let WS handle it then
+    function clickInsideExistingRegion(timeAtClick) {
+      for (const r of ctx.regionData.values()) {
+        const rs = r.start - ctx.trimOffset;
+        const re = r.end - ctx.trimOffset;
+        if (timeAtClick >= rs && timeAtClick <= re) return true;
+      }
+      return false;
     }
 
     // Visual helper: live indicator while dragging
@@ -807,14 +829,18 @@
     const THRESHOLD = 4;
 
     const onDown = (e) => {
-      // ignore if interacting with an existing wsregion element (regions live in shadow DOM as <wsregion>)
+      lastDownX = e.clientX; // for click calibration
+      // skip if clicking on a region element
       let t = e.target;
       while (t && t !== wsRoot && t !== document) {
         const tag = (t.tagName || '').toLowerCase();
         if (tag === 'wsregion' || (t.getAttribute && t.getAttribute('part') === 'region')) return;
         t = t.parentNode || (t.host || null);
       }
-      drag = { startX: e.clientX, startTime: getTimeAt(e.clientX), tmpRegion: null, pointerId: e.pointerId };
+      // also skip if click time falls inside an existing region (catches shadow-DOM cases the DOM walk misses)
+      const timeAtClick = getTimeAt(e.clientX);
+      if (clickInsideExistingRegion(timeAtClick)) return;
+      drag = { startX: e.clientX, startTime: timeAtClick, tmpRegion: null, pointerId: e.pointerId };
       try { wsRoot.setPointerCapture(e.pointerId); } catch {}
     };
 
