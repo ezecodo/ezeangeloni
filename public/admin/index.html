@@ -1115,9 +1115,41 @@
     ws.on('finish', () => { playBtn.textContent = '▶ play'; });
 
     playBtn.addEventListener('click', () => ws.playPause());
-    let zoomLevel = 0;
-    zoomIn.addEventListener('click', () => { zoomLevel = Math.min(zoomLevel + 20, 200); ws.zoom(zoomLevel); });
-    zoomOut.addEventListener('click', () => { zoomLevel = Math.max(zoomLevel - 20, 0); ws.zoom(zoomLevel); });
+    ctx.zoomLevel = 0;
+    const ZOOM_MIN = 0, ZOOM_MAX = 800;
+    function applyZoom(v) {
+      ctx.zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v));
+      try { ws.zoom(ctx.zoomLevel); } catch {}
+    }
+    zoomIn.addEventListener('click', () => applyZoom((ctx.zoomLevel || 0) + 20 || 30));
+    zoomOut.addEventListener('click', () => applyZoom((ctx.zoomLevel || 0) - 20));
+
+    // trackpad: pinch (wheel + ctrlKey) → zoom; horizontal scroll (deltaX) → pan
+    function getScrollContainer() {
+      try { return ws.renderer && ws.renderer.scrollContainer; } catch { return null; }
+    }
+    wsRoot.addEventListener('wheel', (e) => {
+      if (e.ctrlKey) {
+        // pinch on trackpad fires wheel with ctrlKey
+        e.preventDefault();
+        const factor = Math.exp(-e.deltaY * 0.012);
+        const base = ctx.zoomLevel > 0 ? ctx.zoomLevel : 30;
+        applyZoom(base * factor);
+        return;
+      }
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        const sc = getScrollContainer();
+        if (sc && sc.scrollWidth > sc.clientWidth + 1) {
+          e.preventDefault();
+          sc.scrollLeft += e.deltaX;
+        }
+      }
+    }, { passive: false });
+    // Safari pinch (legacy gesture events)
+    let gestureBaseZoom = 0;
+    wsRoot.addEventListener('gesturestart', (e) => { e.preventDefault(); gestureBaseZoom = ctx.zoomLevel || 30; });
+    wsRoot.addEventListener('gesturechange', (e) => { e.preventDefault(); applyZoom(gestureBaseZoom * e.scale); });
+    wsRoot.addEventListener('gestureend', (e) => { e.preventDefault(); });
     fxBtn.addEventListener('click', () => {
       ctx.fxOn = !ctx.fxOn;
       fxBtn.classList.toggle('active', ctx.fxOn);

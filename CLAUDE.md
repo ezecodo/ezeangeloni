@@ -61,6 +61,10 @@ The landing fetches `sets.json` at runtime, so no rebuild needed when adding set
 - Color palette: `['#ff3f3f','#ff9f1c','#6ef9f5','#b8f75b','#c77dff','#ff6eb4','#38bdf8','#ffd166']`
 - Bubble color cues: photos = cyan `#38bdf8`, sets = pink/purple `#ff6eb4`/`#c77dff`, message = yellow `#ffd166`
 
+## Why this exists
+
+The project's reason for being is **digital independence**. The user (Eze) is a DJ who wanted to publish his sets without depending on SoundCloud / Mixcloud — no ads injected over his music, no algorithm dictating reach, no third party owning his stats or audience. The whole site exists so that when a venue, label or festival receives a link to his set, they hear pure music in his own visual identity, on his own infrastructure. This positioning ("digital independence, my own system, not the same channel as every other DJ") matters when scoping new features: prefer self-hosted, prefer ownership, avoid dependencies that would dilute that story.
+
 ## Set uploader (mini backend)
 
 Lives in `apps/uploader/` in this repo. Express server that exposes:
@@ -100,7 +104,7 @@ Re-renders are always **from the original**, so edits are non-destructive — ch
 
 **Nginx** in the `ezeangeloni.xyz` block proxies `/api/sets*` to `127.0.0.1:3010` and sets `client_max_body_size 320M;` plus `proxy_read_timeout 600s`. Detailed config in `apps/uploader/README.md`.
 
-**Available audio processing** (all applied non-destructively from the original on each save):
+**Master audio processing** (applied to the whole set, non-destructively from the original on each save):
 - Trim start/end
 - Fade in/out
 - Loudness normalization to -14 LUFS (save-only, not previewed)
@@ -112,9 +116,38 @@ Re-renders are always **from the original**, so edits are non-destructive — ch
 - **Reverb** (0-100%) — multi-tap echo approximation on server, ConvolverNode w/ synthesized IR in browser preview
 - **Stereo width** (-100% to +100%) — `extrastereo` filter on server, mid/side matrix via ChannelSplitter/Merger in preview
 - **Delay** (amount 0-100% + time 50-1000ms) — `aecho` on server, DelayNode with feedback in preview
-- Volume regions — per-time-range gain (±30 dB), stored in original-time. Drag handles on the WaveSurfer waveform to define them; the ffmpeg filter chain applies `volume=<factor>:enable='between(t,start,end)'` for each region.
 
-**Admin UI is channel-strip style**: side-by-side panels (trim, fades, cleanup, compressor, EQ, space, delay) above the volume-regions section. Custom knobs (CSS+JS, drag vertically to adjust, double-click to reset, shift+drag for fine control) and vertical faders for level controls. Real-time preview toggle "🔊 hear effects" routes audio through a Web Audio chain that mirrors the server's filter ordering. The two save-only effects (de-clip, normalize) are flagged with a yellow ● marker.
+**Effect regions** (per-time-range processing, applied via ffmpeg's `enable='between(t,start,end)'` clause and previewed live in the browser):
+- `volume` — gain in dB (±30)
+- `lowpass` — cutoff Hz (20–20000, log scale)
+- `highpass` — cutoff Hz (20–20000, log scale)
+- `eq` — single peaking band (freq + gain + Q)
+- `saturation` — drive multiplier (1×–10×, server uses `aeval=tanh(K*val(0))/tanh(K)` for harmonic saturation)
+
+Region times are stored in **original-time** (so changing master trim doesn't break alignment). Backward compat: legacy `volumeRegions[]` are auto-merged into `effectRegions[]` server-side and on UI load.
+
+**Admin UI** (channel-strip layout above the regions zone, both inside the WaveSurfer editor div):
+- **Channel strip panels**: trim · fades · cleanup · compressor · EQ · space (reverb+width) · delay
+- **Custom knobs**: CSS+JS, drag vertically to adjust, double-click to reset, shift+drag for fine resolution
+- **Vertical faders** for fade in/out (mixer-style)
+- Real-time preview toggle "🔊 hear effects" routes audio through a Web Audio chain that mirrors the server's filter ordering
+- The two save-only effects (de-clip, normalize) are flagged with a yellow ● marker
+
+**Region UX** (multiple ways to create / select a region):
+- **Drag on the waveform** with no type armed → creates a `volume` region of the dragged range
+- **Click a type button (vol/LP/HP/EQ/sat) to "arm" it** (button pulses pink), then either:
+  - Drag on the waveform → region of that type with the dragged range, OR
+  - Click a start point → marker appears, click an end point → region created (arming auto-clears after creation; Esc cancels the pending start marker)
+- **Pure click on empty waveform** = seek the play cursor (works whether or not a type is armed; click-click region uses the same clicks for both seek + marker)
+- **Click on an existing region in the waveform** = highlight (pink glow) its row in the list below + scroll it into view
+- **Click on a row in the list** (in the empty area, not on inputs) = same highlight + seek the play cursor to that region's start
+- Drag the body of an existing region = move it; drag the edges = resize (handled natively by WaveSurfer)
+- Coordinate calibration: on first WaveSurfer click, captures `(clientX, relativeX)` to lock the wave's true left/width in client coords; subsequent drag math is exact regardless of internal padding/shadow-DOM layout
+
+**Coordinate notes for future work on the editor**:
+- WaveSurfer 7 renders into a shadow DOM inside the first child of the container; `wsRoot.getBoundingClientRect()` is NOT reliably the wave's actual bounds
+- Prefer `ws.renderer.wrapper` / `ws.renderer.scrollContainer` if accessible, else fall back to the click-calibration approach (see `installManualDragSelect` in `public/admin/index.html`)
+- Pointer capture is delayed until the drag-threshold (4px) is crossed — captures during pure clicks would block WaveSurfer's seek behavior
 
 **sets.json schema:**
 ```json
@@ -134,7 +167,14 @@ Re-renders are always **from the original**, so edits are non-destructive — ch
         "declip": false, "limiter": false, "highpass": false,
         "compressor": "",
         "eqLow": 0, "eqMid": 0, "eqHigh": 0,
-        "volumeRegions": [{ "start": 30, "end": 45, "gainDb": -6 }]
+        "reverb": 0, "stereoWidth": 0, "delayAmount": 0, "delayTime": 300,
+        "volumeRegions": [],
+        "effectRegions": [
+          { "type": "volume", "start": 30, "end": 45, "params": { "gainDb": -6 } },
+          { "type": "lowpass", "start": 60, "end": 75, "params": { "cutoff": 800 } },
+          { "type": "eq", "start": 100, "end": 130, "params": { "freq": 80, "gain": 6, "q": 1 } },
+          { "type": "saturation", "start": 200, "end": 220, "params": { "drive": 3 } }
+        ]
       },
       "artwork": "/sets/artworks/set1.jpg",
       "tracklist": [{ "at": 0, "label": "Intro" }, { "at": 330, "label": "Artist - Track" }]
