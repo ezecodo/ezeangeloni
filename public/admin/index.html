@@ -877,44 +877,32 @@
     rebuildRegionList(ctx, listEl);
   }
   function installManualDragSelect(wsRoot, ws, ctx) {
-    // Best-effort access to the WaveSurfer-rendered wave element so coordinates match exactly
-    function getWaveBounds() {
-      try {
-        if (ws.renderer && ws.renderer.wrapper) return ws.renderer.wrapper.getBoundingClientRect();
-      } catch {}
-      try {
-        if (ws.renderer && ws.renderer.scrollContainer) return ws.renderer.scrollContainer.getBoundingClientRect();
-      } catch {}
-      const first = wsRoot.firstElementChild;
-      if (first && first.shadowRoot) {
-        const inner = first.shadowRoot.firstElementChild;
-        if (inner) return inner.getBoundingClientRect();
-      }
-      return wsRoot.getBoundingClientRect();
-    }
-    // Calibration via WS click — overrides bounds calc when available (zero error)
-    let cal = null;
-    ws.on('click', (relativeX) => {
-      // WS 7 click signature: (relativeX, relativeY) — both numbers 0..1
-      if (typeof relativeX !== 'number') return;
-      // We need to derive cal from the next pointerdown; use last-known clientX
-      if (lastDownX != null) {
-        const bounds = getWaveBounds();
-        const waveLeft = lastDownX - relativeX * bounds.width;
-        cal = { left: waveLeft, width: bounds.width };
-      }
-    });
     let lastDownX = null;
+    // Convert clientX → time using WaveSurfer's actual rendered elements (handles zoom + scroll correctly)
     function getTimeAt(clientX) {
       const dur = ws.getDuration() || 0;
-      if (cal) {
-        const x = Math.max(0, Math.min(cal.width, clientX - cal.left));
-        return (x / cal.width) * dur;
+      if (dur <= 0) return 0;
+      const r = ws.renderer || {};
+      // wrapper has the full wave width; its left position naturally shifts with scroll
+      if (r.wrapper) {
+        const rect = r.wrapper.getBoundingClientRect();
+        const x = clientX - rect.left;
+        return Math.max(0, Math.min(rect.width, x)) / Math.max(1, rect.width) * dur;
       }
-      const rect = getWaveBounds();
-      const w = Math.max(1, rect.width);
-      const x = Math.max(0, Math.min(w, clientX - rect.left));
-      return (x / w) * dur;
+      // scrollContainer is just the viewport — must add scrollLeft and use scrollWidth as total
+      if (r.scrollContainer) {
+        const sc = r.scrollContainer;
+        const rect = sc.getBoundingClientRect();
+        const x = (clientX - rect.left) + sc.scrollLeft;
+        return Math.max(0, Math.min(sc.scrollWidth, x)) / Math.max(1, sc.scrollWidth) * dur;
+      }
+      // last-resort fallback
+      const first = wsRoot.firstElementChild;
+      const inner = (first && first.shadowRoot) ? first.shadowRoot.firstElementChild : null;
+      const ref = inner || wsRoot;
+      const rect = ref.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+      return (x / Math.max(1, rect.width)) * dur;
     }
     // Check if a click at this time is inside any existing region — let WS handle it then
     function clickInsideExistingRegion(timeAtClick) {
