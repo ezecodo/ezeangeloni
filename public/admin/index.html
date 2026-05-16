@@ -1232,10 +1232,23 @@
         return;
       }
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        e.preventDefault();
+        const dur = ws.getDuration() || 0;
+        if (dur <= 0) return;
         const sc = getScrollContainer();
+        // scroll horizontally = seek the playhead through the set
+        const cur = ws.getCurrentTime();
+        // sensitivity: time-per-pixel that scales with current zoom
+        const pxPerSec = sc && sc.scrollWidth ? Math.max(15, sc.scrollWidth / dur) : Math.max(15, wsRoot.clientWidth / dur);
+        const dt = e.deltaX / pxPerSec;
+        const newTime = Math.max(0, Math.min(dur - 0.05, cur + dt));
+        try { ws.seekTo(newTime / dur); } catch {}
+        // auto-pan the view to keep the playhead visible (only when zoomed)
         if (sc && sc.scrollWidth > sc.clientWidth + 1) {
-          e.preventDefault();
-          sc.scrollLeft += e.deltaX;
+          const playheadX = newTime * (sc.scrollWidth / dur);
+          const margin = sc.clientWidth * 0.15;
+          if (playheadX < sc.scrollLeft + margin) sc.scrollLeft = Math.max(0, playheadX - sc.clientWidth * 0.5);
+          else if (playheadX > sc.scrollLeft + sc.clientWidth - margin) sc.scrollLeft = Math.min(sc.scrollWidth - sc.clientWidth, playheadX - sc.clientWidth * 0.5);
         }
       }
     }, { passive: false });
