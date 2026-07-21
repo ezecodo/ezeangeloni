@@ -37,9 +37,24 @@ import Layout from '../layouts/Layout.astro';
       #stage { max-width: min(72vw, 760px); max-height: 78vh; width: auto; height: auto; display: block; border-radius: 4px; box-shadow: 0 0 0 1px rgba(240,237,232,0.1), 0 20px 60px rgba(0,0,0,0.5); }
       #dims { font-size: .68rem; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; }
       #panel { width: 380px; flex-shrink: 0; background: rgba(240,237,232,0.03); border-left: 1px solid rgba(240,237,232,0.08); padding: 5.5rem 1.8rem 2.5rem; overflow-y: auto; max-height: 100vh; }
+      #mobile-tabs { display: none; }
+      .hint { font-size: .62rem; color: var(--muted); letter-spacing: .03em; margin: -.3rem 0 .8rem; line-height: 1.5; }
+      #quick-download { display: flex; flex-direction: column; gap: .5rem; margin-bottom: 1rem; }
+      .qd-btn { background: rgba(240,237,232,0.05); border: 1px solid rgba(240,237,232,0.15); color: var(--text); font-family: 'DM Mono', monospace; padding: .9rem 1rem; border-radius: 10px; cursor: pointer; text-align: left; transition: background .15s, border-color .15s; }
+      .qd-btn:hover { background: rgba(56,189,248,0.1); border-color: rgba(56,189,248,0.4); }
+      .qd-btn:disabled { opacity: .5; cursor: default; }
+      .qd-btn strong { display: block; font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; margin-bottom: .2rem; }
+      .qd-btn small { display: block; font-size: .66rem; color: var(--muted); }
+      #manual-download { margin-bottom: .5rem; }
+      #manual-download summary { font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); cursor: pointer; list-style: none; margin: .8rem 0 1rem; }
+      #manual-download summary::-webkit-details-marker { display: none; }
+      #manual-download summary::before { content: '▸ '; }
+      #manual-download[open] summary::before { content: '▾ '; }
       h1 { font-family: 'MalvinasSans', sans-serif; font-size: 1.7rem; letter-spacing: .01em; margin-bottom: .2rem; color: var(--text); }
       #subtitle { font-size: .68rem; color: var(--muted); letter-spacing: .1em; margin-bottom: 2rem; }
       #stamp { font-size: .6rem; color: var(--muted); letter-spacing: .18em; text-transform: uppercase; opacity: .55; }
+      #counter { font-size: .62rem; color: var(--muted); letter-spacing: .1em; margin-top: .5rem; min-height: 1em; }
+      #counter strong { color: var(--text); font-weight: normal; }
       .group { margin-bottom: 1.6rem; }
       .group-title { font-size: .66rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin-bottom: .7rem; }
       label.row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-bottom: .55rem; font-size: .72rem; }
@@ -81,11 +96,19 @@ import Layout from '../layouts/Layout.astro';
       #dl-note { font-size: .62rem; color: var(--muted); text-align: center; margin-top: .6rem; letter-spacing: .03em; }
       @media (max-width: 860px) {
         #app { flex-direction: column; }
-        #preview-col { padding: 4.5rem 1.2rem 1rem; }
-        #stage { max-width: 92vw; max-height: 48vh; }
-        #panel { width: 100%; max-height: none; border-left: none; border-top: 1px solid rgba(240,237,232,0.08); padding: 1.5rem 1.2rem 3rem; }
-        h1 { font-size: 1.6rem; }
+        #preview-col { padding: 3.2rem 1.2rem .5rem; }
+        #page-title { position: static; text-align: center; margin-bottom: .6rem; }
+        #stage { max-width: 92vw; max-height: 52vh; }
+        #panel { width: 100%; max-height: none; border-left: none; border-top: 1px solid rgba(240,237,232,0.08); padding: 1rem 1.2rem 5.5rem; }
+        h1 { font-size: 1.5rem; }
+        #stamp { font-size: .74rem; letter-spacing: .24em; opacity: .85; color: #38bdf8; margin-top: .1rem; }
+        #about-trigger { margin: .5rem auto 0; }
         #subtitle { display: none; }
+        #mobile-tabs { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; background: rgba(8,8,16,0.94); backdrop-filter: blur(12px); border-top: 1px solid rgba(240,237,232,0.1); }
+        .tab-btn { flex: 1; background: none; border: none; color: var(--muted); font-family: 'DM Mono', monospace; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; padding: 1rem .5rem; cursor: pointer; transition: color .2s; }
+        .tab-btn.active { color: #38bdf8; }
+        .group[data-tab] { display: none; }
+        .group[data-tab].tab-active { display: block; }
       }
     </style>
   </Fragment>
@@ -95,7 +118,8 @@ import Layout from '../layouts/Layout.astro';
     <div id="preview-col">
       <div id="page-title">
         <h1>Fábrica de trapos</h1>
-        <p id="stamp">industria argentina</p>
+        <p id="stamp">industria nacional</p>
+        <p id="counter"></p>
         <button id="about-trigger">¿de dónde salió esto?</button>
       </div>
       <div id="canvas-wrap">
@@ -106,14 +130,20 @@ import Layout from '../layouts/Layout.astro';
     <div id="panel">
       <p id="subtitle">escribí, ajustá, descargá</p>
 
-      <div class="group">
+      <nav id="mobile-tabs">
+        <button class="tab-btn active" data-tab="texto">Texto</button>
+        <button class="tab-btn" data-tab="estilo">Estilo</button>
+        <button class="tab-btn" data-tab="descargar">Descargar</button>
+      </nav>
+
+      <div class="group" data-tab="texto">
         <div class="group-title">Texto</div>
         <textarea id="txt-input" placeholder="tu trapo" autofocus></textarea>
       </div>
 
-      <div class="group">
+      <div class="group" data-tab="estilo">
         <div class="group-title">Tipografía</div>
-        <label class="row"><span class="name">Tamaño</span><input type="range" id="ctl-fontsize" min="12" max="400" step="1"><input type="number" id="ctl-fontsize-n" min="12" max="400"></label>
+        <label class="row"><span class="name">Tamaño</span><input type="range" id="ctl-fontsize" min="12" max="2000" step="1"><input type="number" id="ctl-fontsize-n" min="12" max="2000"></label>
         <label class="row"><span class="name">Interlineado</span><input type="range" id="ctl-lineheight" min="0.8" max="2.5" step="0.05"><input type="number" id="ctl-lineheight-n" min="0.8" max="2.5" step="0.05"></label>
         <label class="row"><span class="name">Espaciado</span><input type="range" id="ctl-letterspacing" min="-10" max="60" step="1"><input type="number" id="ctl-letterspacing-n" min="-10" max="60"></label>
         <div class="seg" id="align-h">
@@ -130,20 +160,21 @@ import Layout from '../layouts/Layout.astro';
         <a id="font-dl" href="/fonts/MalvinasSans-Regular.otf?v=19" download="MalvinasSans-Regular.otf">↓ descargar fuente (.otf)</a>
       </div>
 
-      <div class="group">
+      <div class="group" data-tab="estilo">
         <div class="group-title">Color</div>
         <label class="row"><span class="name">Texto</span><input type="color" id="ctl-textcolor"></label>
         <label class="row"><span class="name">Fondo</span><input type="color" id="ctl-bgcolor"></label>
       </div>
 
-      <div class="group">
+      <div class="group" data-tab="estilo">
         <div class="group-title">Lienzo</div>
         <div class="presets" id="size-presets">
-          <button data-w="1080" data-h="1080">Cuadrado</button>
-          <button data-w="1080" data-h="1350">Post</button>
+          <button data-w="1080" data-h="1080">Post cuadrado</button>
+          <button data-w="1080" data-h="1350">Post vertical</button>
           <button data-w="1080" data-h="1920">Story</button>
           <button data-w="2480" data-h="3508">A4 (impresión)</button>
         </div>
+        <p class="hint">cuadrado, vertical y story ya vienen a la medida ideal de Instagram</p>
         <div class="dims-row">
           <input type="number" id="ctl-w" min="100" max="6000"> ×
           <input type="number" id="ctl-h" min="100" max="6000"> px
@@ -151,27 +182,35 @@ import Layout from '../layouts/Layout.astro';
         <label class="row" style="margin-top:.6rem"><span class="name">Margen</span><input type="range" id="ctl-padding" min="0" max="400" step="4"><input type="number" id="ctl-padding-n" min="0" max="400"></label>
       </div>
 
-      <div class="group">
-        <div class="group-title">Calidad de descarga</div>
-        <div class="seg" id="format-seg" style="margin-bottom:.9rem">
-          <button data-v="jpeg" class="active">JPG</button>
-          <button data-v="png">PNG (sin pérdida)</button>
+      <div class="group" data-tab="descargar">
+        <div class="group-title">Descargar</div>
+        <div id="quick-download">
+          <button id="qd-share" class="qd-btn"><strong>Compartir</strong><small>Instagram, WhatsApp — liviano y rápido</small></button>
+          <button id="qd-fabric" class="qd-btn"><strong>Imprimir en tela</strong><small>remera, bolsa — sin fondo, calidad máxima</small></button>
+          <button id="qd-poster" class="qd-btn"><strong>Imprimir grande</strong><small>bandera, banner, lienzo grande — para ver de lejos</small></button>
         </div>
-        <label class="row" id="transparent-row" style="opacity:.35">
-          <span class="name">Fondo transparente</span>
-          <input type="checkbox" id="ctl-transparent" disabled>
-        </label>
-        <div id="quality-seg">
-          <button data-preset="web" class="active"><strong>Web</strong><small>JPG · 72 dpi · liviano</small></button>
-          <button data-preset="print"><strong>Impresión</strong><small>PNG · 300 dpi · sin pérdida</small></button>
-        </div>
-        <details id="advanced">
-          <summary>Avanzado</summary>
-          <label class="row" id="quality-row"><span class="name">Calidad JPG</span><input type="range" id="ctl-quality" min="0.5" max="1" step="0.01"><input type="number" id="ctl-quality-n" min="0.5" max="1" step="0.01"></label>
-          <label class="row"><span class="name">DPI</span><input type="range" id="ctl-dpi" min="72" max="600" step="1"><input type="number" id="ctl-dpi-n" min="72" max="600"></label>
-          <label class="row"><span class="name">Escala extra</span><input type="range" id="ctl-scale" min="1" max="4" step="0.5"><input type="number" id="ctl-scale-n" min="1" max="4" step="0.5"></label>
+        <details id="manual-download">
+          <summary>ajustar formato manualmente</summary>
+          <div class="seg" id="format-seg" style="margin-bottom:.9rem">
+            <button data-v="jpeg" class="active">JPG</button>
+            <button data-v="png">PNG (sin pérdida)</button>
+          </div>
+          <label class="row" id="transparent-row" style="opacity:.35">
+            <span class="name">Fondo transparente</span>
+            <input type="checkbox" id="ctl-transparent" disabled>
+          </label>
+          <div id="quality-seg">
+            <button data-preset="web" class="active"><strong>Web</strong><small>JPG · 72 dpi · liviano</small></button>
+            <button data-preset="print"><strong>Impresión</strong><small>PNG · 300 dpi · sin pérdida</small></button>
+          </div>
+          <details id="advanced">
+            <summary>Avanzado</summary>
+            <label class="row" id="quality-row"><span class="name">Calidad JPG</span><input type="range" id="ctl-quality" min="0.5" max="1" step="0.01"><input type="number" id="ctl-quality-n" min="0.5" max="1" step="0.01"></label>
+            <label class="row"><span class="name">DPI</span><input type="range" id="ctl-dpi" min="72" max="600" step="1"><input type="number" id="ctl-dpi-n" min="72" max="600"></label>
+            <label class="row"><span class="name">Escala extra</span><input type="range" id="ctl-scale" min="1" max="4" step="0.5"><input type="number" id="ctl-scale-n" min="1" max="4" step="0.5"></label>
+          </details>
+          <button id="download-btn">Descargar JPG</button>
         </details>
-        <button id="download-btn">Descargar JPG</button>
         <div id="dl-note"></div>
       </div>
     </div>
@@ -294,6 +333,7 @@ import Layout from '../layouts/Layout.astro';
       const update = (v: string) => { r.value = v; n.value = v; apply(parseFloat(v)); redraw(); };
       r.addEventListener('input', () => update(r.value));
       n.addEventListener('input', () => update(n.value));
+      return update;
     }
 
     (document.getElementById('txt-input') as HTMLTextAreaElement).addEventListener('input', e => {
@@ -301,10 +341,10 @@ import Layout from '../layouts/Layout.astro';
       redraw();
     });
 
-    syncPair('ctl-fontsize', 'ctl-fontsize-n', v => state.fontSize = v, state.fontSize);
+    const setFontSize = syncPair('ctl-fontsize', 'ctl-fontsize-n', v => state.fontSize = v, state.fontSize);
     syncPair('ctl-lineheight', 'ctl-lineheight-n', v => state.lineHeight = v, state.lineHeight);
     syncPair('ctl-letterspacing', 'ctl-letterspacing-n', v => state.letterSpacing = v, state.letterSpacing);
-    syncPair('ctl-padding', 'ctl-padding-n', v => state.padding = v, state.padding);
+    const setPadding = syncPair('ctl-padding', 'ctl-padding-n', v => state.padding = v, state.padding);
     syncPair('ctl-quality', 'ctl-quality-n', v => state.quality = v, state.quality);
     syncPair('ctl-dpi', 'ctl-dpi-n', v => state.dpi = v, state.dpi);
     syncPair('ctl-scale', 'ctl-scale-n', v => state.scale = v, state.scale);
@@ -334,7 +374,12 @@ import Layout from '../layouts/Layout.astro';
     const wInput = document.getElementById('ctl-w') as HTMLInputElement;
     const hInput = document.getElementById('ctl-h') as HTMLInputElement;
     wInput.value = String(state.canvasW); hInput.value = String(state.canvasH);
-    function applySize(w: number, h: number) {
+    function applySize(w: number, h: number, rescale = false) {
+      if (rescale && state.canvasW > 0) {
+        const ratio = w / state.canvasW;
+        setFontSize(String(Math.min(2000, Math.max(12, Math.round(state.fontSize * ratio)))));
+        setPadding(String(Math.min(400, Math.max(0, Math.round(state.padding * ratio)))));
+      }
       state.canvasW = w; state.canvasH = h;
       wInput.value = String(w); hInput.value = String(h);
       redraw();
@@ -347,7 +392,7 @@ import Layout from '../layouts/Layout.astro';
       b.addEventListener('click', () => {
         presetBtns.forEach(x => x.classList.remove('active'));
         b.classList.add('active');
-        applySize(parseInt(b.dataset.w!), parseInt(b.dataset.h!));
+        applySize(parseInt(b.dataset.w!), parseInt(b.dataset.h!), true);
       });
     });
     presetBtns[0].classList.add('active');
@@ -464,41 +509,132 @@ import Layout from '../layouts/Layout.astro';
     const downloadBtn = document.getElementById('download-btn') as HTMLButtonElement;
     const dlNote = document.getElementById('dl-note')!;
     setFormat('jpeg');
-    downloadBtn.addEventListener('click', () => {
-      if (state.text.trim() !== '') {
-        fetch('https://n8n.ezeangeloni.xyz/webhook/trapo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ texto: state.text }),
-        }).catch(() => {});
-      }
-      const scale = state.scale;
+
+    const counterEl = document.getElementById('counter')!;
+    let trapoCount: number | null = null;
+    function renderCounter() {
+      if (trapoCount === null) return;
+      counterEl.innerHTML = `<strong>${trapoCount.toLocaleString('es-AR')}</strong> trapos fabricados`;
+    }
+    fetch('https://n8n.ezeangeloni.xyz/webhook/trapo-count')
+      .then(r => r.json())
+      .then(data => { if (typeof data.count === 'number') { trapoCount = data.count; renderCounter(); } })
+      .catch(() => {});
+
+    function notifyTrapo() {
+      if (state.text.trim() === '') return;
+      fetch('https://n8n.ezeangeloni.xyz/webhook/trapo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: state.text }),
+      }).catch(() => {});
+      if (trapoCount !== null) { trapoCount++; renderCounter(); }
+    }
+
+    interface ExportOpts { format: 'jpeg'|'png'; quality: number; dpi: number; scale: number; transparentBg: boolean; }
+
+    function exportImage(opts: ExportOpts): Promise<{ blob: Blob; w: number; h: number }> {
       const off = document.createElement('canvas');
-      off.width = Math.round(state.canvasW * scale);
-      off.height = Math.round(state.canvasH * scale);
+      off.width = Math.round(state.canvasW * opts.scale);
+      off.height = Math.round(state.canvasH * opts.scale);
       const octx = off.getContext('2d')!;
-      octx.scale(scale, scale);
+      octx.scale(opts.scale, opts.scale);
+      const prevFormat = state.format, prevTransparent = state.transparentBg;
+      state.format = opts.format; state.transparentBg = opts.transparentBg;
       paint(octx, state.canvasW, state.canvasH);
-      downloadBtn.disabled = true;
-      downloadBtn.textContent = 'generando...';
+      state.format = prevFormat; state.transparentBg = prevTransparent;
+      const isPng = opts.format === 'png';
+      return new Promise((resolve, reject) => {
+        off.toBlob(async blob => {
+          if (!blob) { reject(new Error('toBlob failed')); return; }
+          const finalBlob = isPng ? await setPngDensity(blob, opts.dpi) : await setJpegDensity(blob, opts.dpi);
+          resolve({ blob: finalBlob, w: off.width, h: off.height });
+        }, isPng ? 'image/png' : 'image/jpeg', isPng ? undefined : opts.quality);
+      });
+    }
+
+    function triggerDownload(blob: Blob, ext: string) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      a.download = `texto-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}.${ext}`;
+      a.href = url;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+
+    // scale needed so the long side reaches targetLong, capped so total pixels stay browser-safe
+    function safeScaleFor(targetLong: number, capMultiplier = 6): number {
+      const longSide = Math.max(state.canvasW, state.canvasH);
+      let scale = Math.max(1, targetLong / longSide);
+      scale = Math.min(scale, capMultiplier);
+      const maxPixels = 16_000_000;
+      const pixels = state.canvasW * scale * (state.canvasH * scale);
+      if (pixels > maxPixels) scale *= Math.sqrt(maxPixels / pixels);
+      return scale;
+    }
+
+    downloadBtn.addEventListener('click', async () => {
+      notifyTrapo();
       const isPng = state.format === 'png';
       const label = isPng ? 'PNG' : 'JPG';
-      off.toBlob(async blob => {
+      downloadBtn.disabled = true;
+      downloadBtn.textContent = 'generando...';
+      try {
+        const { blob, w, h } = await exportImage({ format: state.format, quality: state.quality, dpi: state.dpi, scale: state.scale, transparentBg: state.transparentBg });
+        triggerDownload(blob, isPng ? 'png' : 'jpg');
+        dlNote.textContent = `${w} × ${h} px · ${state.dpi} dpi · ${fmtSize(blob.size)}`;
+      } finally {
         downloadBtn.disabled = false;
         downloadBtn.textContent = `Descargar ${label}`;
-        if (!blob) return;
-        const finalBlob = isPng ? await setPngDensity(blob, state.dpi) : await setJpegDensity(blob, state.dpi);
-        const url = URL.createObjectURL(finalBlob);
-        const a = document.createElement('a');
-        const ts = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        a.download = `texto-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}.${isPng ? 'png' : 'jpg'}`;
-        a.href = url;
-        a.click();
-        dlNote.textContent = `${off.width} × ${off.height} px · ${state.dpi} dpi · ${fmtSize(finalBlob.size)}`;
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
-      }, isPng ? 'image/png' : 'image/jpeg', isPng ? undefined : state.quality);
+      }
     });
+
+    const qdButtons: Record<string, HTMLButtonElement> = {
+      share: document.getElementById('qd-share') as HTMLButtonElement,
+      fabric: document.getElementById('qd-fabric') as HTMLButtonElement,
+      poster: document.getElementById('qd-poster') as HTMLButtonElement,
+    };
+
+    async function quickDownload(mode: 'share'|'fabric'|'poster') {
+      notifyTrapo();
+      const btn = qdButtons[mode];
+      let opts: ExportOpts;
+      if (mode === 'share') {
+        opts = { format: 'jpeg', quality: 0.9, dpi: 72, scale: 1, transparentBg: false };
+      } else if (mode === 'fabric') {
+        opts = { format: 'png', quality: 1, dpi: 300, scale: safeScaleFor(3600), transparentBg: true };
+      } else {
+        // large format (banner/lienzo) is viewed from a distance, so a lower dpi tag
+        // claims a bigger real-world print size for the same safe pixel budget
+        opts = { format: 'png', quality: 1, dpi: 150, scale: safeScaleFor(4500), transparentBg: state.transparentBg };
+      }
+      const original = btn.innerHTML;
+      Object.values(qdButtons).forEach(b => b.disabled = true);
+      btn.innerHTML = '<strong>generando...</strong>';
+      try {
+        const { blob, w, h } = await exportImage(opts);
+        triggerDownload(blob, opts.format === 'png' ? 'png' : 'jpg');
+        dlNote.textContent = `${w} × ${h} px · ${opts.dpi} dpi · ${fmtSize(blob.size)}`;
+      } finally {
+        Object.values(qdButtons).forEach(b => b.disabled = false);
+        btn.innerHTML = original;
+      }
+    }
+    qdButtons.share.addEventListener('click', () => quickDownload('share'));
+    qdButtons.fabric.addEventListener('click', () => quickDownload('fabric'));
+    qdButtons.poster.addEventListener('click', () => quickDownload('poster'));
+
+    const tabBtns = Array.from(document.querySelectorAll('.tab-btn')) as HTMLButtonElement[];
+    function setMobileTab(tab: string) {
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      document.querySelectorAll('.group[data-tab]').forEach(g => {
+        g.classList.toggle('tab-active', (g as HTMLElement).dataset.tab === tab);
+      });
+    }
+    tabBtns.forEach(b => b.addEventListener('click', () => setMobileTab(b.dataset.tab!)));
+    setMobileTab('texto');
 
     redraw();
     (document.getElementById('txt-input') as HTMLTextAreaElement).focus();
