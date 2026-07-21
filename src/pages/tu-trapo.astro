@@ -1,0 +1,514 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Fábrica de trapos — Eze Angeloni">
+  <Fragment slot="head">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital@0;1&family=Cormorant+Garamond:ital,wght@0,300;1,300&display=swap" rel="stylesheet" />
+    <style>
+      @font-face {
+        font-family: 'MalvinasSans';
+        src: url('/fonts/MalvinasSans-Regular.otf?v=19') format('opentype');
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+      :root { --bg: #080810; --text: #f0ede8; --muted: rgba(240,237,232,0.45); --accent: #38bdf8; }
+      html, body { width: 100%; min-height: 100%; background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; }
+      a { color: inherit; }
+      #back { position: fixed; top: 1.2rem; left: 1.5rem; font-size: .72rem; letter-spacing: .15em; text-transform: uppercase; color: var(--muted); text-decoration: none; z-index: 20; transition: color .2s; }
+      #back:hover { color: var(--text); }
+      #app { display: flex; min-height: 100vh; }
+      #preview-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem 2rem; gap: 1rem; min-width: 0; }
+      #page-title { position: fixed; top: 2.3rem; left: 1.5rem; text-align: left; z-index: 20; }
+      #about-trigger { display: block; background: none; border: none; padding: 0; margin-top: .5rem; font-family: 'DM Mono', monospace; font-size: .62rem; letter-spacing: .06em; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; transition: color .2s; }
+      #about-trigger:hover { color: var(--text); }
+      #about-overlay { position: fixed; inset: 0; background: rgba(8,8,16,0.85); backdrop-filter: blur(12px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
+      #about-overlay.open { opacity: 1; pointer-events: all; }
+      #about-box { background: rgba(240,237,232,0.04); border: 1px solid rgba(240,237,232,0.1); border-radius: 16px; padding: 2.6rem; max-width: 560px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative; transform: translateY(30px); transition: transform .4s cubic-bezier(.16,1,.3,1); }
+      #about-overlay.open #about-box { transform: translateY(0); }
+      #about-box h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(1.7rem,4vw,2.4rem); font-weight: 300; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 1.3rem; color: var(--text); }
+      #about-box p { font-family: 'DM Mono', monospace; font-size: .82rem; line-height: 1.85; color: rgba(240,237,232,0.85); }
+      #about-box a { color: #38bdf8; text-decoration: underline; }
+      #about-close { position: absolute; top: 1.1rem; right: 1.4rem; background: none; border: none; color: var(--muted); font-size: 1.4rem; cursor: pointer; line-height: 1; transition: color .2s; }
+      #about-close:hover { color: var(--text); }
+      #canvas-wrap { display: flex; align-items: center; justify-content: center; max-width: 100%; }
+      #stage { max-width: min(72vw, 760px); max-height: 78vh; width: auto; height: auto; display: block; border-radius: 4px; box-shadow: 0 0 0 1px rgba(240,237,232,0.1), 0 20px 60px rgba(0,0,0,0.5); }
+      #dims { font-size: .68rem; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; }
+      #panel { width: 380px; flex-shrink: 0; background: rgba(240,237,232,0.03); border-left: 1px solid rgba(240,237,232,0.08); padding: 5.5rem 1.8rem 2.5rem; overflow-y: auto; max-height: 100vh; }
+      h1 { font-family: 'MalvinasSans', sans-serif; font-size: 1.7rem; letter-spacing: .01em; margin-bottom: .2rem; color: var(--text); }
+      #subtitle { font-size: .68rem; color: var(--muted); letter-spacing: .1em; margin-bottom: 2rem; }
+      #stamp { font-size: .6rem; color: var(--muted); letter-spacing: .18em; text-transform: uppercase; opacity: .55; }
+      .group { margin-bottom: 1.6rem; }
+      .group-title { font-size: .66rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin-bottom: .7rem; }
+      label.row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-bottom: .55rem; font-size: .72rem; }
+      label.row span.name { color: rgba(240,237,232,0.75); flex-shrink: 0; }
+      textarea#txt-input { width: 100%; min-height: 90px; background: rgba(240,237,232,0.06); border: 1px solid rgba(240,237,232,0.15); border-radius: 8px; color: var(--text); font-family: 'MalvinasSans', sans-serif; font-size: 1rem; padding: .8rem .9rem; resize: vertical; outline: none; transition: border-color .2s; line-height: 1.4; }
+      textarea#txt-input:focus { border-color: rgba(240,237,232,0.4); }
+      input[type=range] { flex: 1; accent-color: var(--accent); }
+      input[type=number] { width: 64px; background: rgba(240,237,232,0.06); border: 1px solid rgba(240,237,232,0.15); border-radius: 5px; color: var(--text); font-family: 'DM Mono', monospace; font-size: .72rem; padding: .3rem .4rem; outline: none; }
+      input[type=color] { width: 32px; height: 28px; border: 1px solid rgba(240,237,232,0.2); border-radius: 5px; background: none; cursor: pointer; padding: 0; }
+      input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+      #transparent-row { transition: opacity .2s; }
+      #canvas-wrap.checkerboard { border-radius: 4px; background-image: linear-gradient(45deg, #555 25%, transparent 25%), linear-gradient(-45deg, #555 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #555 75%), linear-gradient(-45deg, transparent 75%, #555 75%); background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0px; }
+      .seg { display: flex; gap: .35rem; }
+      .seg button { flex: 1; background: rgba(240,237,232,0.06); border: 1px solid rgba(240,237,232,0.15); color: var(--muted); font-family: 'DM Mono', monospace; font-size: .68rem; letter-spacing: .05em; padding: .45rem .3rem; border-radius: 6px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+      .seg button:hover { color: var(--text); }
+      .seg button.active { background: rgba(56,189,248,0.15); border-color: rgba(56,189,248,0.5); color: var(--text); }
+      #font-dl { display: inline-block; margin-top: .9rem; font-size: .68rem; letter-spacing: .06em; color: var(--muted); text-decoration: none; transition: color .2s; }
+      #font-dl:hover { color: var(--text); }
+      .presets { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+      .presets button { background: rgba(240,237,232,0.06); border: 1px solid rgba(240,237,232,0.15); color: var(--muted); font-family: 'DM Mono', monospace; font-size: .66rem; letter-spacing: .04em; padding: .4rem .7rem; border-radius: 6px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+      .presets button:hover { color: var(--text); border-color: rgba(240,237,232,0.35); }
+      .presets button.active { background: rgba(56,189,248,0.15); border-color: rgba(56,189,248,0.5); color: var(--text); }
+      .dims-row { display: flex; align-items: center; gap: .5rem; font-size: .72rem; }
+      .dims-row input { width: 70px; }
+      #quality-seg { display: flex; gap: .5rem; margin-bottom: .9rem; }
+      #quality-seg button { flex: 1; background: rgba(240,237,232,0.05); border: 1px solid rgba(240,237,232,0.15); color: var(--text); font-family: 'DM Mono', monospace; padding: .8rem .5rem; border-radius: 8px; cursor: pointer; transition: background .15s, border-color .15s; text-align: left; }
+      #quality-seg button strong { display: block; font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; margin-bottom: .2rem; }
+      #quality-seg button small { display: block; font-size: .62rem; color: var(--muted); letter-spacing: .03em; }
+      #quality-seg button.active { background: rgba(56,189,248,0.14); border-color: rgba(56,189,248,0.55); }
+      #quality-seg button.active small { color: rgba(240,237,232,0.6); }
+      details#advanced { margin-bottom: 1.4rem; }
+      details#advanced summary { font-size: .66rem; letter-spacing: .15em; text-transform: uppercase; color: var(--muted); cursor: pointer; list-style: none; margin-bottom: .8rem; }
+      details#advanced summary::-webkit-details-marker { display: none; }
+      details#advanced summary::before { content: '▸ '; }
+      details#advanced[open] summary::before { content: '▾ '; }
+      #download-btn { width: 100%; background: rgba(56,189,248,0.16); border: 1px solid rgba(56,189,248,0.5); color: var(--text); font-family: 'DM Mono', monospace; font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; padding: .9rem; border-radius: 8px; cursor: pointer; transition: background .2s, border-color .2s; }
+      #download-btn:hover { background: rgba(56,189,248,0.28); border-color: rgba(56,189,248,0.8); }
+      #download-btn:active { transform: scale(.985); }
+      #dl-note { font-size: .62rem; color: var(--muted); text-align: center; margin-top: .6rem; letter-spacing: .03em; }
+      @media (max-width: 860px) {
+        #app { flex-direction: column; }
+        #preview-col { padding: 4.5rem 1.2rem 1rem; }
+        #stage { max-width: 92vw; max-height: 48vh; }
+        #panel { width: 100%; max-height: none; border-left: none; border-top: 1px solid rgba(240,237,232,0.08); padding: 1.5rem 1.2rem 3rem; }
+        h1 { font-size: 1.6rem; }
+        #subtitle { display: none; }
+      }
+    </style>
+  </Fragment>
+
+  <a id="back" href="/">← volver</a>
+  <div id="app">
+    <div id="preview-col">
+      <div id="page-title">
+        <h1>Fábrica de trapos</h1>
+        <p id="stamp">industria argentina</p>
+        <button id="about-trigger">¿de dónde salió esto?</button>
+      </div>
+      <div id="canvas-wrap">
+        <canvas id="stage"></canvas>
+      </div>
+      <div id="dims"></div>
+    </div>
+    <div id="panel">
+      <p id="subtitle">escribí, ajustá, descargá</p>
+
+      <div class="group">
+        <div class="group-title">Texto</div>
+        <textarea id="txt-input" placeholder="tu trapo" autofocus></textarea>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Tipografía</div>
+        <label class="row"><span class="name">Tamaño</span><input type="range" id="ctl-fontsize" min="12" max="400" step="1"><input type="number" id="ctl-fontsize-n" min="12" max="400"></label>
+        <label class="row"><span class="name">Interlineado</span><input type="range" id="ctl-lineheight" min="0.8" max="2.5" step="0.05"><input type="number" id="ctl-lineheight-n" min="0.8" max="2.5" step="0.05"></label>
+        <label class="row"><span class="name">Espaciado</span><input type="range" id="ctl-letterspacing" min="-10" max="60" step="1"><input type="number" id="ctl-letterspacing-n" min="-10" max="60"></label>
+        <div class="seg" id="align-h">
+          <button data-v="left">Izq</button>
+          <button data-v="center">Centro</button>
+          <button data-v="right">Der</button>
+        </div>
+        <div style="height:.4rem"></div>
+        <div class="seg" id="align-v">
+          <button data-v="top">Arriba</button>
+          <button data-v="center">Medio</button>
+          <button data-v="bottom">Abajo</button>
+        </div>
+        <a id="font-dl" href="/fonts/MalvinasSans-Regular.otf?v=19" download="MalvinasSans-Regular.otf">↓ descargar fuente (.otf)</a>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Color</div>
+        <label class="row"><span class="name">Texto</span><input type="color" id="ctl-textcolor"></label>
+        <label class="row"><span class="name">Fondo</span><input type="color" id="ctl-bgcolor"></label>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Lienzo</div>
+        <div class="presets" id="size-presets">
+          <button data-w="1080" data-h="1080">Cuadrado</button>
+          <button data-w="1080" data-h="1350">Post</button>
+          <button data-w="1080" data-h="1920">Story</button>
+          <button data-w="2480" data-h="3508">A4 (impresión)</button>
+        </div>
+        <div class="dims-row">
+          <input type="number" id="ctl-w" min="100" max="6000"> ×
+          <input type="number" id="ctl-h" min="100" max="6000"> px
+        </div>
+        <label class="row" style="margin-top:.6rem"><span class="name">Margen</span><input type="range" id="ctl-padding" min="0" max="400" step="4"><input type="number" id="ctl-padding-n" min="0" max="400"></label>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Calidad de descarga</div>
+        <div class="seg" id="format-seg" style="margin-bottom:.9rem">
+          <button data-v="jpeg" class="active">JPG</button>
+          <button data-v="png">PNG (sin pérdida)</button>
+        </div>
+        <label class="row" id="transparent-row" style="opacity:.35">
+          <span class="name">Fondo transparente</span>
+          <input type="checkbox" id="ctl-transparent" disabled>
+        </label>
+        <div id="quality-seg">
+          <button data-preset="web" class="active"><strong>Web</strong><small>JPG · 72 dpi · liviano</small></button>
+          <button data-preset="print"><strong>Impresión</strong><small>PNG · 300 dpi · sin pérdida</small></button>
+        </div>
+        <details id="advanced">
+          <summary>Avanzado</summary>
+          <label class="row" id="quality-row"><span class="name">Calidad JPG</span><input type="range" id="ctl-quality" min="0.5" max="1" step="0.01"><input type="number" id="ctl-quality-n" min="0.5" max="1" step="0.01"></label>
+          <label class="row"><span class="name">DPI</span><input type="range" id="ctl-dpi" min="72" max="600" step="1"><input type="number" id="ctl-dpi-n" min="72" max="600"></label>
+          <label class="row"><span class="name">Escala extra</span><input type="range" id="ctl-scale" min="1" max="4" step="0.5"><input type="number" id="ctl-scale-n" min="1" max="4" step="0.5"></label>
+        </details>
+        <button id="download-btn">Descargar JPG</button>
+        <div id="dl-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="about-overlay">
+    <div id="about-box">
+      <button id="about-close">✕</button>
+      <h2>¿de dónde salió esto?</h2>
+      <p>En la semifinal contra Inglaterra, alguien agarró una sábana de hotel y escribió algo a mano. Al terminar el partido, se la pasaron a los jugadores, que la mostraron al mundo entero.</p>
+      <p style="margin-top:1.2rem"><a href="https://www.instagram.com/juanma_artwork/" target="_blank" rel="noopener">Juanma</a> agarró esa foto y, con el estilo de esa letra escrita en la sábana, hizo la tipografía. <a href="https://www.instagram.com/ezekiel_angeloni/" target="_blank" rel="noopener">Yo</a> armé esta fábrica y le agregué tildes y la eñe.</p>
+      <p style="margin-top:1.2rem">Ahora es tuya: para la bandera, para la remera, para pegar en la pared. Escribí, descargá, imprimí.</p>
+    </div>
+  </div>
+
+  <script>
+    const stage = document.getElementById('stage') as HTMLCanvasElement;
+    const sctx = stage.getContext('2d')!;
+    const dimsLabel = document.getElementById('dims')!;
+
+    interface State {
+      text: string; fontSize: number; lineHeight: number; letterSpacing: number;
+      alignH: 'left'|'center'|'right'; alignV: 'top'|'center'|'bottom';
+      textColor: string; bgColor: string; padding: number;
+      canvasW: number; canvasH: number;
+      quality: number; dpi: number; scale: number; format: 'jpeg'|'png'; transparentBg: boolean;
+    }
+    const state: State = {
+      text: '', fontSize: 96, lineHeight: 1.15, letterSpacing: 0,
+      alignH: 'center', alignV: 'center',
+      textColor: '#080810', bgColor: '#ffffff', padding: 80,
+      canvasW: 1080, canvasH: 1080,
+      quality: 0.85, dpi: 72, scale: 1, format: 'jpeg', transparentBg: false,
+    };
+
+    const font = new FontFace('MalvinasSans', "url('/fonts/MalvinasSans-Regular.otf?v=19')");
+    font.load().then(f => { document.fonts.add(f); redraw(); }).catch(() => {});
+
+    function measureLineWidth(ctx: CanvasRenderingContext2D, text: string, spacing: number): number {
+      if (!text.length) return 0;
+      let w = 0;
+      for (const ch of text) w += ctx.measureText(ch).width + spacing;
+      return w - spacing;
+    }
+
+    function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number, spacing: number): string[] {
+      const paragraphs = text.split('\n');
+      const lines: string[] = [];
+      for (const para of paragraphs) {
+        if (para === '') { lines.push(''); continue; }
+        const words = para.split(' ');
+        let current = '';
+        for (const word of words) {
+          const test = current ? current + ' ' + word : word;
+          if (current && measureLineWidth(ctx, test, spacing) > maxW) {
+            lines.push(current);
+            current = word;
+          } else {
+            current = test;
+          }
+        }
+        lines.push(current);
+      }
+      return lines;
+    }
+
+    function drawLine(ctx: CanvasRenderingContext2D, line: string, w: number, y: number) {
+      const lineW = measureLineWidth(ctx, line, state.letterSpacing);
+      let x = state.alignH === 'left' ? state.padding
+        : state.alignH === 'right' ? w - state.padding - lineW
+        : (w - lineW) / 2;
+      for (const ch of line) {
+        ctx.fillText(ch, x, y);
+        x += ctx.measureText(ch).width + state.letterSpacing;
+      }
+    }
+
+    function paint(ctx: CanvasRenderingContext2D, w: number, h: number, showPlaceholder = false) {
+      ctx.clearRect(0, 0, w, h);
+      if (!(state.format === 'png' && state.transparentBg)) {
+        ctx.fillStyle = state.bgColor;
+        ctx.fillRect(0, 0, w, h);
+      }
+      const isEmpty = state.text.trim() === '';
+      const displayText = isEmpty && showPlaceholder ? 'tu trapo' : state.text;
+      ctx.fillStyle = state.textColor;
+      ctx.globalAlpha = isEmpty && showPlaceholder ? 0.3 : 1;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = `${state.fontSize}px 'MalvinasSans', sans-serif`;
+      const maxW = Math.max(10, w - state.padding * 2);
+      const lines = wrapText(ctx, displayText, maxW, state.letterSpacing);
+      const lineH = state.fontSize * state.lineHeight;
+      const totalH = lines.length * lineH;
+      const ascentOffset = state.fontSize * 0.85;
+      let startY: number;
+      if (state.alignV === 'top') startY = state.padding + ascentOffset;
+      else if (state.alignV === 'bottom') startY = h - state.padding - totalH + ascentOffset;
+      else startY = (h - totalH) / 2 + ascentOffset;
+      lines.forEach((line, i) => drawLine(ctx, line, w, startY + i * lineH));
+      ctx.globalAlpha = 1;
+    }
+
+    function redraw() {
+      stage.width = state.canvasW;
+      stage.height = state.canvasH;
+      paint(sctx, state.canvasW, state.canvasH, true);
+      dimsLabel.textContent = `${state.canvasW} × ${state.canvasH} px`;
+    }
+
+    function bind(id: string, ev: string, fn: (v: string) => void) {
+      const el = document.getElementById(id) as HTMLInputElement;
+      el.addEventListener(ev, () => fn(el.value));
+      return el;
+    }
+    function syncPair(rangeId: string, numId: string, apply: (n: number) => void, initial: number) {
+      const r = document.getElementById(rangeId) as HTMLInputElement;
+      const n = document.getElementById(numId) as HTMLInputElement;
+      r.value = String(initial); n.value = String(initial);
+      const update = (v: string) => { r.value = v; n.value = v; apply(parseFloat(v)); redraw(); };
+      r.addEventListener('input', () => update(r.value));
+      n.addEventListener('input', () => update(n.value));
+    }
+
+    (document.getElementById('txt-input') as HTMLTextAreaElement).addEventListener('input', e => {
+      state.text = (e.target as HTMLTextAreaElement).value;
+      redraw();
+    });
+
+    syncPair('ctl-fontsize', 'ctl-fontsize-n', v => state.fontSize = v, state.fontSize);
+    syncPair('ctl-lineheight', 'ctl-lineheight-n', v => state.lineHeight = v, state.lineHeight);
+    syncPair('ctl-letterspacing', 'ctl-letterspacing-n', v => state.letterSpacing = v, state.letterSpacing);
+    syncPair('ctl-padding', 'ctl-padding-n', v => state.padding = v, state.padding);
+    syncPair('ctl-quality', 'ctl-quality-n', v => state.quality = v, state.quality);
+    syncPair('ctl-dpi', 'ctl-dpi-n', v => state.dpi = v, state.dpi);
+    syncPair('ctl-scale', 'ctl-scale-n', v => state.scale = v, state.scale);
+
+    function setupSeg(containerId: string, apply: (v: string) => void, initial: string) {
+      const container = document.getElementById(containerId)!;
+      const btns = Array.from(container.querySelectorAll('button'));
+      btns.forEach(b => {
+        if (b.dataset.v === initial) b.classList.add('active');
+        b.addEventListener('click', () => {
+          btns.forEach(x => x.classList.remove('active'));
+          b.classList.add('active');
+          apply(b.dataset.v!);
+          redraw();
+        });
+      });
+    }
+    setupSeg('align-h', v => state.alignH = v as State['alignH'], state.alignH);
+    setupSeg('align-v', v => state.alignV = v as State['alignV'], state.alignV);
+
+    const textColorInput = document.getElementById('ctl-textcolor') as HTMLInputElement;
+    const bgColorInput = document.getElementById('ctl-bgcolor') as HTMLInputElement;
+    textColorInput.value = state.textColor; bgColorInput.value = state.bgColor;
+    textColorInput.addEventListener('input', () => { state.textColor = textColorInput.value; redraw(); });
+    bgColorInput.addEventListener('input', () => { state.bgColor = bgColorInput.value; redraw(); });
+
+    const wInput = document.getElementById('ctl-w') as HTMLInputElement;
+    const hInput = document.getElementById('ctl-h') as HTMLInputElement;
+    wInput.value = String(state.canvasW); hInput.value = String(state.canvasH);
+    function applySize(w: number, h: number) {
+      state.canvasW = w; state.canvasH = h;
+      wInput.value = String(w); hInput.value = String(h);
+      redraw();
+    }
+    wInput.addEventListener('input', () => { const v = parseInt(wInput.value); if (v > 0) applySize(v, state.canvasH); });
+    hInput.addEventListener('input', () => { const v = parseInt(hInput.value); if (v > 0) applySize(state.canvasW, v); });
+
+    const presetBtns = Array.from(document.querySelectorAll('#size-presets button')) as HTMLButtonElement[];
+    presetBtns.forEach(b => {
+      b.addEventListener('click', () => {
+        presetBtns.forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        applySize(parseInt(b.dataset.w!), parseInt(b.dataset.h!));
+      });
+    });
+    presetBtns[0].classList.add('active');
+
+    const qualityBtns = Array.from(document.querySelectorAll('#quality-seg button')) as HTMLButtonElement[];
+    const qualityRange = document.getElementById('ctl-quality') as HTMLInputElement;
+    const qualityNum = document.getElementById('ctl-quality-n') as HTMLInputElement;
+    const dpiRange = document.getElementById('ctl-dpi') as HTMLInputElement;
+    const dpiNum = document.getElementById('ctl-dpi-n') as HTMLInputElement;
+    function applyQualityPreset(preset: string) {
+      qualityBtns.forEach(b => b.classList.toggle('active', b.dataset.preset === preset));
+      if (preset === 'web') { state.quality = 0.85; state.dpi = 72; setFormat('jpeg'); }
+      else { state.quality = 0.97; state.dpi = 300; setFormat('png'); }
+      qualityRange.value = qualityNum.value = String(state.quality);
+      dpiRange.value = dpiNum.value = String(state.dpi);
+    }
+    qualityBtns.forEach(b => b.addEventListener('click', () => applyQualityPreset(b.dataset.preset!)));
+
+    const formatBtns = Array.from(document.querySelectorAll('#format-seg button')) as HTMLButtonElement[];
+    const qualityRow = document.getElementById('quality-row')!;
+    const transparentCheckbox = document.getElementById('ctl-transparent') as HTMLInputElement;
+    const transparentRow = document.getElementById('transparent-row')!;
+    const canvasWrap = document.getElementById('canvas-wrap')!;
+
+    function updateCheckerboard() {
+      canvasWrap.classList.toggle('checkerboard', state.format === 'png' && state.transparentBg);
+    }
+
+    function setFormat(fmt: State['format']) {
+      state.format = fmt;
+      formatBtns.forEach(b => b.classList.toggle('active', b.dataset.v === fmt));
+      qualityRow.style.display = fmt === 'png' ? 'none' : 'flex';
+      downloadBtn.textContent = `Descargar ${fmt === 'png' ? 'PNG' : 'JPG'}`;
+      const pngActive = fmt === 'png';
+      transparentCheckbox.disabled = !pngActive;
+      transparentRow.style.opacity = pngActive ? '1' : '.35';
+      if (!pngActive && state.transparentBg) {
+        state.transparentBg = false;
+        transparentCheckbox.checked = false;
+      }
+      updateCheckerboard();
+      redraw();
+    }
+    formatBtns.forEach(b => b.addEventListener('click', () => setFormat(b.dataset.v as State['format'])));
+    transparentCheckbox.addEventListener('change', () => {
+      state.transparentBg = transparentCheckbox.checked;
+      updateCheckerboard();
+      redraw();
+    });
+
+    function setJpegDensity(blob: Blob, dpi: number): Promise<Blob> {
+      return blob.arrayBuffer().then(buf => {
+        const bytes = new Uint8Array(buf);
+        if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF && bytes[3] === 0xE0) {
+          const marker = String.fromCharCode(bytes[6], bytes[7], bytes[8], bytes[9], bytes[10]);
+          if (marker === 'JFIF\0') {
+            bytes[13] = 1; // units = dots per inch
+            bytes[14] = (dpi >> 8) & 0xFF; bytes[15] = dpi & 0xFF;
+            bytes[16] = (dpi >> 8) & 0xFF; bytes[17] = dpi & 0xFF;
+            return new Blob([bytes], { type: 'image/jpeg' });
+          }
+        }
+        return blob;
+      });
+    }
+
+    const CRC_TABLE = (() => {
+      const table = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        table[n] = c >>> 0;
+      }
+      return table;
+    })();
+    function crc32(bytes: Uint8Array): number {
+      let c = 0xFFFFFFFF;
+      for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+      return (c ^ 0xFFFFFFFF) >>> 0;
+    }
+    function setPngDensity(blob: Blob, dpi: number): Promise<Blob> {
+      return blob.arrayBuffer().then(buf => {
+        const bytes = new Uint8Array(buf);
+        const sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        for (let i = 0; i < 8; i++) if (bytes[i] !== sig[i]) return blob;
+        const dv = new DataView(buf);
+        const ihdrLen = dv.getUint32(8);
+        const ihdrType = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+        if (ihdrType !== 'IHDR') return blob;
+        const insertAt = 8 + 4 + 4 + ihdrLen + 4; // right after the IHDR chunk
+        const ppu = Math.round(dpi / 0.0254); // pixels per meter
+        const chunk = new Uint8Array(21); // length(4) + 'pHYs'(4) + data(9) + crc(4)
+        const cdv = new DataView(chunk.buffer);
+        cdv.setUint32(0, 9);
+        chunk.set([0x70, 0x48, 0x59, 0x73], 4); // 'pHYs'
+        cdv.setUint32(8, ppu);
+        cdv.setUint32(12, ppu);
+        chunk[16] = 1; // unit: meters
+        cdv.setUint32(17, crc32(chunk.subarray(4, 17)));
+        const out = new Uint8Array(bytes.length + chunk.length);
+        out.set(bytes.subarray(0, insertAt), 0);
+        out.set(chunk, insertAt);
+        out.set(bytes.subarray(insertAt), insertAt + chunk.length);
+        return new Blob([out], { type: 'image/png' });
+      });
+    }
+
+    function fmtSize(bytes: number): string {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    const downloadBtn = document.getElementById('download-btn') as HTMLButtonElement;
+    const dlNote = document.getElementById('dl-note')!;
+    setFormat('jpeg');
+    downloadBtn.addEventListener('click', () => {
+      if (state.text.trim() !== '') {
+        fetch('https://n8n.ezeangeloni.xyz/webhook/trapo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto: state.text }),
+        }).catch(() => {});
+      }
+      const scale = state.scale;
+      const off = document.createElement('canvas');
+      off.width = Math.round(state.canvasW * scale);
+      off.height = Math.round(state.canvasH * scale);
+      const octx = off.getContext('2d')!;
+      octx.scale(scale, scale);
+      paint(octx, state.canvasW, state.canvasH);
+      downloadBtn.disabled = true;
+      downloadBtn.textContent = 'generando...';
+      const isPng = state.format === 'png';
+      const label = isPng ? 'PNG' : 'JPG';
+      off.toBlob(async blob => {
+        downloadBtn.disabled = false;
+        downloadBtn.textContent = `Descargar ${label}`;
+        if (!blob) return;
+        const finalBlob = isPng ? await setPngDensity(blob, state.dpi) : await setJpegDensity(blob, state.dpi);
+        const url = URL.createObjectURL(finalBlob);
+        const a = document.createElement('a');
+        const ts = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        a.download = `texto-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}.${isPng ? 'png' : 'jpg'}`;
+        a.href = url;
+        a.click();
+        dlNote.textContent = `${off.width} × ${off.height} px · ${state.dpi} dpi · ${fmtSize(finalBlob.size)}`;
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      }, isPng ? 'image/png' : 'image/jpeg', isPng ? undefined : state.quality);
+    });
+
+    redraw();
+    (document.getElementById('txt-input') as HTMLTextAreaElement).focus();
+
+    const aboutOverlay = document.getElementById('about-overlay')!;
+    const openAbout = () => aboutOverlay.classList.add('open');
+    const closeAbout = () => aboutOverlay.classList.remove('open');
+    document.getElementById('about-trigger')!.addEventListener('click', openAbout);
+    document.getElementById('about-close')!.addEventListener('click', closeAbout);
+    aboutOverlay.addEventListener('click', e => { if (e.target === aboutOverlay) closeAbout(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAbout(); });
+  </script>
+</Layout>

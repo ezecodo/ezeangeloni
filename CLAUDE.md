@@ -142,12 +142,30 @@ Region times are stored in **original-time** (so changing master trim doesn't br
 - **Click on an existing region in the waveform** = highlight (pink glow) its row in the list below + scroll it into view
 - **Click on a row in the list** (in the empty area, not on inputs) = same highlight + seek the play cursor to that region's start
 - Drag the body of an existing region = move it; drag the edges = resize (handled natively by WaveSurfer)
-- Coordinate calibration: on first WaveSurfer click, captures `(clientX, relativeX)` to lock the wave's true left/width in client coords; subsequent drag math is exact regardless of internal padding/shadow-DOM layout
+- Region's `start`/`end` are stored in original-time (pre-trim); the on-screen position is `original - trimOffset`
 
 **Coordinate notes for future work on the editor**:
 - WaveSurfer 7 renders into a shadow DOM inside the first child of the container; `wsRoot.getBoundingClientRect()` is NOT reliably the wave's actual bounds
-- Prefer `ws.renderer.wrapper` / `ws.renderer.scrollContainer` if accessible, else fall back to the click-calibration approach (see `installManualDragSelect` in `public/admin/index.html`)
+- Use `ws.renderer.wrapper` (full wave width, position shifts with scroll) for converting clientX → time. Falls back to `scrollContainer` (with `scrollLeft` + `scrollWidth` math) and then shadow-DOM probing. See `getTimeAt()` inside `installManualDragSelect` in `public/admin/index.html`
 - Pointer capture is delayed until the drag-threshold (4px) is crossed — captures during pure clicks would block WaveSurfer's seek behavior
+- Pure click without movement = explicit `ws.seekTo(...)` call, since pointer capture (if it had been set) blocks WaveSurfer's own click-to-seek
+
+**Trackpad / scroll gestures on the waveform**:
+- **Pinch (wheel + ctrlKey)** → smooth multiplicative zoom (`Math.exp(-deltaY * 0.012)`); also handles Safari's legacy `gesturestart/change/end` events
+- **Two-finger horizontal scroll** → seeks the playhead through the audio (NOT just panning the view). Sensitivity scales with current px/sec so zoomed-in scrubbing is fine-grained while zoomed-out scrolling jumps faster. The view auto-pans to keep the playhead visible (margin 15%) when zoomed
+- Zoom range clamped 0–800 px/sec; double-click on knobs resets to default
+
+**BPM + key detection** (lazy-loaded, only when "🎯 detect" is clicked):
+- **BPM**: `web-audio-beat-detector` (esm.sh, ~30KB). Calls `guess()` for `{ bpm, offset }`; falls back to `analyze()` for just the BPM. Result populates the BPM and offset fields, auto-enables the grid overlay
+- **Key**: in-house chromagram + Albrecht-Shanahan (2013) profiles + bass-region weighting (2.2× for 60–260Hz). Uses `fft.js` (esm.sh, ~3KB) for FFT, then correlates against the 24 major/minor profiles. Returns the best match plus top alternatives — a `↻` button next to the key field cycles through them
+- Both detections work in browser only; nothing about BPM or key is computed server-side
+- BPM, offset, and key are persisted in `edits.bpm` / `edits.bpmOffset` / `edits.musicalKey` and shown in the public player overlay (e.g. `2026-05-13 · 124.0 BPM · A minor`) so a venue/festival opening a share link sees the musical context at a glance
+
+**Beat grid overlay** (canvas on top of the waveform):
+- Toggle "show grid" in the tempo bar
+- Lines computed as `60 / bpm` seconds apart from the offset; every 4th line is a cyan "downbeat" (assumes 4/4)
+- Re-rendered on `ws.zoom`, `ws.scroll`, `ws.redraw`, BPM/offset input change, and window resize
+- It's pure math from the two inputs — accuracy depends on the user picking the right BPM + offset. For multi-tempo DJ sets the line-up drifts across the set (single-BPM assumption)
 
 **sets.json schema:**
 ```json
@@ -168,6 +186,7 @@ Region times are stored in **original-time** (so changing master trim doesn't br
         "compressor": "",
         "eqLow": 0, "eqMid": 0, "eqHigh": 0,
         "reverb": 0, "stereoWidth": 0, "delayAmount": 0, "delayTime": 300,
+        "bpm": 124.0, "bpmOffset": 0.32, "musicalKey": "A minor",
         "volumeRegions": [],
         "effectRegions": [
           { "type": "volume", "start": 30, "end": 45, "params": { "gainDb": -6 } },
