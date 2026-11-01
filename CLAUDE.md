@@ -1,7 +1,23 @@
 # Eze Angeloni Landing — Project Notes
 
 ## Stack
-Astro 5 static site, single page (`src/pages/index.astro`). Whole UX is one big canvas-based scene with floating bubbles that surface content: photos, frases, DJ sets, plus `about` and `message` modals.
+Astro 5 static site, single page (`src/pages/index.astro`). The whole UX is the **Cronovisor**, a 3D constellation of the archive (the name and "pasado observado" come from Eze's own frases of 2026-08-07). Built on Three.js, the only runtime dependency besides Astro: it's bundled by the build and served from the VPS, so it doesn't break the self-hosted positioning.
+
+`astro dev` proxies `/frases.json`, `/sets.json`, `/images` and `/sets/` to production (see `astro.config.mjs`), so local shows the real content. It does not affect the build.
+
+## Cronovisor
+
+- **Stations**: `buildStations()` merges frases and sets by date. `n` is the archive number (oldest = 1) and is the share link (`#013`), so numbers only shift if something is inserted in the past. Station 0 is the logo, at the origin. New content needs no code: it appears from the JSON.
+- **Distance is time**: `layout()` puts months as clusters on a spiral, newest near the centre, deterministic per `n` (seeded RNG) so the map is stable. A relaxation pass keeps plates apart.
+- **Pieces** are billboarded planes with a custom shader: far away they are halftone signals in their tint, approaching or hovering resolves them to the original. Thumbnails (384px) stream in; `loadHi` swaps in full resolution for the focused piece and its neighbours.
+- **Frases** are drawn to square canvases (`renderCard`/`fitText`, as big as the plate allows). Every third (`n % 3 === 0`) is a full-colour plate. `#now` is the aria-live text equivalent.
+- **Atmosphere**: procedural nebula, stars, dust around the pieces, and `buildThread()`: one curve through the chronology with pulses running along it.
+- **Post**: `UnrealBloomPass` plus a `lens` pass (radial blur and chroma during flights, grain, vignette). Rule: `calm` takes all of it to zero at a focused piece, so a photo is always shown untouched. If bloom is raised, check it doesn't burn the plates (`uGain` keeps them under the threshold).
+- **Navigation**: orbit and zoom with `OrbitControls` (slow auto-rotate when idle); click/tap flies to a piece (`focusOn`). In focus: arrows, wheel, horizontal swipe or `j`/`k` step through time, Esc / `← all` / click outside goes back (`backOut`).
+- **Sound**: hover and arrival play notes from `NOTES`, flights carry band-passed noise. Starts on first click/key (browser rule), `m` or the `sound` button mutes, persisted in localStorage. Key `1` still plays Redemption Song.
+- **Scan** button: guided tour piece by piece, any input stops it. **Index** (`i`): contact sheet of the whole archive.
+- `prefers-reduced-motion` gets cuts instead of flights and no auto-rotate. Slow devices drop bloom and resolution automatically (`lowPower`). Without WebGL the contact sheet is the whole site.
+- Styles are `is:global` on purpose: much of the DOM is created from JS and Astro's scoping would skip it.
 
 ## Deploy
 
@@ -48,18 +64,17 @@ The landing fetches `sets.json` at runtime, so no rebuild needed when adding set
 
 ## How the audio player works
 
-- Each entry in `sets.json` claims one "spare slot" in the bubble grid, marked `__set__` in `LABELS`.
-- Set bubbles render with a pink→purple gradient stroke, two breathing concentric rings, and a ▶ triangle.
-- Tap/click opens an overlay with a custom player: play/pause, gradient seek bar with buffer indicator, time, copy-link button.
-- `?set=<slug>` URL param auto-opens the matching set on page load — that's the share link.
+- Each entry in `sets.json` is a piece placed by date: pink→purple plate with the title (or its artwork as a photo), larger than the rest and ringed in pink.
+- The round "play set" button opens a sheet with the custom player: play/pause, gradient seek bar with buffer indicator, time, copy-link button.
+- `?set=<slug>` URL param goes straight to the set and opens the player on load — that's the share link.
 - Playback position is saved to `localStorage` per slug; reopening picks up where you left.
 
 ## Aesthetic conventions
 - Background `#080810`, text `#f0ede8`, muted `rgba(240,237,232,0.3)`
-- Fonts: Cormorant Garamond (serif, italic, light) for titles; DM Mono (monospace, uppercase, wide letter-spacing) for UI labels and metadata
-- Modals: glassmorphism (rgba bg + backdrop-filter blur), 16px rounded corners
+- Fonts: Cormorant Garamond (serif, italic, light) for titles and frases; DM Mono (monospace, uppercase, wide letter-spacing) for UI labels and metadata
+- Sheets: full-screen, opaque, hard-edged, huge italic title. No glass, no rounded cards
 - Color palette: `['#ff3f3f','#ff9f1c','#6ef9f5','#b8f75b','#c77dff','#ff6eb4','#38bdf8','#ffd166']`
-- Bubble color cues: photos = cyan `#38bdf8`, sets = pink/purple `#ff6eb4`/`#c77dff`, message = yellow `#ffd166`
+- Station tint: `COLORS[n % 8]`; sets are always pink/purple `#ff6eb4`/`#c77dff`
 
 ## Why this exists
 
@@ -206,7 +221,7 @@ Region times are stored in **original-time** (so changing master trim doesn't br
 
 This used to live here as `/tu-trapo`. As of 2026-07-22 it's its own standalone project — separate repo (`ezecodo/trapos`), separate deploy, own domain `trapos.xyz`. Full history/notes are in that project's own `CLAUDE.md` (`~/Desktop/dev/trapos/CLAUDE.md`).
 
-All that's left of it here: the floating "Fábrica de trapos" button on the landing (`#trapo-fab` in `index.astro`, drifts around the screen like the bubbles, bounces off edges) links out to `https://trapos.xyz`. It still uses the same `MalvinasSans-Regular.otf` (kept in `public/fonts/` here too, just for that button's own text rendering) — don't delete that font file thinking it's unused leftover cruft.
+All that's left of it here: the floating "Fábrica de trapos" link on the landing (`#trapo-fab` in `index.astro`, drifts around the screen, bounces off edges) links out to `https://trapos.xyz`. It still uses the same `MalvinasSans-Regular.otf` (kept in `public/fonts/` here too, just for that button's own text rendering) — don't delete that font file thinking it's unused leftover cruft.
 
 ## Future
 - Telegram bot integration (n8n workflow) calling `POST /api/sets` from the existing bot, so sets can be uploaded via Telegram like frases.
