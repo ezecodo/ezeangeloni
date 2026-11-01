@@ -66,21 +66,30 @@ import Layout from '../layouts/Layout.astro';
       #about-body { columns: 2 22rem; column-gap: 3rem; max-width: 62rem; }
       #about-body p { font-size: .85rem; line-height: 1.9; color: rgba(240,237,232,0.85); margin-bottom: 1.2rem; break-inside: avoid; }
 
-      #msg-form, #msg-thanks { max-width: 56rem; }
-      #msg-box .subtitle { font-size: .72rem; color: var(--muted); letter-spacing: .16em; text-transform: uppercase; margin-bottom: 2rem; }
-      #msg-input { width: 100%; background: none; border: none; border-bottom: 1px solid rgba(240,237,232,0.3); color: var(--text); font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(1.6rem,4vw,3rem); line-height: 1.25; padding: .4rem 0; resize: none; outline: none; cursor: none; }
-      #msg-input:focus { border-color: var(--text); }
-      #msg-input::placeholder { color: rgba(240,237,232,0.25); }
-      #msg-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+      #ship-tag { position: fixed; top: 0; left: 0; z-index: 12; font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; white-space: nowrap; padding: .5rem .7rem; opacity: 0; pointer-events: none; transition: opacity .3s; text-shadow: 0 0 10px rgba(8,8,16,.9); }
+      #ship-tag.show { opacity: 1; pointer-events: auto; }
+      #ship-tag.hot { color: #fff; }
+      #ship-tag:focus-visible { opacity: 1; pointer-events: auto; transform: translate(1.4rem, 3.6rem) !important; }
+      body.no3d #ship-tag { opacity: 1; pointer-events: auto; z-index: 101; transform: translate(1rem, .6rem); }
+      #cockpit { position: fixed; inset: 0 0 auto 0; z-index: 20; padding: clamp(3.8rem,9vh,6rem) 1.4rem 1rem; display: flex; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .5s; background: linear-gradient(rgba(8,8,16,.72) 55%, transparent); }
+      #cockpit.open { opacity: 1; pointer-events: auto; }
+      #cockpit.flat { z-index: 110; bottom: 0; background: var(--bg); }
+      #msg-box { width: min(56rem, 100%); }
+      #msg-box .subtitle { font-size: .7rem; color: var(--muted); letter-spacing: .16em; text-transform: uppercase; margin-bottom: 1rem; }
+      #msg-input { width: 100%; background: none; border: none; color: var(--text); font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(1.7rem,4.2vw,3.2rem); line-height: 1.15; padding: .2rem 0; resize: none; outline: none; cursor: none; caret-color: #6ef9f5; }
+      #msg-input::placeholder { color: rgba(240,237,232,0.28); }
+      #msg-footer { display: flex; justify-content: space-between; align-items: center; margin-top: .8rem; }
       #word-count { font-size: .72rem; color: var(--muted); letter-spacing: .1em; }
       #word-count.full { color: #b8f75b; }
       #word-count.over { color: #ff3f3f; }
-      #msg-send { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; padding: .7rem 1.4rem; border: 1px solid var(--text); transition: background .15s, color .15s; }
-      #msg-send:hover:not(:disabled) { background: var(--text); color: var(--bg); }
+      #msg-send { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; padding: .7rem 1.6rem; border: 1px solid #6ef9f5; color: #6ef9f5; transition: background .15s, color .15s; }
+      #msg-send:hover:not(:disabled) { background: #6ef9f5; color: var(--bg); }
       #msg-send:disabled { opacity: .3; }
       #msg-thanks { display: none; }
-      #msg-thanks p { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(3rem,10vw,8rem); margin-bottom: .8rem; }
+      #msg-thanks p { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(2.6rem,8vw,6rem); margin-bottom: .6rem; }
       #msg-thanks small { font-size: .72rem; color: var(--muted); letter-spacing: .1em; }
+      body.aboard #hud, body.aboard #trapo-fab { opacity: 0; pointer-events: none; }
+      body.aboard #hud * { pointer-events: none; }
 
       #index-grid { columns: 5 200px; column-gap: 10px; }
       .cell { display: block; width: 100%; margin-bottom: 10px; break-inside: avoid; text-align: left; position: relative; transition: opacity .15s; }
@@ -158,7 +167,6 @@ import Layout from '../layouts/Layout.astro';
         <button id="btn-scan" aria-pressed="false">scan</button>
         <button id="btn-index">index</button>
         <button id="btn-about">about</button>
-        <button id="btn-msg">transmit</button>
         <button id="btn-sound" aria-pressed="true">sound</button>
       </nav>
     </header>
@@ -179,16 +187,16 @@ import Layout from '../layouts/Layout.astro';
     <div id="index-grid"></div>
   </div>
 
-  <div id="msg-sheet" class="sheet">
-    <button class="close" id="msg-close">close ✕</button>
+  <button id="ship-tag">leave a word</button>
+  <div id="cockpit">
+    <button class="close" id="msg-close">leave ship ✕</button>
     <div id="msg-box">
       <div id="msg-form">
-        <h2>Leave a word</h2>
-        <p class="subtitle">exactly 11 words. make them count.</p>
+        <p class="subtitle">this ship carries exactly 11 words. make them count.</p>
         <textarea id="msg-input" rows="3" placeholder="eleven words, no more, no less..."></textarea>
         <div id="msg-footer">
           <span id="word-count">0 / 11</span>
-          <button id="msg-send" disabled>send</button>
+          <button id="msg-send" disabled>launch</button>
         </div>
       </div>
       <div id="msg-thanks">
@@ -586,6 +594,7 @@ import Layout from '../layouts/Layout.astro';
       });
       buildThread();
       buildDust();
+      buildShip();
       cards();
       queuePhotos();
     }
@@ -773,7 +782,7 @@ import Layout from '../layouts/Layout.astro';
     const look = new THREE.Vector3();
     const overviewPos = new THREE.Vector3();
     const hint = $('hint'), lamp = $('lamp'), metaId = $('meta-id'), metaCap = $('meta-cap'), nowEl = $('now'), act = $('act');
-    const btnScan = $('btn-scan'), btnBack = $('btn-back');
+    const btnScan = $('btn-scan'), btnBack = $('btn-back'), shipTag = $('ship-tag'), cockpit = $('cockpit');
     function anyOpen(){ return !!document.querySelector('.sheet.open'); }
 
     function syncScan(){
@@ -833,6 +842,340 @@ import Layout from '../layouts/Layout.astro';
       url.hash = String(p.st.n).padStart(3,'0');
       history.replaceState(null, '', url.toString());
     }
+    // ── Ship ──────────────────────────────────────────────
+    // The message carrier: patrols the limbo with one cargo light per word, leaves when it holds eleven.
+    interface Ship {
+      group: THREE.Group; engine: THREE.Mesh; lamps: THREE.MeshBasicMaterial[][]; trail: THREE.Line;
+      tau: number; up: THREE.Vector3; peek: number; peekFrom: number; mode: 'cruise' | 'board' | 'parked' | 'launch' | 'away';
+      spawn: number; t0: number; p0: THREE.Vector3; ctrl: THREE.Vector3; v: number; dir: THREE.Vector3; lit: number; over: boolean; sx: number; sy: number; onScreen: boolean;
+    }
+    let ship: Ship | null = null, boarded = false, hoverShip = false;
+    let burst: THREE.Points | null = null, shock: THREE.Mesh | null = null;
+    let impactAt = 0, logoPulse = 0, delivering = false;
+    const BURST = 330, DELIVERY = 2.7;
+    const TRAIL = 170, SHIP_SCALE = 1;
+    // Cruising, the ship lives in this rig glued to the camera: orbiting and zooming the universe never move it.
+    const rig = new THREE.Group();
+    scene.add(rig);
+    const HULL: [number, number][] = [[0,5.4],[.3,4.5],[.62,3],[.86,.8],[.92,-1.4],[.76,-2.9],[.52,-3.5]];
+    const hullR = (z: number) => {
+      for(let i = 1; i < HULL.length; i++){
+        if(z >= HULL[i][1]){
+          const [r0,z0] = HULL[i-1], [r1,z1] = HULL[i];
+          return r1 + (r0-r1)*(z-z1)/(z0-z1);
+        }
+      }
+      return .5;
+    };
+    function buildShip(){
+      const group = new THREE.Group();
+      const ink = new THREE.LineBasicMaterial({ color:0xf0ede8 });
+      const shell = new THREE.MeshBasicMaterial({ color:0x0b0b16, polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1 });
+      const add = (geo: THREE.BufferGeometry, angle = 18) => {
+        group.add(new THREE.Mesh(geo, shell));
+        group.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, angle), ink));
+      };
+      const hull = new THREE.LatheGeometry(HULL.map(([r,z]) => new THREE.Vector2(r, z)), 8);
+      hull.rotateX(Math.PI/2);
+      hull.rotateZ(Math.PI/8);
+      add(hull);
+      const fin = new THREE.Shape();
+      fin.moveTo(0,.6); fin.lineTo(1.1,-1.2); fin.lineTo(2.5,-4.6); fin.lineTo(1.5,-4.1); fin.lineTo(0,-3.2); fin.closePath();
+      for(let k = 0; k < 3; k++){
+        const g = new THREE.ExtrudeGeometry(fin, { depth:.05, bevelEnabled:false });
+        g.rotateX(Math.PI/2);
+        g.rotateY(0);
+        g.translate(0, 0, 0);
+        g.rotateZ(Math.PI/2 + k*Math.PI*2/3);
+        add(g, 30);
+      }
+      const ring = new THREE.TorusGeometry(.62, .1, 6, 16);
+      ring.translate(0, 0, -3.5);
+      add(ring, 40);
+      const lampGeo = new THREE.SphereGeometry(.13, 8, 8);
+      const lamps: THREE.MeshBasicMaterial[][] = [];
+      for(let k = 0; k < 11; k++){
+        const z = 3.1 - k*.56, r = hullR(z)*1.03;
+        const row = [1,-1].map(side => {
+          const m = new THREE.MeshBasicMaterial({ color:new THREE.Color(COLORS[k % COLORS.length]) });
+          const mesh = new THREE.Mesh(lampGeo, m);
+          mesh.position.set(side*r, 0, z);
+          group.add(mesh);
+          return m;
+        });
+        lamps.push(row);
+      }
+      const engine = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map:SPRITE, color:0x6ef9f5, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
+      engine.position.z = -3.9;
+      group.add(engine);
+      group.scale.setScalar(SHIP_SCALE);
+      rig.add(group);
+
+      const pts = new Float32Array(TRAIL*3), col = new Float32Array(TRAIL*3);
+      for(let i = 0; i < TRAIL; i++){
+        const f = Math.pow(1-i/TRAIL, 2)*.9;
+        col.set([.43*f, .98*f, .96*f], i*3);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const trail = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
+      trail.frustumCulled = false;
+      rig.add(trail);
+
+      // what the logo gives back on arrival: a shockwave and the colours of the eleven lights
+      const dirs = new Float32Array(BURST*3), tints = new Float32Array(BURST*3);
+      for(let i = 0; i < BURST; i++){
+        const u = rnd(0, Math.PI*2), v = Math.acos(rnd(-1, 1)), r = rnd(12, 60);
+        dirs.set([Math.sin(v)*Math.cos(u)*r, Math.cos(v)*r, Math.sin(v)*Math.sin(u)*r], i*3);
+        tints.set(hexRgb(COLORS[i % COLORS.length]), i*3);
+      }
+      const burstGeo = new THREE.BufferGeometry();
+      burstGeo.setAttribute('position', new THREE.BufferAttribute(dirs, 3));
+      burstGeo.setAttribute('color', new THREE.BufferAttribute(tints, 3));
+      burst = new THREE.Points(burstGeo, new THREE.PointsMaterial({ size:1.1, map:SPRITE, vertexColors:true, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
+      burst.visible = false;
+      scene.add(burst);
+      shock = new THREE.Mesh(new THREE.RingGeometry(.975, 1, 128), new THREE.MeshBasicMaterial({ color:0xf0ede8, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide }));
+      shock.visible = false;
+      scene.add(shock);
+      billboards.push(shock);
+
+      ship = { group, engine, lamps, trail, tau:rnd(0, 400), up:new THREE.Vector3(0,1,0), peek:0, peekFrom:0, mode:'cruise', spawn:0, t0:0, p0:new THREE.Vector3(), ctrl:new THREE.Vector3(), v:0, dir:new THREE.Vector3(0,0,1), lit:0, over:false, sx:0, sy:0, onScreen:false };
+      resetTrail();
+    }
+    // Its own route, in view space: incommensurate waves, so it never repeats and always stays in frame.
+    function route(tau: number){
+      const depth = 94 + 16*Math.sin(tau*.067+2);
+      const hh = depth*Math.tan(camera.fov*Math.PI/360), hw = hh*camera.aspect;
+      const x = (Math.sin(tau*.113) + .4*Math.sin(tau*.047+1))/1.4;
+      const y = (Math.sin(tau*.081+1) + .4*Math.sin(tau*.037))/1.4;
+      return new THREE.Vector3(x*hw*.8, y*hh*.66, -depth);
+    }
+    function placeShip(){
+      if(!ship) return;
+      const p = route(ship.tau), t = route(ship.tau+.2).sub(p).normalize();
+      ship.group.position.copy(p);
+      ship.up.addScaledVector(t, -ship.up.dot(t)).normalize(); // carried along, so it never flips at a vertical turn
+      ship.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(p.clone().add(t), p, ship.up));
+      ship.dir.copy(t);
+    }
+    // While a piece is open the ship slides out from behind it and waits, nose towards open space.
+    function peekOut(s: Ship, e: number, now: number){
+      const p = pieces[s.peekFrom];
+      const dist = camera.position.distanceTo(p.mesh.position), D = dist+5, ratio = D/dist;
+      const wide = camera.aspect >= 1.05;
+      const at = wide ? new THREE.Vector3(p.w/2*ratio + 1.2, .4, -D) : new THREE.Vector3(.5, -(p.h/2*ratio + 1.7), -D);
+      at.x += Math.sin(now*.0011)*.16;
+      at.y += Math.sin(now*.0016)*.24;
+      const from = focused >= 0 ? new THREE.Vector3(0, 0, -D) : s.group.position.clone();
+      const nose = new THREE.Vector3(.84, wide ? .5 : .3, -.25).normalize();
+      const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(at.clone().add(nose), at, new THREE.Vector3(0,1,0)));
+      s.group.position.lerpVectors(from, at, e);
+      if(focused >= 0) s.group.quaternion.copy(q); else s.group.quaternion.slerp(q, e);
+    }
+    function resetTrail(){
+      if(!ship) return;
+      placeShip();
+      const { trail, group } = ship;
+      trail.position.set(0,0,0); trail.quaternion.identity(); trail.scale.set(1,1,1);
+      const p = trail.geometry.attributes.position as THREE.BufferAttribute;
+      for(let i = 0; i < TRAIL; i++) p.setXYZ(i, group.position.x, group.position.y, group.position.z);
+      p.needsUpdate = true;
+    }
+    function setLit(words: number){
+      if(!ship) return;
+      const lit = Math.min(words, 11), over = words > 11;
+      if(lit > ship.lit && !over) playNote(NOTES[(lit-1) % NOTES.length]*(lit === 11 ? 2 : 1));
+      ship.lit = lit;
+      ship.over = over;
+    }
+    function updateShip(now: number, dt: number){
+      if(!ship) return 0;
+      const s = ship;
+      const hidden = s.mode === 'away' || (focused >= 0 && s.mode !== 'cruise');
+      s.group.visible = !hidden;
+      s.trail.visible = focused < 0 && s.peek < .05;
+      camera.updateMatrixWorld(); // the screen label must read this frame's camera, not the last one
+      rig.position.copy(camera.position);
+      rig.quaternion.copy(camera.quaternion);
+      rig.updateMatrixWorld(true);
+      let energy = 0;
+      if(s.mode === 'cruise'){
+        if(!reduced) s.tau += dt;
+        placeShip();
+        const grow = Math.min(1, (now-s.spawn)/900);
+        const want = focused >= 0 && !flight ? 1 : 0;
+        s.peek += (want-s.peek)*(1-Math.exp(-dt*(want ? 2.4 : 2.8)));
+        if(!want && s.peek < .002) s.peek = 0;
+        if(focused >= 0) s.peekFrom = focused;
+        const e = s.peek*s.peek*(3-2*s.peek);
+        if(s.peek > 0) peekOut(s, e, now);
+        s.group.scale.setScalar(SHIP_SCALE*(1-Math.pow(1-grow, 3))*(1-e*.56));
+      } else if(s.mode === 'launch'){
+        // the message is for Eze: a banked run across the universe straight into the logo
+        const e = (now-s.t0)/1000, k = Math.min(1, e/DELIVERY), q = reduced ? 1 : Math.pow(k, 2.3), r = 1-q;
+        const pos = s.p0.clone().multiplyScalar(r*r).addScaledVector(s.ctrl, 2*r*q);
+        const tan = s.ctrl.clone().multiplyScalar(2*r-2*q).addScaledVector(s.p0, -2*r);
+        s.group.position.copy(pos);
+        if(tan.lengthSq() > 1e-4) s.group.lookAt(pos.clone().add(tan));
+        const size = SHIP_SCALE*(1-Math.max(0, (k-.74)/.26));
+        s.group.scale.set(size, size, size*(1 + k*k*3.2));
+        energy = Math.sin(Math.PI*k)*.6;
+        if(k >= 1 || reduced) impact(now);
+      } else if(s.mode === 'away' && !boarded && now-s.t0 > 5000){
+        s.mode = 'cruise';
+        s.lit = 0; s.over = false; s.v = 0; s.spawn = now;
+        rig.attach(s.group);
+        rig.attach(s.trail);
+        s.group.rotation.set(0,0,0);
+        s.tau += 20; // comes back somewhere else
+        resetTrail();
+      }
+      if(impactAt){
+        const e = (now-impactAt)/1000;
+        logoPulse = Math.exp(-e*1.5);
+        energy = Math.max(energy, Math.exp(-e*4)*.9);
+        if(burst && shock){
+          const grow = 1-Math.exp(-e*2.2);
+          burst.scale.setScalar(grow + .02);
+          (burst.material as THREE.PointsMaterial).opacity = Math.max(0, 1-e/2.6);
+          shock.scale.set(2 + grow*90, 2 + grow*90, 1);
+          (shock.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1-e/1.5);
+          if(e > 2.6){ burst.visible = false; shock.visible = false; impactAt = 0; logoPulse = 0; }
+        }
+      }
+      const idle = s.mode === 'cruise' ? Math.floor(now*.006) % 11 : -1;
+      s.lamps.forEach((row, k) => row.forEach(m => {
+        const c = s.over ? hexRgb('#ff3f3f') : hexRgb(COLORS[k % COLORS.length]);
+        const on = s.over ? (Math.floor(now*.008) % 2 ? 1.4 : .2) : k < s.lit ? 1.7 : k === idle ? 1 : .1;
+        m.color.setRGB(c[0]*on, c[1]*on, c[2]*on);
+      }));
+      const full = s.lit === 11 && !s.over;
+      const power = s.mode === 'launch' ? 9 : full ? 3.6 : 1.5;
+      const flame = power*(1 + .16*Math.sin(now*.05) + .08*Math.sin(now*.083));
+      s.engine.scale.set(flame, flame, 1);
+      s.engine.quaternion.copy(s.group.quaternion).invert().multiply(camera.quaternion);
+
+      const p = s.trail.geometry.attributes.position as THREE.BufferAttribute;
+      (p.array as Float32Array).copyWithin(3, 0, (TRAIL-1)*3);
+      const at = s.group.getWorldPosition(new THREE.Vector3());
+      const tip = s.trail.worldToLocal(at.clone());
+      p.setXYZ(0, tip.x, tip.y, tip.z);
+      if(s.peek > .05) for(let i = 1; i < TRAIL; i++) p.setXYZ(i, tip.x, tip.y, tip.z); // no trail while waiting
+      p.needsUpdate = true;
+
+      const v = at.project(camera);
+      s.sx = (v.x+1)/2*window.innerWidth;
+      s.sy = (1-v.y)/2*window.innerHeight;
+      s.onScreen = v.z < 1 && Math.abs(v.x) < .96 && Math.abs(v.y) < .9;
+      const waiting = focused >= 0 && s.peek > .6;
+      const show = s.onScreen && s.mode === 'cruise' && (focused < 0 || waiting) && !boarded && !flight;
+      shipTag.classList.toggle('show', show);
+      const label = focused >= 0 ? 'keep travelling' : 'leave a word';
+      if(shipTag.textContent !== label) shipTag.textContent = label;
+      if(show){
+        const x = Math.max(76, Math.min(window.innerWidth-76, s.sx));
+        shipTag.style.transform = `translate(${x}px, ${s.sy}px) translate(-50%, ${waiting ? 52 : 34}px)`;
+      }
+      return energy;
+    }
+    function board(){
+      if(boarded) return;
+      touched();
+      if(!renderer || !ship){ cockpit.classList.add('flat', 'open'); boarded = true; resetForm(); return; }
+      if(focused >= 0) backOutNow();
+      boarded = true;
+      hoverShip = false;
+      ship.mode = 'board';
+      ship.peek = 0;
+      ship.group.scale.setScalar(SHIP_SCALE);
+      resetForm();
+      if(controls){ controls.enabled = false; overviewPos.copy(camera.position); }
+      // from here on it's a physical object in the universe, parked where you caught it
+      scene.attach(ship.group);
+      scene.attach(ship.trail);
+      ship.group.getWorldDirection(ship.dir);
+      const p = ship.group.position, t = ship.dir;
+      const side = t.clone().cross(new THREE.Vector3(0,1,0)).normalize();
+      if(side.dot(camera.position.clone().sub(p)) < 0) side.negate();
+      const up = side.clone().cross(t).normalize();
+      if(up.y < 0) up.negate();
+      const d = 17.4*Math.max(1, Math.pow(1.2/camera.aspect, .5));
+      document.body.classList.add('aboard');
+      flyTo(p.clone().addScaledVector(side, d).addScaledVector(up, 1.6), p.clone().addScaledVector(up, 4.4), 1900, () => {
+        cockpit.classList.add('open');
+        setTimeout(() => msgInput.focus(), 200);
+      });
+    }
+    function backOutNow(){
+      const p = pieces[focused];
+      p.mat.depthTest = true;
+      p.mesh.renderOrder = 0;
+      focused = -1;
+      document.body.classList.remove('focus');
+      btnBack.hidden = true;
+      showMeta(0);
+    }
+    function leaveShip(){
+      if(!boarded) return;
+      boarded = false;
+      cockpit.classList.remove('open', 'flat');
+      document.body.classList.remove('aboard');
+      if(!renderer || !ship) return;
+      const stayed = ship.mode === 'board';
+      if(stayed){ ship.mode = 'parked'; setLit(0); }
+      flyTo(overviewPos.clone(), CENTER.clone(), 1700, () => {
+        if(controls){ controls.target.copy(CENTER); controls.enabled = true; }
+        if(stayed && ship){ ship.mode = 'away'; ship.t0 = performance.now()-3800; }
+      });
+    }
+    function impact(now: number){
+      if(!ship) return;
+      ship.mode = 'away';
+      ship.t0 = now;
+      impactAt = now;
+      logoPulse = 1;
+      if(burst && shock && !reduced){ burst.visible = true; shock.visible = true; }
+      if(audioCtx && masterGain){
+        const t = audioCtx.currentTime, osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(130, t);
+        osc.frequency.exponentialRampToValueAtTime(34, t+.9);
+        g.gain.setValueAtTime(1.3, t);
+        g.gain.exponentialRampToValueAtTime(.001, t+1.1);
+        osc.connect(g); g.connect(masterGain);
+        osc.start(t); osc.stop(t+1.1);
+      }
+      for(let k = 0; k < 11; k++) setTimeout(() => playNote(NOTES[k % NOTES.length]*2), 90 + k*85); // the eleven words, one last time
+    }
+    function launch(){
+      msgForm.style.display = 'none';
+      delivering = true;
+      if(ship){
+        ship.mode = 'launch';
+        ship.t0 = performance.now();
+        ship.p0.copy(ship.group.position);
+        ship.ctrl.copy(ship.p0).addScaledVector(ship.dir, 34).add(new THREE.Vector3(0, -8, 0));
+        // pull back to watch it land: the logo sits low in frame, under the thank-you
+        const side = ship.p0.lengthSq() > 1 ? ship.p0.clone().normalize() : new THREE.Vector3(0, 0, 1);
+        flyTo(side.multiplyScalar(50).add(new THREE.Vector3(0, 7, 0)), new THREE.Vector3(0, 6, 0), DELIVERY*1000-300);
+      }
+      if(audioCtx && masterGain){
+        const t = audioCtx.currentTime, osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(55, t);
+        osc.frequency.exponentialRampToValueAtTime(1400, t+DELIVERY);
+        g.gain.setValueAtTime(.001, t);
+        g.gain.exponentialRampToValueAtTime(.42, t+DELIVERY-.1);
+        g.gain.exponentialRampToValueAtTime(.001, t+DELIVERY+.05);
+        osc.connect(g); g.connect(masterGain);
+        osc.start(t); osc.stop(t+DELIVERY+.05);
+      }
+      setTimeout(() => { msgThanks.style.display = 'block'; }, DELIVERY*1000+500);
+      setTimeout(() => { delivering = false; leaveShip(); }, DELIVERY*1000+4300);
+    }
+
     function backOut(){
       if(focused < 0) return;
       const p = pieces[focused];
@@ -891,9 +1234,11 @@ import Layout from '../layouts/Layout.astro';
       if(!press) return;
       const dx = e.clientX-press.x, dy = e.clientY-press.y, quick = performance.now()-press.t < 500;
       press = null;
-      if(e.target !== screen) return;
+      if(e.target !== screen || boarded) return;
       if(focused >= 0 && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)){ stepFocus(dx < 0 ? 1 : -1); return; }
       if(Math.hypot(dx, dy) > 7 || !quick) return;
+      if(focused < 0 && ship && ship.mode === 'cruise' && Math.hypot(e.clientX-ship.sx, e.clientY-ship.sy) < 56){ board(); return; }
+      if(focused >= 0 && ship && ship.peek > .5 && Math.hypot(e.clientX-ship.sx, e.clientY-ship.sy) < 64){ backOut(); return; }
       setNdc(e);
       const i = pick();
       if(focused < 0){ if(i > 0) focusOn(i); }
@@ -901,7 +1246,7 @@ import Layout from '../layouts/Layout.astro';
     });
     screen.addEventListener('wheel', e => {
       touched();
-      if(focused < 0) return;
+      if(focused < 0 || boarded) return;
       const now = performance.now();
       if(now-wheelAt < 650 || Math.abs(e.deltaY)+Math.abs(e.deltaX) < 8) return;
       wheelAt = now;
@@ -911,10 +1256,12 @@ import Layout from '../layouts/Layout.astro';
 
     window.addEventListener('keydown', e => {
       if(e.key === 'Escape'){
-        if(anyOpen()) closeSheets(); else { touched(); backOut(); }
+        if(boarded){ if(!delivering) leaveShip(); }
+        else if(anyOpen()) closeSheets();
+        else { touched(); backOut(); }
         return;
       }
-      if(anyOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
+      if(boarded || anyOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = (e.target as HTMLElement).tagName;
       if(e.key === ' ' && tag === 'BUTTON') return;
       switch(e.key){
@@ -923,6 +1270,7 @@ import Layout from '../layouts/Layout.astro';
         case 'Home': touched(); backOut(); e.preventDefault(); break;
         case 'End': touched(); focusOn(pieces.length-1); e.preventDefault(); break;
         case 'i': openIndex(); break;
+        case 't': board(); break;
         case 'm': toggleSound(); break;
         case '1': playSong(); break;
       }
@@ -971,7 +1319,17 @@ import Layout from '../layouts/Layout.astro';
         controls.update();
         look.copy(controls.target);
       }
-      if(pointerFresh && focused < 0 && !flight && pieces.length){
+      flightEnergy = Math.max(flightEnergy, updateShip(now, dt));
+      if(pointerFresh && ship && focused < 0 && !flight && !boarded){
+        const near = ship.mode === 'cruise' && Math.hypot((ndc.x+1)/2*window.innerWidth-ship.sx, (1-ndc.y)/2*window.innerHeight-ship.sy) < 56;
+        if(near !== hoverShip){
+          hoverShip = near;
+          shipTag.classList.toggle('hot', near);
+          metaCap.textContent = near ? 'leave a word' : 'pasado observado';
+          if(near) playNote(NOTES[4]);
+        }
+      }
+      if(pointerFresh && focused < 0 && !flight && !boarded && pieces.length){
         pointerFresh = false;
         const i = pick();
         if(i !== hovered){
@@ -979,7 +1337,7 @@ import Layout from '../layouts/Layout.astro';
           if(i > 0){ showMeta(i); playNote(NOTES[pieces[i].st.n % NOTES.length]); }
           else showMeta(0);
         }
-      } else if(focused >= 0 || flight) hovered = -1;
+      } else if(focused >= 0 || flight || boarded) hovered = -1;
 
       if(staticGain && staticFilter && audioCtx){
         staticGain.gain.setTargetAtTime(flightEnergy*.13, audioCtx.currentTime, .05);
@@ -1000,6 +1358,7 @@ import Layout from '../layouts/Layout.astro';
         const revealT = home || isOn || isHov ? 1 : farReveal + near*(1-farReveal);
         let opacityT = 1;
         if(focused >= 0) opacityT = isOn ? 1 : Math.abs(p.i-focused) === 1 ? .05 : .012;
+        else if(boarded) opacityT = home && delivering ? 1 : .28;
         else if(hovered > 0 && !isHov) opacityT = .4;
         p.reveal += (revealT-p.reveal)*ease;
         p.opacity += (opacityT-p.opacity)*ease;
@@ -1007,7 +1366,7 @@ import Layout from '../layouts/Layout.astro';
         p.mesh.scale.set(p.w*p.grow, p.h*p.grow, 1);
         p.mat.uniforms.uReveal.value = p.reveal;
         p.mat.uniforms.uOpacity.value = p.opacity;
-        p.mat.uniforms.uGain.value = isOn || isHov || home ? 1 : .74;
+        p.mat.uniforms.uGain.value = home ? 1 + logoPulse*1.8 : isOn || isHov ? 1 : .74;
         if(p.halo){
           const s = Math.max(p.w, p.h)*(.85 + .05*Math.sin(now*.0016));
           p.halo.scale.set(s, s, 1);
@@ -1025,7 +1384,7 @@ import Layout from '../layouts/Layout.astro';
       (nebula.material as THREE.ShaderMaterial).uniforms.uDim.value = dim;
       if(!reduced){ stars.rotation.y += dt*.004; nebula.rotation.y += dt*.0015; }
       if(composer && bloom && lens){
-        bloom.strength = BLOOM*(1-calm);
+        bloom.strength = BLOOM*(1-calm) + logoPulse*.8;
         bloom.enabled = !lowPower && bloom.strength > .01;
         lens.uniforms.uEnergy.value = reduced ? 0 : flightEnergy;
         lens.uniforms.uGrain.value = 1-calm;
@@ -1035,7 +1394,7 @@ import Layout from '../layouts/Layout.astro';
     }
 
     // ── Sheets ────────────────────────────────────────────
-    const sheets = { index:$('index-sheet'), about:$('about-sheet'), msg:$('msg-sheet'), set:$('set-sheet') };
+    const sheets = { index:$('index-sheet'), about:$('about-sheet'), set:$('set-sheet') };
     function openSheet(s: HTMLElement){ stopScan(); hint.hidden = true; s.classList.add('open'); }
     function closeSheets(){
       if(sheets.set.classList.contains('open')) closeSetModal();
@@ -1262,12 +1621,13 @@ import Layout from '../layouts/Layout.astro';
       const words = msgInput.value.trim() === '' ? 0 : msgInput.value.trim().split(/\s+/).filter(w=>w.length>0).length;
       wordCount.textContent = `${words} / 11`;
       wordCount.className = words === 11 ? 'full' : words > 11 ? 'over' : '';
+      setLit(words);
       msgSend.disabled = words !== 11;
     });
 
     msgSend.addEventListener('click', async () => {
       msgSend.disabled = true;
-      msgSend.textContent = 'sending...';
+      msgSend.textContent = 'igniting...';
       try {
         const res = await fetch('https://n8n.ezeangeloni.xyz/webhook/mensaje', {
           method: 'POST',
@@ -1275,27 +1635,24 @@ import Layout from '../layouts/Layout.astro';
           body: JSON.stringify({ mensaje: msgInput.value.trim() })
         });
         if(res.ok){
-          msgForm.style.display = 'none';
-          msgThanks.style.display = 'block';
-          setTimeout(() => closeSheets(), 2800);
+          launch();
         } else {
           wordCount.textContent = 'something went wrong, try again';
         }
       } catch(e) {
         wordCount.textContent = 'connection error';
       }
-      msgSend.textContent = 'send';
+      msgSend.textContent = 'launch';
       msgSend.disabled = false;
     });
 
-    function openMsgModal(){
+    function resetForm(){
       msgInput.value = ''; wordCount.textContent = '0 / 11'; wordCount.className = '';
       msgSend.disabled = true; msgForm.style.display = 'block'; msgThanks.style.display = 'none';
-      openSheet(sheets.msg);
-      setTimeout(() => msgInput.focus(), 300);
+      setLit(0);
     }
-    $('btn-msg').addEventListener('click', openMsgModal);
-    $('msg-close').addEventListener('click', closeSheets);
+    shipTag.addEventListener('click', () => { if(focused >= 0){ touched(); backOut(); } else board(); });
+    $('msg-close').addEventListener('click', () => { if(!delivering) leaveShip(); });
 
     const cursor = $('cursor');
     window.addEventListener('mousemove', e => { cursor.style.left = e.clientX+'px'; cursor.style.top = e.clientY+'px'; });
@@ -1320,6 +1677,7 @@ import Layout from '../layouts/Layout.astro';
       buildIndex();
       if(!renderer){ // no WebGL: the contact sheet is the whole site
         $('index-close').hidden = true;
+        document.body.classList.add('no3d');
         openIndex();
         return;
       }
