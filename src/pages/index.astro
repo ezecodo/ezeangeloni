@@ -66,11 +66,11 @@ import Layout from '../layouts/Layout.astro';
       #about-body { columns: 2 22rem; column-gap: 3rem; max-width: 62rem; }
       #about-body p { font-size: .85rem; line-height: 1.9; color: rgba(240,237,232,0.85); margin-bottom: 1.2rem; break-inside: avoid; }
 
-      #ship-tag { position: fixed; top: 0; left: 0; z-index: 12; font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; white-space: nowrap; padding: .5rem .7rem; opacity: 0; pointer-events: none; transition: opacity .3s; text-shadow: 0 0 10px rgba(8,8,16,.9); }
-      #ship-tag.show { opacity: 1; pointer-events: auto; }
-      #ship-tag.hot { color: #fff; }
-      #ship-tag:focus-visible { opacity: 1; pointer-events: auto; transform: translate(1.4rem, 3.6rem) !important; }
-      body.no3d #ship-tag { opacity: 1; pointer-events: auto; z-index: 101; transform: translate(1rem, .6rem); }
+      #balloon-tag { position: fixed; top: 0; left: 0; z-index: 12; font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; white-space: nowrap; padding: .5rem .7rem; opacity: 0; pointer-events: none; transition: opacity .3s; text-shadow: 0 0 10px rgba(8,8,16,.9); }
+      #balloon-tag.show { opacity: 1; pointer-events: auto; }
+      #balloon-tag.hot { color: #fff; }
+      #balloon-tag:focus-visible { opacity: 1; pointer-events: auto; transform: translate(1.4rem, 3.6rem) !important; }
+      body.no3d #balloon-tag { opacity: 1; pointer-events: auto; z-index: 101; transform: translate(1rem, .6rem); }
       #cockpit { position: fixed; inset: 0 0 auto 0; z-index: 20; padding: clamp(3.8rem,9vh,6rem) 1.4rem 1rem; display: flex; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .5s; background: linear-gradient(rgba(8,8,16,.72) 55%, transparent); }
       #cockpit.open { opacity: 1; pointer-events: auto; }
       #cockpit.flat { z-index: 110; bottom: 0; background: var(--bg); }
@@ -187,16 +187,16 @@ import Layout from '../layouts/Layout.astro';
     <div id="index-grid"></div>
   </div>
 
-  <button id="ship-tag">leave a word</button>
+  <button id="balloon-tag">leave a word</button>
   <div id="cockpit">
-    <button class="close" id="msg-close">leave ship ✕</button>
+    <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
       <div id="msg-form">
-        <p class="subtitle" id="msg-subtitle">this ship carries exactly 11 words. make them count.</p>
+        <p class="subtitle">this balloon carries exactly 11 words. it will let them go.</p>
         <textarea id="msg-input" rows="3" placeholder="eleven words, no more, no less..."></textarea>
         <div id="msg-footer">
           <span id="word-count">0 / 11</span>
-          <button id="msg-send" disabled>launch</button>
+          <button id="msg-send" disabled>let go</button>
         </div>
       </div>
       <div id="msg-thanks">
@@ -667,7 +667,7 @@ import Layout from '../layouts/Layout.astro';
       });
       buildThread();
       buildDust();
-      buildShip();
+      buildBalloon();
       cards();
       queuePhotos();
     }
@@ -855,7 +855,7 @@ import Layout from '../layouts/Layout.astro';
     const look = new THREE.Vector3();
     const overviewPos = new THREE.Vector3();
     const hint = $('hint'), lamp = $('lamp'), metaId = $('meta-id'), metaCap = $('meta-cap'), nowEl = $('now'), act = $('act');
-    const btnScan = $('btn-scan'), btnBack = $('btn-back'), shipTag = $('ship-tag'), cockpit = $('cockpit');
+    const btnScan = $('btn-scan'), btnBack = $('btn-back'), balloonTag = $('balloon-tag'), cockpit = $('cockpit');
     function anyOpen(){ return !!document.querySelector('.sheet.open'); }
 
     function syncScan(){
@@ -915,181 +915,123 @@ import Layout from '../layouts/Layout.astro';
       url.hash = String(p.st.n).padStart(3,'0');
       history.replaceState(null, '', url.toString());
     }
-    // ── Ship ──────────────────────────────────────────────
-    // The message carrier: patrols the limbo with one cargo light per word, leaves when it holds eleven.
-    // Two crafts carry the words: the ship, or a hot air balloon that lets its eleven lights go. One per visit, `b` swaps.
-    type Craft = 'ship' | 'balloon';
-    interface Body {
-      kind: Craft; scale: number; group: THREE.Group; engine: THREE.Mesh; lamps: THREE.MeshBasicMaterial[][];
-      bulbs: THREE.Mesh[]; home: THREE.Vector3[]; thread: THREE.Line | null; skin: { m: THREE.MeshBasicMaterial; base: THREE.Color }[];
+    // ── Balloon ───────────────────────────────────────────
+    // The message carrier: a hot air balloon drifting through the limbo with a string of eleven lights, one per word.
+    // On send it lets them go: they fall into the logo while the balloon rises, lighter.
+    interface Balloon {
+      group: THREE.Group; engine: THREE.Mesh; lamps: THREE.MeshBasicMaterial[]; bulbs: THREE.Mesh[]; home: THREE.Vector3[];
+      thread: THREE.Line; skin: { m: THREE.MeshBasicMaterial; base: THREE.Color }[]; drops: { from: THREE.Vector3; ctrl: THREE.Vector3 }[];
+      tau: number; peek: number; peekFrom: number; mode: 'cruise' | 'board' | 'parked' | 'launch' | 'away';
+      spawn: number; t0: number; p0: THREE.Vector3; dir: THREE.Vector3; lit: number; over: boolean; sx: number; sy: number; onScreen: boolean;
     }
-    interface Ship extends Body {
-      trail: THREE.Line; drops: { from: THREE.Vector3; ctrl: THREE.Vector3; gone: boolean }[];
-      tau: number; up: THREE.Vector3; peek: number; peekFrom: number; mode: 'cruise' | 'board' | 'parked' | 'launch' | 'away';
-      spawn: number; t0: number; p0: THREE.Vector3; ctrl: THREE.Vector3; v: number; dir: THREE.Vector3; lit: number; over: boolean; sx: number; sy: number; onScreen: boolean;
-    }
-    let ship: Ship | null = null, boarded = false, hoverShip = false;
+    let balloon: Balloon | null = null, boarded = false, hoverBalloon = false;
     let burst: THREE.Points | null = null, shock: THREE.Mesh | null = null;
     let impactAt = 0, logoPulse = 0, delivering = false, novaImpact = false;
-    const BURST = 330, TRAIL = 170;
-    const DELIVERY = { ship:2.7, balloon:4.6 }, RISE = 3.5, LET_GO = .17; // the balloon releases a light every LET_GO seconds
-    const craftParam = new URLSearchParams(location.search).get('craft');
-    let craft: Craft = craftParam === 'ship' || craftParam === 'balloon' ? craftParam : Math.random() < .5 ? 'ship' : 'balloon';
-    // Cruising, the ship lives in this rig glued to the camera: orbiting and zooming the universe never move it.
+    const BURST = 330, BALLOON_SCALE = .7;
+    const DELIVERY = 4.6, RISE = 3.5, LET_GO = .17; // a light is released every LET_GO seconds
+    // Cruising, the balloon lives in this rig glued to the camera: orbiting and zooming the universe never move it.
     const rig = new THREE.Group();
     scene.add(rig);
-    const HULL: [number, number][] = [[0,5.4],[.3,4.5],[.62,3],[.86,.8],[.92,-1.4],[.76,-2.9],[.52,-3.5]];
-    const hullR = (z: number) => {
-      for(let i = 1; i < HULL.length; i++){
-        if(z >= HULL[i][1]){
-          const [r0,z0] = HULL[i-1], [r1,z1] = HULL[i];
-          return r1 + (r0-r1)*(z-z1)/(z0-z1);
-        }
-      }
-      return .5;
-    };
-    // Envelope profile (radius, height): a teardrop, widest high up, narrowing to the mouth.
-    const ENVELOPE: [number, number][] = [[.52,-.2],[.72,.55],[1.15,1.5],[1.68,2.55],[2.12,3.6],[2.38,4.6],[2.42,5.45],[2.24,6.25],[1.82,6.9],[1.18,7.32],[.5,7.5],[0,7.53]];
+    // Envelope profile (radius, height): a full pear, round and wide up top, a short cone down to the mouth.
+    const ENVELOPE: [number, number][] = [[.62,-.2],[1,.45],[1.6,1.15],[2.25,1.95],[2.8,2.85],[3.15,3.8],[3.32,4.75],[3.3,5.65],[3.1,6.5],[2.7,7.25],[2.1,7.85],[1.3,8.25],[0,8.4]];
+    // Wiphala colours (they hold the rainbow of the pride flag too), laid out in diagonals across the panels
+    const WIPHALA = ['#e4232b','#f47b20','#ffd200','#e6e2da','#00a650','#0072bc','#6c3b97'];
     const GORES = 12, GORE_SEGS = 5;
     const lobe = (f: number) => .935 + .065*Math.sin(Math.PI*f); // each gore bulges between its seams
-    // the envelope's radius at profile point j and angle phi, following the bulge of its gore
-    function envelopeAt(j: number, phi: number){
-      const f = ((phi/(Math.PI*2/GORES)) % 1 + 1) % 1, [r, y] = ENVELOPE[j];
-      return new THREE.Vector3(Math.sin(phi)*r*lobe(f), y, Math.cos(phi)*r*lobe(f));
-    }
-    function buildBody(kind: Craft): Body {
+    function buildBalloon(){
       const group = new THREE.Group();
       const ink = new THREE.LineBasicMaterial({ color:0xf0ede8 });
+      const faint = new THREE.LineBasicMaterial({ color:0xf0ede8, transparent:true, opacity:.55 });
       const shell = new THREE.MeshBasicMaterial({ color:0x0b0b16, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1 });
       const add = (geo: THREE.BufferGeometry, angle = 18) => {
         group.add(new THREE.Mesh(geo, shell));
         group.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, angle), ink));
       };
-      const lamps: THREE.MeshBasicMaterial[][] = [], bulbs: THREE.Mesh[] = [], home: THREE.Vector3[] = [];
-      let thread: THREE.Line | null = null;
-      const skin: Body['skin'] = [];
-      const flame = (color: number) => new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map:SPRITE, color, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
-      if(kind === 'balloon'){
-        // twelve inflated gores, each its own panel tinted from the palette: the burner lights them from inside
-        for(let g = 0; g < GORES; g++){
-          const geo = new THREE.LatheGeometry(ENVELOPE.map(([r,y]) => new THREE.Vector2(r, y)), GORE_SEGS, g*Math.PI*2/GORES, Math.PI*2/GORES);
-          const pos = geo.attributes.position as THREE.BufferAttribute;
-          for(let i = 0; i <= GORE_SEGS; i++) for(let j = 0; j < ENVELOPE.length; j++){
-            const v = i*ENVELOPE.length + j, k = lobe(i/GORE_SEGS);
-            pos.setX(v, pos.getX(v)*k); pos.setZ(v, pos.getZ(v)*k);
-          }
-          geo.computeVertexNormals();
-          const base = new THREE.Color(COLORS[(g*3) % COLORS.length]).multiplyScalar(.13);
-          const m = new THREE.MeshBasicMaterial({ color:base.clone(), side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1 });
-          skin.push({ m, base });
-          group.add(new THREE.Mesh(geo, m));
-          group.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 35), ink));
+      const lines = (pts: number[], mat: THREE.LineBasicMaterial) => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+        group.add(new THREE.LineSegments(geo, mat));
+      };
+      // twelve inflated gores cut in panels, each panel a Wiphala colour, stepping one colour per gore so they run in diagonals
+      const P = ENVELOPE.length, skin: Balloon['skin'] = [];
+      for(let g = 0; g < GORES; g++){
+        const lathe = new THREE.LatheGeometry(ENVELOPE.map(([r,y]) => new THREE.Vector2(r, y)), GORE_SEGS, g*Math.PI*2/GORES, Math.PI*2/GORES);
+        const lp = lathe.attributes.position as THREE.BufferAttribute;
+        for(let i = 0; i <= GORE_SEGS; i++) for(let j = 0; j < P; j++){
+          const v = i*P + j, k = lobe(i/GORE_SEGS);
+          lp.setX(v, lp.getX(v)*k); lp.setZ(v, lp.getZ(v)*k);
         }
-        // decorative bands and the crown, drawn along the bulging gores
-        const faint = new THREE.LineBasicMaterial({ color:0xf0ede8, transparent:true, opacity:.55 });
-        for(const j of [2, 5, 9]){
-          const pts: THREE.Vector3[] = [];
-          for(let a = 0; a <= 96; a++) pts.push(envelopeAt(j, a/96*Math.PI*2).multiplyScalar(1.006).setY(ENVELOPE[j][1]));
-          group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), j === 5 ? ink : faint));
+        const geo = lathe.toNonIndexed(); // faces come in pairs per panel row: (segment, row) -> 2 triangles
+        lathe.dispose();
+        const cols = new Float32Array(geo.attributes.position.count*3);
+        for(let f = 0; f < cols.length/9; f++){
+          const row = Math.floor(f/2) % (P-1), c = hexRgb(WIPHALA[(g + row) % WIPHALA.length]);
+          for(let v = 0; v < 3; v++) cols.set(c, f*9 + v*3);
         }
-        // skirt below the mouth, the burner, and a wicker basket with a rim
-        const skirt = new THREE.CylinderGeometry(.52, .44, .5, GORES, 1, true);
-        skirt.translate(0, -.45, 0);
-        add(skirt, 20);
-        const burner = new THREE.CylinderGeometry(.16, .2, .22, 8);
-        burner.translate(0, -1.32, 0);
-        add(burner, 30);
-        const basket = new THREE.BoxGeometry(.86, .62, .86);
-        basket.translate(0, -2.24, 0);
-        add(basket);
-        const rim = new THREE.BoxGeometry(.98, .09, .98);
-        rim.translate(0, -1.93, 0);
-        add(rim);
-        const weave: number[] = [];
-        for(const y of [-2.12, -2.32]) for(const [a,b] of [[[.43,.43],[.43,-.43]],[[.43,-.43],[-.43,-.43]],[[-.43,-.43],[-.43,.43]],[[-.43,.43],[.43,.43]]] as [number,number][][]) weave.push(a[0]*1.01, y, a[1]*1.01, b[0]*1.01, y, b[1]*1.01);
-        const weaveGeo = new THREE.BufferGeometry();
-        weaveGeo.setAttribute('position', new THREE.Float32BufferAttribute(weave, 3));
-        group.add(new THREE.LineSegments(weaveGeo, faint));
-        const ropes: number[] = [];
-        for(const [x,z] of [[1,1],[1,-1],[-1,1],[-1,-1]]) ropes.push(x*.47, -1.9, z*.47, x*.31, -.68, z*.31, 0, -1.32, 0, x*.31, -.68, z*.31);
-        const ropeGeo = new THREE.BufferGeometry();
-        ropeGeo.setAttribute('position', new THREE.Float32BufferAttribute(ropes, 3));
-        group.add(new THREE.LineSegments(ropeGeo, faint));
-        // the eleven words hang under the basket as a string of lights
-        const lampGeo = new THREE.SphereGeometry(.17, 8, 8);
-        for(let k = 0; k < 11; k++){
-          const m = new THREE.MeshBasicMaterial({ color:new THREE.Color(COLORS[k % COLORS.length]) });
-          const mesh = new THREE.Mesh(lampGeo, m);
-          const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map:SPRITE, color:0x000000, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
-          glow.scale.setScalar(.8);
-          mesh.add(glow);
-          mesh.userData.glow = glow.material;
-          mesh.position.set(0, -3 - k*.48, 0);
-          home.push(mesh.position.clone());
-          group.add(mesh);
-          bulbs.push(mesh);
-          lamps.push([m]);
-        }
-        const threadGeo = new THREE.BufferGeometry();
-        threadGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12*3), 3));
-        thread = new THREE.Line(threadGeo, new THREE.LineBasicMaterial({ color:0xf0ede8, transparent:true, opacity:.45 }));
-        thread.frustumCulled = false;
-        group.add(thread);
-        const engine = flame(0xff9f1c);
-        engine.position.y = -1.05;
-        group.add(engine);
-        group.scale.setScalar(.7);
-        return { kind, scale:.7, group, engine, lamps, bulbs, home, thread, skin };
+        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        const base = new THREE.Color(.55, .55, .55); // under the bloom threshold even at full burn
+        const m = new THREE.MeshBasicMaterial({ color:base.clone(), vertexColors:true, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1 });
+        skin.push({ m, base });
+        group.add(new THREE.Mesh(geo, m));
       }
-      const hull = new THREE.LatheGeometry(HULL.map(([r,z]) => new THREE.Vector2(r, z)), 8);
-      hull.rotateX(Math.PI/2);
-      hull.rotateZ(Math.PI/8);
-      add(hull);
-      const fin = new THREE.Shape();
-      fin.moveTo(0,.6); fin.lineTo(1.1,-1.2); fin.lineTo(2.5,-4.6); fin.lineTo(1.5,-4.1); fin.lineTo(0,-3.2); fin.closePath();
-      for(let k = 0; k < 3; k++){
-        const g = new THREE.ExtrudeGeometry(fin, { depth:.05, bevelEnabled:false });
-        g.rotateX(Math.PI/2);
-        g.rotateY(0);
-        g.translate(0, 0, 0);
-        g.rotateZ(Math.PI/2 + k*Math.PI*2/3);
-        add(g, 30);
+      // seams: down each gore and around each row of panels
+      const seams: number[] = [];
+      const at = (j: number, phi: number) => {
+        const f = ((phi/(Math.PI*2/GORES)) % 1 + 1) % 1, [r, y] = ENVELOPE[j], k = r*lobe(f)*1.004;
+        return [Math.sin(phi)*k, y, Math.cos(phi)*k];
+      };
+      for(let g = 0; g < GORES; g++) for(let j = 0; j < P-1; j++) seams.push(...at(j, g*Math.PI*2/GORES), ...at(j+1, g*Math.PI*2/GORES));
+      for(let j = 1; j < P-1; j++) for(let a = 0; a < GORES*GORE_SEGS; a++){
+        seams.push(...at(j, a/(GORES*GORE_SEGS)*Math.PI*2), ...at(j, (a+1)/(GORES*GORE_SEGS)*Math.PI*2));
       }
-      const ring = new THREE.TorusGeometry(.62, .1, 6, 16);
-      ring.translate(0, 0, -3.5);
-      add(ring, 40);
-      const lampGeo = new THREE.SphereGeometry(.13, 8, 8);
+      lines(seams, new THREE.LineBasicMaterial({ color:0x080810, transparent:true, opacity:.4 }));
+      // skirt below the mouth, the burner, and a wicker basket with a rim
+      const skirt = new THREE.CylinderGeometry(.6, .46, .55, GORES, 1, true);
+      skirt.translate(0, -.47, 0);
+      group.add(new THREE.Mesh(skirt, new THREE.MeshBasicMaterial({ color:new THREE.Color(WIPHALA[0]).multiplyScalar(.5), side:THREE.DoubleSide })));
+      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(skirt, 20), faint));
+      const burner = new THREE.CylinderGeometry(.16, .2, .22, 8);
+      burner.translate(0, -1.32, 0);
+      add(burner, 30);
+      const basket = new THREE.BoxGeometry(.86, .62, .86);
+      basket.translate(0, -2.24, 0);
+      add(basket);
+      const rim = new THREE.BoxGeometry(.98, .09, .98);
+      rim.translate(0, -1.93, 0);
+      add(rim);
+      const weave: number[] = [];
+      const corners: [number, number][] = [[.43,.43],[.43,-.43],[-.43,-.43],[-.43,.43]];
+      for(const y of [-2.12, -2.32]) corners.forEach(([x,z], c) => { const [x2,z2] = corners[(c+1) % 4]; weave.push(x*1.01, y, z*1.01, x2*1.01, y, z2*1.01); });
+      lines(weave, faint);
+      const ropes: number[] = [];
+      for(const [x,z] of corners) ropes.push(x*1.1, -1.9, z*1.1, x*.77, -.74, z*.77, 0, -1.32, 0, x*.77, -.74, z*.77);
+      lines(ropes, faint);
+      // the eleven words hang under the basket as a string of lights
+      const lamps: THREE.MeshBasicMaterial[] = [], bulbs: THREE.Mesh[] = [], home: THREE.Vector3[] = [];
+      const lampGeo = new THREE.SphereGeometry(.17, 8, 8);
       for(let k = 0; k < 11; k++){
-        const z = 3.1 - k*.56, r = hullR(z)*1.03;
-        const row = [1,-1].map(side => {
-          const m = new THREE.MeshBasicMaterial({ color:new THREE.Color(COLORS[k % COLORS.length]) });
-          const mesh = new THREE.Mesh(lampGeo, m);
-          mesh.position.set(side*r, 0, z);
-          group.add(mesh);
-          return m;
-        });
-        lamps.push(row);
+        const m = new THREE.MeshBasicMaterial({ color:new THREE.Color(COLORS[k % COLORS.length]) });
+        const mesh = new THREE.Mesh(lampGeo, m);
+        const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map:SPRITE, color:0x000000, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
+        glow.scale.setScalar(.8);
+        mesh.add(glow);
+        mesh.userData.glow = glow.material;
+        mesh.position.set(0, -3 - k*.48, 0);
+        home.push(mesh.position.clone());
+        group.add(mesh);
+        bulbs.push(mesh);
+        lamps.push(m);
       }
-      const engine = flame(0x6ef9f5);
-      engine.position.z = -3.9;
+      const threadGeo = new THREE.BufferGeometry();
+      threadGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12*3), 3));
+      const thread = new THREE.Line(threadGeo, new THREE.LineBasicMaterial({ color:0xf0ede8, transparent:true, opacity:.45 }));
+      thread.frustumCulled = false;
+      group.add(thread);
+      const engine = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map:SPRITE, color:0xff9f1c, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
+      engine.position.y = -1.05;
       group.add(engine);
-      return { kind, scale:1, group, engine, lamps, bulbs, home, thread, skin };
-    }
-    function buildShip(){
-      const body = buildBody(craft);
-      rig.add(body.group);
-
-      const pts = new Float32Array(TRAIL*3), col = new Float32Array(TRAIL*3);
-      for(let i = 0; i < TRAIL; i++){
-        const f = Math.pow(1-i/TRAIL, 2)*.9;
-        col.set([.43*f, .98*f, .96*f], i*3);
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
-      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      const trail = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
-      trail.frustumCulled = false;
-      rig.add(trail);
+      group.scale.setScalar(BALLOON_SCALE);
+      rig.add(group);
 
       // what the logo gives back on arrival: a shockwave and the colours of the eleven lights
       const dirs = new Float32Array(BURST*3), tints = new Float32Array(BURST*3);
@@ -1109,8 +1051,8 @@ import Layout from '../layouts/Layout.astro';
       scene.add(shock);
       billboards.push(shock);
 
-      ship = { ...body, trail, drops:[], tau:rnd(0, 400), up:new THREE.Vector3(0,1,0), peek:0, peekFrom:0, mode:'cruise', spawn:0, t0:0, p0:new THREE.Vector3(), ctrl:new THREE.Vector3(), v:0, dir:new THREE.Vector3(0,0,1), lit:0, over:false, sx:0, sy:0, onScreen:false };
-      resetTrail();
+      balloon = { group, engine, lamps, bulbs, home, thread, skin, drops:[], tau:rnd(0, 400), peek:0, peekFrom:0, mode:'cruise', spawn:0, t0:0, p0:new THREE.Vector3(), dir:new THREE.Vector3(0,0,1), lit:0, over:false, sx:0, sy:0, onScreen:false };
+      placeBalloon();
     }
     // Its own route, in view space: incommensurate waves, so it never repeats and always stays in frame.
     function route(tau: number){
@@ -1120,26 +1062,20 @@ import Layout from '../layouts/Layout.astro';
       const y = (Math.sin(tau*.081+1) + .4*Math.sin(tau*.037))/1.4;
       return new THREE.Vector3(x*hw*.8, y*hh*.66, -depth);
     }
-    function placeShip(){
-      if(!ship) return;
-      const p = route(ship.tau), t = route(ship.tau+.2).sub(p).normalize();
-      ship.group.position.copy(p);
-      if(ship.kind === 'balloon'){
-        // a balloon doesn't point where it goes: it stays upright, turns slowly, leans a little into the wind
-        ship.group.position.y += Math.sin(ship.tau*1.3)*.5;
-        ship.group.quaternion.copy(upright(ship.tau*.2, -t.x*.1));
-        ship.dir.copy(t);
-        return;
-      }
-      ship.up.addScaledVector(t, -ship.up.dot(t)).normalize(); // carried along, so it never flips at a vertical turn
-      ship.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(p.clone().add(t), p, ship.up));
-      ship.dir.copy(t);
+    // A balloon doesn't point where it goes: it stays upright, turns slowly, bobs and leans a little into the wind.
+    function placeBalloon(){
+      if(!balloon) return;
+      const p = route(balloon.tau), t = route(balloon.tau+.2).sub(p).normalize();
+      balloon.group.position.copy(p);
+      balloon.group.position.y += Math.sin(balloon.tau*1.3)*.5;
+      balloon.group.quaternion.copy(upright(balloon.tau*.2, -t.x*.1));
+      balloon.dir.copy(t);
     }
     function upright(yaw: number, lean = 0){
       return new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), lean).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), yaw));
     }
-    // While a piece is open the ship slides out from behind it and waits, nose towards open space.
-    function peekOut(s: Ship, e: number, now: number){
+    // While a piece is open the balloon slides out from behind it and waits beside it.
+    function peekOut(s: Balloon, e: number, now: number){
       const p = pieces[s.peekFrom];
       const dist = camera.position.distanceTo(p.mesh.position), D = dist+5, ratio = D/dist;
       const wide = camera.aspect >= 1.05;
@@ -1147,15 +1083,12 @@ import Layout from '../layouts/Layout.astro';
       at.x += Math.sin(now*.0011)*.16;
       at.y += Math.sin(now*.0016)*.24;
       const from = focused >= 0 ? new THREE.Vector3(0, 0, -D) : s.group.position.clone();
-      const nose = new THREE.Vector3(.84, wide ? .5 : .3, -.25).normalize();
-      const q = s.kind === 'balloon' ? upright(now*.0002)
-        : new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(at.clone().add(nose), at, new THREE.Vector3(0,1,0)));
+      const q = upright(now*.0002);
       s.group.position.lerpVectors(from, at, e);
       if(focused >= 0) s.group.quaternion.copy(q); else s.group.quaternion.slerp(q, e);
     }
     // The string of lights swings under the basket; the thread follows whatever is still hanging.
-    function swayGarland(s: Ship, now: number){
-      if(!s.thread) return;
+    function swayGarland(s: Balloon, now: number){
       const pos = s.thread.geometry.attributes.position as THREE.BufferAttribute;
       pos.setXYZ(0, 0, -2.55, 0);
       s.bulbs.forEach((b, k) => {
@@ -1166,36 +1099,26 @@ import Layout from '../layouts/Layout.astro';
       });
       pos.needsUpdate = true;
     }
-    function resetTrail(){
-      if(!ship) return;
-      placeShip();
-      const { trail, group } = ship;
-      trail.position.set(0,0,0); trail.quaternion.identity(); trail.scale.set(1,1,1);
-      const p = trail.geometry.attributes.position as THREE.BufferAttribute;
-      for(let i = 0; i < TRAIL; i++) p.setXYZ(i, group.position.x, group.position.y, group.position.z);
-      p.needsUpdate = true;
-    }
     function setLit(words: number){
-      if(!ship) return;
+      if(!balloon) return;
       const lit = Math.min(words, 11), over = words > 11;
-      if(lit > ship.lit && !over) playNote(NOTES[(lit-1) % NOTES.length]*(lit === 11 ? 2 : 1));
-      ship.lit = lit;
-      ship.over = over;
+      if(lit > balloon.lit && !over) playNote(NOTES[(lit-1) % NOTES.length]*(lit === 11 ? 2 : 1));
+      balloon.lit = lit;
+      balloon.over = over;
     }
-    function updateShip(now: number, dt: number){
-      if(!ship) return 0;
-      const s = ship;
+    function updateBalloon(now: number, dt: number){
+      if(!balloon) return 0;
+      const s = balloon;
       const hidden = s.mode === 'away' || (focused >= 0 && s.mode !== 'cruise');
       s.group.visible = !hidden;
-      s.trail.visible = s.kind === 'ship' && focused < 0 && s.peek < .05;
       camera.updateMatrixWorld(); // the screen label must read this frame's camera, not the last one
       rig.position.copy(camera.position);
       rig.quaternion.copy(camera.quaternion);
       rig.updateMatrixWorld(true);
       let energy = 0;
       if(s.mode === 'cruise'){
-        if(!reduced) s.tau += dt*(s.kind === 'balloon' ? .55 : 1); // a balloon drifts
-        placeShip();
+        if(!reduced) s.tau += dt*.55; // it drifts
+        placeBalloon();
         const grow = Math.min(1, (now-s.spawn)/900);
         const want = focused >= 0 && !flight ? 1 : 0;
         s.peek += (want-s.peek)*(1-Math.exp(-dt*(want ? 2.4 : 2.8)));
@@ -1203,10 +1126,10 @@ import Layout from '../layouts/Layout.astro';
         if(focused >= 0) s.peekFrom = focused;
         const e = s.peek*s.peek*(3-2*s.peek);
         if(s.peek > 0) peekOut(s, e, now);
-        s.group.scale.setScalar(s.scale*(1-Math.pow(1-grow, 3))*(1-e*.56));
-      } else if(s.mode === 'launch' && s.kind === 'balloon'){
-        // the balloon lets its words go: one light at a time, they fall down to the logo and the balloon rises, lighter
-        const e = (now-s.t0)/1000, travel = DELIVERY.balloon - 10*LET_GO;
+        s.group.scale.setScalar(BALLOON_SCALE*(1-Math.pow(1-grow, 3))*(1-e*.56));
+      } else if(s.mode === 'launch'){
+        // the message is for Eze: one light at a time, the words fall down to the logo and the balloon rises, lighter
+        const e = (now-s.t0)/1000, travel = DELIVERY - 10*LET_GO;
         const up = 1-Math.exp(-e*.7);
         s.group.position.copy(s.p0).add(new THREE.Vector3(0, up*RISE, 0));
         s.group.quaternion.copy(upright(now*.0002));
@@ -1218,33 +1141,21 @@ import Layout from '../layouts/Layout.astro';
           const q = u*u*(3-2*u), r = 1-q;
           b.position.copy(d.from).multiplyScalar(r*r).addScaledVector(d.ctrl, 2*r*q); // the logo is at the origin
           b.position.x += Math.sin(u*Math.PI*3 + k)*Math.sin(Math.PI*u)*1.2; // swaying as it falls
-          b.scale.setScalar(s.scale*(1 + 2.4*Math.min(1, u*5)*(1-u*u))); // brightest while falling, small again as it lands
+          b.scale.setScalar(BALLOON_SCALE*(1 + 2.4*Math.min(1, u*5)*(1-u*u))); // brightest while falling, small again as it lands
           b.visible = u < 1;
           if(u >= 1) arrived++;
         });
         energy = up > .9 ? .1 : .25;
         if(arrived === 11) impact(now);
-      } else if(s.mode === 'launch'){
-        // the message is for Eze: a banked run across the universe straight into the logo
-        const e = (now-s.t0)/1000, k = Math.min(1, e/DELIVERY.ship), q = reduced ? 1 : Math.pow(k, 2.3), r = 1-q;
-        const pos = s.p0.clone().multiplyScalar(r*r).addScaledVector(s.ctrl, 2*r*q);
-        const tan = s.ctrl.clone().multiplyScalar(2*r-2*q).addScaledVector(s.p0, -2*r);
-        s.group.position.copy(pos);
-        if(tan.lengthSq() > 1e-4) s.group.lookAt(pos.clone().add(tan));
-        const size = s.scale*(1-Math.max(0, (k-.74)/.26));
-        s.group.scale.set(size, size, size*(1 + k*k*3.2));
-        energy = Math.sin(Math.PI*k)*.6;
-        if(k >= 1 || reduced) impact(now);
       } else if(s.mode === 'away' && !boarded && now-s.t0 > 5000){
         s.mode = 'cruise';
-        s.lit = 0; s.over = false; s.v = 0; s.spawn = now;
+        s.lit = 0; s.over = false; s.spawn = now;
         rig.attach(s.group);
-        rig.attach(s.trail);
         s.group.rotation.set(0,0,0);
         s.bulbs.forEach((b, k) => { s.group.add(b); b.position.copy(s.home[k]); b.quaternion.identity(); b.scale.setScalar(1); b.visible = true; });
         s.drops = [];
         s.tau += 20; // comes back somewhere else
-        resetTrail();
+        placeBalloon();
       }
       if(impactAt){
         const e = (now-impactAt)/1000;
@@ -1260,77 +1171,64 @@ import Layout from '../layouts/Layout.astro';
         }
       }
       const idle = s.mode === 'cruise' ? Math.floor(now*.006) % 11 : -1;
-      s.lamps.forEach((row, k) => row.forEach(m => {
+      s.lamps.forEach((m, k) => {
         const c = s.over ? hexRgb('#ff3f3f') : hexRgb(COLORS[k % COLORS.length]);
         const on = s.over ? (Math.floor(now*.008) % 2 ? 1.4 : .2) : k < s.lit ? 1.7 : k === idle ? 1 : .1;
         m.color.setRGB(c[0]*on, c[1]*on, c[2]*on);
-        const g = s.bulbs[k]?.parent === s.group ? .22 : .6; // a soft halo while hanging, a bright one while falling
-        s.bulbs[k]?.userData.glow?.color.setRGB(c[0]*on*g, c[1]*on*g, c[2]*on*g);
-      }));
+        const g = s.bulbs[k].parent === s.group ? .22 : .6; // a soft halo while hanging, a bright one while falling
+        s.bulbs[k].userData.glow?.color.setRGB(c[0]*on*g, c[1]*on*g, c[2]*on*g);
+      });
+      swayGarland(s, now);
+      // the burner fires in bursts, steady once the eleven words are aboard, a long blast when letting go;
+      // each burst lights the envelope from inside, warmest at full burn
       const full = s.lit === 11 && !s.over;
-      let power = s.mode === 'launch' ? 9 : full ? 3.6 : 1.5;
-      if(s.kind === 'balloon'){
-        // the burner fires in bursts, steady once the eleven words are aboard, a long blast when letting go
-        const blast = Math.pow(Math.max(0, Math.sin(now*.0007)), 14);
-        power = s.mode === 'launch' ? 1.2 + 4*Math.exp(-(now-s.t0)/900) : full ? 2.6 : .5 + blast*2.2;
-        swayGarland(s, now);
-        // the envelope glows from inside with each burst, warmest at full burn
-        const heat = Math.min(1, (power-.5)/3);
-        s.skin.forEach(({ m, base }) => m.color.copy(base).multiplyScalar(1 + heat*2.6).lerp(new THREE.Color(0xff9f1c), heat*.12));
-      }
-      const flame = (s.kind === 'balloon' ? .55 : 1)*power*(1 + .16*Math.sin(now*.05) + .08*Math.sin(now*.083));
+      const blast = Math.pow(Math.max(0, Math.sin(now*.0007)), 14);
+      const power = s.mode === 'launch' ? 1.2 + 4*Math.exp(-(now-s.t0)/900) : full ? 2.6 : .5 + blast*2.2;
+      const heat = Math.min(1, (power-.5)/3);
+      s.skin.forEach(({ m, base }) => m.color.copy(base).multiplyScalar(1 + heat*.3).lerp(new THREE.Color(0xc9a070), heat*.12));
+      const flame = .55*power*(1 + .16*Math.sin(now*.05) + .08*Math.sin(now*.083));
       s.engine.scale.set(flame, flame, 1);
       s.engine.quaternion.copy(s.group.quaternion).invert().multiply(camera.quaternion);
 
-      const p = s.trail.geometry.attributes.position as THREE.BufferAttribute;
-      (p.array as Float32Array).copyWithin(3, 0, (TRAIL-1)*3);
-      const at = s.group.getWorldPosition(new THREE.Vector3());
-      const tip = s.trail.worldToLocal(at.clone());
-      p.setXYZ(0, tip.x, tip.y, tip.z);
-      if(s.peek > .05) for(let i = 1; i < TRAIL; i++) p.setXYZ(i, tip.x, tip.y, tip.z); // no trail while waiting
-      p.needsUpdate = true;
-
-      const v = at.project(camera);
+      const v = s.group.getWorldPosition(new THREE.Vector3()).project(camera);
       s.sx = (v.x+1)/2*window.innerWidth;
       s.sy = (1-v.y)/2*window.innerHeight;
       s.onScreen = v.z < 1 && Math.abs(v.x) < .96 && Math.abs(v.y) < .9;
       const waiting = focused >= 0 && s.peek > .6;
       const show = s.onScreen && s.mode === 'cruise' && (focused < 0 || waiting) && !boarded && !flight;
-      shipTag.classList.toggle('show', show);
+      balloonTag.classList.toggle('show', show);
       const label = focused >= 0 ? 'keep travelling' : 'leave a word';
-      if(shipTag.textContent !== label) shipTag.textContent = label;
+      if(balloonTag.textContent !== label) balloonTag.textContent = label;
       if(show){
         const x = Math.max(76, Math.min(window.innerWidth-76, s.sx));
-        shipTag.style.transform = `translate(${x}px, ${s.sy}px) translate(-50%, ${s.kind === 'balloon' ? (waiting ? 44 : 60) : (waiting ? 52 : 34)}px)`;
+        balloonTag.style.transform = `translate(${x}px, ${s.sy}px) translate(-50%, ${waiting ? 44 : 60}px)`;
       }
       return energy;
     }
     function board(){
       if(boarded) return;
       touched();
-      if(!renderer || !ship){ cockpit.classList.add('flat', 'open'); boarded = true; resetForm(); return; }
+      if(!renderer || !balloon){ cockpit.classList.add('flat', 'open'); boarded = true; resetForm(); return; }
       if(focused >= 0) backOutNow();
       boarded = true;
-      hoverShip = false;
-      ship.mode = 'board';
-      ship.peek = 0;
-      ship.group.scale.setScalar(ship.scale);
+      hoverBalloon = false;
+      balloon.mode = 'board';
+      balloon.peek = 0;
+      balloon.group.scale.setScalar(BALLOON_SCALE);
       resetForm();
       if(controls){ controls.enabled = false; overviewPos.copy(camera.position); }
-      // from here on it's a physical object in the universe, parked where you caught it
-      scene.attach(ship.group);
-      scene.attach(ship.trail);
-      if(ship.kind === 'balloon') ship.group.quaternion.copy(upright(ship.tau*.2)); // upright in the world, not in the camera that carried it
-      ship.group.getWorldDirection(ship.dir);
-      const p = ship.group.position, t = ship.dir;
+      // from here on it's a physical object in the universe, parked where you caught it, upright in the world
+      scene.attach(balloon.group);
+      balloon.group.quaternion.copy(upright(balloon.tau*.2));
+      balloon.group.getWorldDirection(balloon.dir);
+      const p = balloon.group.position, t = balloon.dir;
       const side = t.clone().cross(new THREE.Vector3(0,1,0)).normalize();
       if(side.dot(camera.position.clone().sub(p)) < 0) side.negate();
       const up = side.clone().cross(t).normalize();
       if(up.y < 0) up.negate();
-      const tall = ship.kind === 'balloon'; // the balloon hangs its lights low: frame it a bit further and lower
-      const d = (tall ? 19 : 17.4)*Math.max(1, Math.pow(1.2/camera.aspect, .5));
+      const d = 19*Math.max(1, Math.pow(1.2/camera.aspect, .5));
       document.body.classList.add('aboard');
-      flyTo(p.clone().addScaledVector(side, d).addScaledVector(up, 1.6), p.clone().addScaledVector(up, tall ? 2.4 : 4.4), 1900, () => {
+      flyTo(p.clone().addScaledVector(side, d).addScaledVector(up, 1.6), p.clone().addScaledVector(up, 2.4), 1900, () => {
         cockpit.classList.add('open');
         setTimeout(() => msgInput.focus(), 200);
       });
@@ -1344,17 +1242,17 @@ import Layout from '../layouts/Layout.astro';
       btnBack.hidden = true;
       showMeta(0);
     }
-    function leaveShip(){
+    function leaveBalloon(){
       if(!boarded) return;
       boarded = false;
       cockpit.classList.remove('open', 'flat');
       document.body.classList.remove('aboard');
-      if(!renderer || !ship) return;
-      const stayed = ship.mode === 'board';
-      if(stayed){ ship.mode = 'parked'; setLit(0); }
+      if(!renderer || !balloon) return;
+      const stayed = balloon.mode === 'board';
+      if(stayed){ balloon.mode = 'parked'; setLit(0); }
       flyTo(overviewPos.clone(), CENTER.clone(), 1700, () => {
         if(controls){ controls.target.copy(CENTER); controls.enabled = true; }
-        if(stayed && ship){ ship.mode = 'away'; ship.t0 = performance.now()-3800; }
+        if(stayed && balloon){ balloon.mode = 'away'; balloon.t0 = performance.now()-3800; }
       });
     }
     // A set past its span explodes once per visitor; after that only the nebula remains.
@@ -1370,9 +1268,9 @@ import Layout from '../layouts/Layout.astro';
       playNote(NOTES[0]/2);
     }
     function impact(now: number){
-      if(!ship) return;
-      ship.mode = 'away';
-      ship.t0 = now;
+      if(!balloon) return;
+      balloon.mode = 'away';
+      balloon.t0 = now;
       impactAt = now;
       novaImpact = false;
       burst?.position.set(0,0,0);
@@ -1394,21 +1292,18 @@ import Layout from '../layouts/Layout.astro';
     function launch(){
       msgForm.style.display = 'none';
       delivering = true;
-      const kind = ship?.kind ?? craft, T = DELIVERY[kind];
-      if(ship && kind === 'balloon'){
-        ship.mode = 'launch';
-        ship.t0 = performance.now();
-        ship.p0.copy(ship.group.position);
-        ship.group.updateMatrixWorld(true);
-        ship.drops = ship.bulbs.map((b, k) => {
+      if(balloon){
+        balloon.mode = 'launch';
+        balloon.t0 = performance.now();
+        balloon.p0.copy(balloon.group.position);
+        balloon.group.updateMatrixWorld(true);
+        balloon.drops = balloon.bulbs.map((b, k) => {
           const from = b.getWorldPosition(new THREE.Vector3());
-          const ctrl = from.clone().multiplyScalar(.5).add(new THREE.Vector3(rnd(-3, 3), -9 - k*.5, rnd(-3, 3)));
-          return { from, ctrl, gone:false };
+          return { from, ctrl:from.clone().multiplyScalar(.5).add(new THREE.Vector3(rnd(-3, 3), -9 - k*.5, rnd(-3, 3))) };
         });
-        // watch from the side of its fall: the balloon on one edge, the logo on the other
-        const p0 = ship.p0, span = Math.max(8, p0.length());
-        // frame from the logo (origin) to the top of the risen balloon
-        const top = p0.clone().add(new THREE.Vector3(0, RISE + 7.6*ship.scale, 0));
+        // watch from the side of the fall, framing from the logo (origin) to the top of the risen balloon
+        const p0 = balloon.p0, span = Math.max(8, p0.length());
+        const top = p0.clone().add(new THREE.Vector3(0, RISE + 8.4*BALLOON_SCALE, 0));
         const mid = top.clone().multiplyScalar(.5);
         const across = p0.clone().cross(new THREE.Vector3(0, 1, 0));
         if(across.lengthSq() < 1e-4) across.set(1, 0, 0);
@@ -1416,16 +1311,8 @@ import Layout from '../layouts/Layout.astro';
         if(across.dot(camera.position.clone().sub(mid)) < 0) across.negate();
         const D = Math.max(34, span*1.25/Math.min(camera.aspect, 1.5), (Math.abs(top.y) + 10)*1.6);
         flyTo(mid.clone().addScaledVector(across, D).add(new THREE.Vector3(0, 3, 0)), mid.clone().add(new THREE.Vector3(0, 3, 0)), 1600);
-      } else if(ship){
-        ship.mode = 'launch';
-        ship.t0 = performance.now();
-        ship.p0.copy(ship.group.position);
-        ship.ctrl.copy(ship.p0).addScaledVector(ship.dir, 34).add(new THREE.Vector3(0, -8, 0));
-        // pull back to watch it land: the logo sits low in frame, under the thank-you
-        const side = ship.p0.lengthSq() > 1 ? ship.p0.clone().normalize() : new THREE.Vector3(0, 0, 1);
-        flyTo(side.multiplyScalar(50).add(new THREE.Vector3(0, 7, 0)), new THREE.Vector3(0, 6, 0), T*1000-300);
       }
-      if(audioCtx && masterGain && kind === 'balloon'){
+      if(audioCtx && masterGain){
         // the burner: one long breath of filtered noise
         const t = audioCtx.currentTime, len = 1.8;
         const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*len, audioCtx.sampleRate), data = buf.getChannelData(0);
@@ -1440,39 +1327,9 @@ import Layout from '../layouts/Layout.astro';
         g.gain.exponentialRampToValueAtTime(.001, t+len);
         src.connect(f); f.connect(g); g.connect(masterGain);
         src.start(t); src.stop(t+len);
-      } else if(audioCtx && masterGain){
-        const t = audioCtx.currentTime, osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(55, t);
-        osc.frequency.exponentialRampToValueAtTime(1400, t+T);
-        g.gain.setValueAtTime(.001, t);
-        g.gain.exponentialRampToValueAtTime(.42, t+T-.1);
-        g.gain.exponentialRampToValueAtTime(.001, t+T+.05);
-        osc.connect(g); g.connect(masterGain);
-        osc.start(t); osc.stop(t+T+.05);
       }
-      setTimeout(() => { msgThanks.style.display = 'block'; }, T*1000+500);
-      setTimeout(() => { delivering = false; leaveShip(); }, T*1000+4300);
-    }
-    // Swap the craft in flight (hidden key `b`): the same route, the other body.
-    function swapCraft(){
-      craft = craft === 'ship' ? 'balloon' : 'ship';
-      craftText();
-      if(!ship || boarded || ship.mode !== 'cruise') return;
-      const old = ship.group, parent = old.parent ?? rig;
-      parent.remove(old);
-      old.traverse((o: THREE.Object3D) => { const m = o as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material | undefined)?.dispose(); });
-      const body = buildBody(craft);
-      parent.add(body.group);
-      Object.assign(ship, body, { drops:[], lit:0, over:false, spawn:performance.now() });
-      resetTrail();
-      playNote(NOTES[craft === 'balloon' ? 1 : 4]);
-    }
-    function craftText(){
-      const balloon = craft === 'balloon';
-      $('msg-close').textContent = balloon ? 'leave balloon ✕' : 'leave ship ✕';
-      $('msg-subtitle').textContent = balloon ? 'this balloon carries exactly 11 words. it will let them go.' : 'this ship carries exactly 11 words. make them count.';
-      msgSend.textContent = balloon ? 'let go' : 'launch';
+      setTimeout(() => { msgThanks.style.display = 'block'; }, DELIVERY*1000+500);
+      setTimeout(() => { delivering = false; leaveBalloon(); }, DELIVERY*1000+4300);
     }
 
     function backOut(){
@@ -1536,8 +1393,8 @@ import Layout from '../layouts/Layout.astro';
       if(e.target !== screen || boarded) return;
       if(focused >= 0 && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)){ stepFocus(dx < 0 ? 1 : -1); return; }
       if(Math.hypot(dx, dy) > 7 || !quick) return;
-      if(focused < 0 && ship && ship.mode === 'cruise' && Math.hypot(e.clientX-ship.sx, e.clientY-ship.sy) < 56){ board(); return; }
-      if(focused >= 0 && ship && ship.peek > .5 && Math.hypot(e.clientX-ship.sx, e.clientY-ship.sy) < 64){ backOut(); return; }
+      if(focused < 0 && balloon && balloon.mode === 'cruise' && Math.hypot(e.clientX-balloon.sx, e.clientY-balloon.sy) < 56){ board(); return; }
+      if(focused >= 0 && balloon && balloon.peek > .5 && Math.hypot(e.clientX-balloon.sx, e.clientY-balloon.sy) < 64){ backOut(); return; }
       setNdc(e);
       const i = pick();
       if(focused < 0){ if(i > 0) focusOn(i); }
@@ -1555,7 +1412,7 @@ import Layout from '../layouts/Layout.astro';
 
     window.addEventListener('keydown', e => {
       if(e.key === 'Escape'){
-        if(boarded){ if(!delivering) leaveShip(); }
+        if(boarded){ if(!delivering) leaveBalloon(); }
         else if(anyOpen()) closeSheets();
         else { touched(); backOut(); }
         return;
@@ -1570,7 +1427,6 @@ import Layout from '../layouts/Layout.astro';
         case 'End': touched(); focusOn(pieces.length-1); e.preventDefault(); break;
         case 'i': openIndex(); break;
         case 't': board(); break;
-        case 'b': swapCraft(); break;
         case 'm': toggleSound(); break;
         case '1': playSong(); break;
       }
@@ -1619,12 +1475,12 @@ import Layout from '../layouts/Layout.astro';
         controls.update();
         look.copy(controls.target);
       }
-      flightEnergy = Math.max(flightEnergy, updateShip(now, dt));
-      if(pointerFresh && ship && focused < 0 && !flight && !boarded){
-        const near = ship.mode === 'cruise' && Math.hypot((ndc.x+1)/2*window.innerWidth-ship.sx, (1-ndc.y)/2*window.innerHeight-ship.sy) < 56;
-        if(near !== hoverShip){
-          hoverShip = near;
-          shipTag.classList.toggle('hot', near);
+      flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
+      if(pointerFresh && balloon && focused < 0 && !flight && !boarded){
+        const near = balloon.mode === 'cruise' && Math.hypot((ndc.x+1)/2*window.innerWidth-balloon.sx, (1-ndc.y)/2*window.innerHeight-balloon.sy) < 56;
+        if(near !== hoverBalloon){
+          hoverBalloon = near;
+          balloonTag.classList.toggle('hot', near);
           metaCap.textContent = near ? 'leave a word' : 'pasado observado';
           if(near) playNote(NOTES[4]);
         }
@@ -1936,7 +1792,7 @@ import Layout from '../layouts/Layout.astro';
 
     msgSend.addEventListener('click', async () => {
       msgSend.disabled = true;
-      msgSend.textContent = craft === 'balloon' ? 'lighting the burner...' : 'igniting...';
+      msgSend.textContent = 'lighting the burner...';
       try {
         const res = await fetch('https://n8n.ezeangeloni.xyz/webhook/mensaje', {
           method: 'POST',
@@ -1951,7 +1807,7 @@ import Layout from '../layouts/Layout.astro';
       } catch(e) {
         wordCount.textContent = 'connection error';
       }
-      craftText();
+      msgSend.textContent = 'let go';
       msgSend.disabled = false;
     });
 
@@ -1960,9 +1816,8 @@ import Layout from '../layouts/Layout.astro';
       msgSend.disabled = true; msgForm.style.display = 'block'; msgThanks.style.display = 'none';
       setLit(0);
     }
-    craftText();
-    shipTag.addEventListener('click', () => { if(focused >= 0){ touched(); backOut(); } else board(); });
-    $('msg-close').addEventListener('click', () => { if(!delivering) leaveShip(); });
+    balloonTag.addEventListener('click', () => { if(focused >= 0){ touched(); backOut(); } else board(); });
+    $('msg-close').addEventListener('click', () => { if(!delivering) leaveBalloon(); });
 
     const cursor = $('cursor');
     window.addEventListener('mousemove', e => { cursor.style.left = e.clientX+'px'; cursor.style.top = e.clientY+'px'; });
