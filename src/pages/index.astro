@@ -465,6 +465,7 @@ import Layout from '../layouts/Layout.astro';
 
     // ── Space ─────────────────────────────────────────────
     interface Piece {
+      star?: THREE.Mesh; starMat?: THREE.ShaderMaterial; stage?: string; beat: number; bright: number; starMix: number;
       st: Station; i: number; mesh: THREE.Mesh; mat: THREE.ShaderMaterial;
       w: number; h: number; lo?: THREE.Texture; hi?: THREE.Texture; hiBusy?: boolean;
       opacity: number; reveal: number; grow: number; halo?: THREE.Mesh;
@@ -498,6 +499,77 @@ import Layout from '../layouts/Layout.astro';
         float dots = smoothstep(.09,-.09,length(fract(g)-.5)-.68*sqrt(l));
         gl_FragColor = vec4(mix(uTint*dots, s.rgb, uReveal)*uGain, s.a*uOpacity);
       }`;
+
+    // ── Stellar life ──────────────────────────────────────
+    // Age comes from the piece's date on every visit, so the universe grows old by itself.
+    // Log time: a piece changes fast at first and slowly after, like attention does.
+    const DAY = 864e5;
+    const NOW = Date.now() + (parseFloat(new URLSearchParams(location.search).get('days') || '0') || 0)*DAY; // ?days=365 previews the future
+    const SPAN: Record<string, number> = { set:200, photo:365, text:520 }; // the massive live fast, as in real stars
+    const MASS: Record<string, number> = { set:1.5, photo:1, text:.75 };
+    const STAGES = [
+      { at:0,   name:'protostar',     color:'#ff9a6b', size:6.5, bright:.8,  beat:1.5, core:.1,  cloud:1, spike:0, ring:0 },
+      { at:.25, name:'young star',    color:'#a9d6ff', size:7,   bright:2,   beat:.5,  core:.16, cloud:0, spike:1, ring:0 },
+      { at:.55, name:'main sequence', color:'#ffe7ac', size:5.4, bright:1.25,beat:.14, core:.14, cloud:0, spike:0, ring:0 },
+      { at:.9,  name:'red giant',     color:'#ff5a3c', size:10,  bright:.85, beat:.06, core:.3,  cloud:0, spike:0, ring:0 },
+      { at:.97, name:'white dwarf',   color:'#dfe9ff', size:3,   bright:.9,  beat:0,   core:.05, cloud:0, spike:0, ring:1 },
+    ];
+    function stellar(st: Station){
+      const age = st.date ? Math.max(0, (NOW-Date.parse(st.date))/DAY) : 1e5;
+      const span = SPAN[st.kind] || 365;
+      const life = Math.min(1, Math.log1p(age)/Math.log1p(span));
+      const mix = (a: number, b: number, t: number) => a + (b-a)*t;
+      let i = STAGES.length-1;
+      while(i > 0 && STAGES[i].at > life) i--;
+      const A = STAGES[i], B = STAGES[Math.min(i+1, STAGES.length-1)];
+      const t = B === A ? 0 : Math.min(1, (life-A.at)/(B.at-A.at));
+      const ca = hexRgb(A.color), cb = hexRgb(B.color);
+      const s = {
+        name:A.name, life, color:[0,1,2].map(k => mix(ca[k], cb[k], t)),
+        size:mix(A.size, B.size, t)*(MASS[st.kind] || 1), bright:mix(A.bright, B.bright, t), beat:mix(A.beat, B.beat, t),
+        core:mix(A.core, B.core, t), cloud:mix(A.cloud, B.cloud, t), spike:mix(A.spike, B.spike, t), ring:mix(A.ring, B.ring, t),
+      };
+      if(st.kind === 'set' && life >= 1){ // heavy stars don't fade: they go supernova and leave a nebula
+        Object.assign(s, { name:'supernova remnant', color:hexRgb('#ff6eb4'), size:17, bright:1, beat:.04, core:.03, cloud:.55, spike:0, ring:1 });
+      }
+      return s;
+    }
+    const STAR_VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`;
+    const STAR_FRAG = `precision highp float;
+      varying vec2 vUv;
+      uniform vec3 uColor, uTint;
+      uniform float uTime, uBright, uCore, uCloud, uSpike, uRing, uOpacity, uSeed;
+      void main(){
+        vec2 p = (vUv-.5)*2.;
+        float d = length(p), a = atan(p.y, p.x);
+        float rough = .5+.5*sin(a*3.+uSeed+uTime*.3)*sin(a*5.-uTime*.2+d*7.);
+        vec3 col = uColor*(smoothstep(uCore, uCore*.45, d)*1.6 + pow(max(0.,1.-d),3.)*.6)*(1.-uCloud*.5);
+        col += vec3(1.)*smoothstep(uCore*.55, 0., d)*.7;
+        col += uColor*uSpike*1.2*(exp(-abs(p.y)*60.)*pow(max(0.,1.-abs(p.x)),4.) + exp(-abs(p.x)*60.)*pow(max(0.,1.-abs(p.y)),4.));
+        col += uTint*uCloud*.7*pow(max(0.,1.-d),1.6)*(.45+.55*rough);
+        col += uTint*uRing*.6*exp(-pow((d-.62)/.07,2.))*(.6+.4*rough);
+        col *= uBright*smoothstep(1.,.86,d)*uOpacity;
+        gl_FragColor = vec4(col, 1.);
+      }`;
+    function buildStar(p: Piece){
+      const s = stellar(p.st);
+      p.stage = s.name;
+      p.beat = s.beat;
+      p.bright = s.bright;
+      p.starMat = new THREE.ShaderMaterial({
+        vertexShader:STAR_VERT, fragmentShader:STAR_FRAG, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+        uniforms:{
+          uColor:{value:new THREE.Vector3(...s.color)}, uTint:{value:new THREE.Vector3(...hexRgb(p.st.tint))},
+          uTime:{value:0}, uBright:{value:s.bright}, uCore:{value:s.core}, uCloud:{value:s.cloud}, uSpike:{value:s.spike}, uRing:{value:s.ring},
+          uOpacity:{value:0}, uSeed:{value:p.st.n*1.7},
+        },
+      });
+      p.star = new THREE.Mesh(plane, p.starMat);
+      p.star.position.copy(p.mesh.position);
+      p.star.scale.set(s.size, s.size, 1);
+      scene.add(p.star);
+      billboards.push(p.star);
+    }
 
     function makeRng(seed: number){
       return () => {
@@ -582,8 +654,9 @@ import Layout from '../layouts/Layout.astro';
         mesh.userData.i = i;
         scene.add(mesh);
         billboards.push(mesh);
-        const p: Piece = { st, i, mesh, mat, w:4, h:4, opacity:0, reveal:0, grow:1 };
+        const p: Piece = { st, i, mesh, mat, w:4, h:4, opacity:0, reveal:0, grow:1, beat:0, bright:1, starMix:1 };
         setSize(p, st.src ? .75 : 1);
+        if(st.kind !== 'home') buildStar(p);
         if(st.kind === 'set'){
           p.halo = new THREE.Mesh(new THREE.RingGeometry(.98, 1, 96), new THREE.MeshBasicMaterial({ color:0xff6eb4, transparent:true, opacity:.7, depthWrite:false }));
           p.halo.position.copy(mesh.position);
@@ -851,7 +924,7 @@ import Layout from '../layouts/Layout.astro';
     }
     let ship: Ship | null = null, boarded = false, hoverShip = false;
     let burst: THREE.Points | null = null, shock: THREE.Mesh | null = null;
-    let impactAt = 0, logoPulse = 0, delivering = false;
+    let impactAt = 0, logoPulse = 0, delivering = false, novaImpact = false;
     const BURST = 330, DELIVERY = 2.7;
     const TRAIL = 170, SHIP_SCALE = 1;
     // Cruising, the ship lives in this rig glued to the camera: orbiting and zooming the universe never move it.
@@ -1034,7 +1107,7 @@ import Layout from '../layouts/Layout.astro';
       }
       if(impactAt){
         const e = (now-impactAt)/1000;
-        logoPulse = Math.exp(-e*1.5);
+        logoPulse = novaImpact ? 0 : Math.exp(-e*1.5);
         energy = Math.max(energy, Math.exp(-e*4)*.9);
         if(burst && shock){
           const grow = 1-Math.exp(-e*2.2);
@@ -1130,11 +1203,26 @@ import Layout from '../layouts/Layout.astro';
         if(stayed && ship){ ship.mode = 'away'; ship.t0 = performance.now()-3800; }
       });
     }
+    // A set past its span explodes once per visitor; after that only the nebula remains.
+    function supernovas(){
+      const p = pieces.find(q => q.stage === 'supernova remnant' && !localStorage.getItem('nova:'+q.st.set?.slug));
+      if(!p || !burst || !shock || reduced) return;
+      try { localStorage.setItem('nova:'+p.st.set!.slug, '1'); } catch {}
+      burst.position.copy(p.mesh.position);
+      shock.position.copy(p.mesh.position);
+      burst.visible = shock.visible = true;
+      impactAt = performance.now();
+      novaImpact = true;
+      playNote(NOTES[0]/2);
+    }
     function impact(now: number){
       if(!ship) return;
       ship.mode = 'away';
       ship.t0 = now;
       impactAt = now;
+      novaImpact = false;
+      burst?.position.set(0,0,0);
+      shock?.position.set(0,0,0);
       logoPulse = 1;
       if(burst && shock && !reduced){ burst.visible = true; shock.visible = true; }
       if(audioCtx && masterGain){
@@ -1203,7 +1291,7 @@ import Layout from '../layouts/Layout.astro';
       const home = st.kind === 'home';
       metaId.textContent = home
         ? `${total} señales`
-        : `Nº ${String(st.n).padStart(3,'0')}/${total} · ${st.date.replaceAll('-','·')}`;
+        : `Nº ${String(st.n).padStart(3,'0')}/${total} · ${st.date.replaceAll('-','·')} · ${pieces[i]?.stage || ''}`;
       metaCap.textContent = home ? 'pasado observado' : (st.kind === 'text' || st.flood) && focused === i ? '' : st.text;
       act.hidden = !(st.kind === 'set' && focused === i);
       nowEl.textContent = home ? 'Eze Angeloni, Cronovisor' : `${st.date}: ${st.text || 'foto sin título'}`;
@@ -1362,10 +1450,19 @@ import Layout from '../layouts/Layout.astro';
         else if(hovered > 0 && !isHov) opacityT = .4;
         p.reveal += (revealT-p.reveal)*ease;
         p.opacity += (opacityT-p.opacity)*ease;
-        p.grow += ((isHov ? 1.3 : 1)-p.grow)*ease;
+        p.grow += ((isHov ? 2.1 : 1)-p.grow)*ease;
+        // far away it is a star; close up, or under the cursor, the star opens into the original piece
+        const starT = home || isOn || isHov ? 0 : 1-Math.min(1, Math.max(0, (near-.1)/.62));
+        p.starMix += (starT-p.starMix)*ease;
         p.mesh.scale.set(p.w*p.grow, p.h*p.grow, 1);
         p.mat.uniforms.uReveal.value = p.reveal;
-        p.mat.uniforms.uOpacity.value = p.opacity;
+        p.mat.uniforms.uOpacity.value = p.opacity*(1-p.starMix);
+        if(p.starMat){
+          const u = p.starMat.uniforms;
+          u.uTime.value = now*.001;
+          u.uOpacity.value = p.opacity*p.starMix;
+          u.uBright.value = p.bright*(1 + (reduced ? 0 : .28*Math.sin(now*.001*p.beat*Math.PI*2 + p.st.n)));
+        }
         p.mat.uniforms.uGain.value = home ? 1 + logoPulse*1.8 : isOn || isHov ? 1 : .74;
         if(p.halo){
           const s = Math.max(p.w, p.h)*(.85 + .05*Math.sin(now*.0016));
@@ -1705,7 +1802,7 @@ import Layout from '../layouts/Layout.astro';
         camera.position.set(0, 1, 15);
         look.copy(CENTER);
         camera.lookAt(look);
-        flyTo(home, CENTER.clone(), 3200, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } });
+        flyTo(home, CENTER.clone(), 3200, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } supernovas(); });
       }
       lastInput = performance.now();
       requestAnimationFrame(frame);
