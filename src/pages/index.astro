@@ -90,6 +90,12 @@ import Layout from '../layouts/Layout.astro';
       #msg-thanks small { font-size: .72rem; color: var(--muted); letter-spacing: .1em; }
       body.aboard #hud, body.aboard #trapo-fab { opacity: 0; pointer-events: none; }
       body.aboard #hud * { pointer-events: none; }
+      #pilot-hud { position: fixed; left: 50%; top: 3.4rem; transform: translateX(-50%); z-index: 12; font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .5s; text-shadow: 0 0 10px rgba(8,8,16,.9); }
+      body.pilot #pilot-hud { opacity: .72; }
+      body.aboard #pilot-hud { opacity: 0; }
+      #pilot-hud .at-piece, body.focus #pilot-hud .flying { display: none; }
+      body.focus #pilot-hud .at-piece { display: inline; }
+      body.pilot #balloon-tag, body.pilot #trapo-fab { opacity: 0; pointer-events: none; }
 
       #index-grid { columns: 5 200px; column-gap: 10px; }
       .cell { display: block; width: 100%; margin-bottom: 10px; break-inside: avoid; text-align: left; position: relative; transition: opacity .15s; }
@@ -188,6 +194,7 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <button id="balloon-tag">leave a word</button>
+  <div id="pilot-hud" aria-hidden="true"><span class="flying">piloting · stick steer &amp; climb · 1 burner · 2 open nearest · 3 land · 4 leave a word</span><span class="at-piece">stick ←→ browse · 2 next · 3 back to the balloon</span></div>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
@@ -921,7 +928,7 @@ import Layout from '../layouts/Layout.astro';
     interface Balloon {
       group: THREE.Group; engine: THREE.Mesh; lamps: THREE.MeshBasicMaterial[]; bulbs: THREE.Mesh[]; home: THREE.Vector3[];
       thread: THREE.Line; skin: { m: THREE.MeshBasicMaterial; base: THREE.Color }[]; drops: { from: THREE.Vector3; ctrl: THREE.Vector3 }[];
-      tau: number; peek: number; peekFrom: number; mode: 'cruise' | 'board' | 'parked' | 'launch' | 'away';
+      tau: number; peek: number; peekFrom: number; mode: 'cruise' | 'pilot' | 'board' | 'parked' | 'launch' | 'away';
       spawn: number; t0: number; p0: THREE.Vector3; dir: THREE.Vector3; lit: number; over: boolean; sx: number; sy: number; onScreen: boolean;
     }
     let balloon: Balloon | null = null, boarded = false, hoverBalloon = false;
@@ -1183,7 +1190,8 @@ import Layout from '../layouts/Layout.astro';
       // each burst lights the envelope from inside, warmest at full burn
       const full = s.lit === 11 && !s.over;
       const blast = Math.pow(Math.max(0, Math.sin(now*.0007)), 14);
-      const power = s.mode === 'launch' ? 1.2 + 4*Math.exp(-(now-s.t0)/900) : full ? 2.6 : .5 + blast*2.2;
+      const burning = s.mode === 'pilot' && (pad.held[0] || pad.y < 0);
+      const power = s.mode === 'launch' ? 1.2 + 4*Math.exp(-(now-s.t0)/900) : full || burning ? 2.6 : .5 + blast*2.2;
       const heat = Math.min(1, (power-.5)/3);
       s.skin.forEach(({ m, base }) => m.color.copy(base).multiplyScalar(1 + heat*.3).lerp(new THREE.Color(0xc9a070), heat*.12));
       const flame = .55*power*(1 + .16*Math.sin(now*.05) + .08*Math.sin(now*.083));
@@ -1216,7 +1224,8 @@ import Layout from '../layouts/Layout.astro';
       balloon.peek = 0;
       balloon.group.scale.setScalar(BALLOON_SCALE);
       resetForm();
-      if(controls){ controls.enabled = false; overviewPos.copy(camera.position); }
+      if(controls){ controls.enabled = false; overviewPos.copy(pilot ? pilot.overview : camera.position); }
+      if(pilot){ pilot = null; document.body.classList.remove('pilot'); }
       // from here on it's a physical object in the universe, parked where you caught it, upright in the world
       scene.attach(balloon.group);
       balloon.group.quaternion.copy(upright(balloon.tau*.2));
@@ -1332,6 +1341,119 @@ import Layout from '../layouts/Layout.astro';
       setTimeout(() => { delivering = false; leaveBalloon(); }, DELIVERY*1000+4300);
     }
 
+    // ── Pilot ─────────────────────────────────────────────
+    // With a joystick (Gamepad API) you fly the balloon through the universe: the camera rides behind it,
+    // and pieces open up as you approach them. Built for a digital 8-way stick and 4 buttons (Competition Pro).
+    const pad = { x:0, y:0, held:[false,false,false,false], prev:[false,false,false,false] };
+    let pilot: { pos: THREE.Vector3; heading: number; turn: number; vy: number; speed: number; overview: THREE.Vector3 } | null = null;
+    let padRepeat = 0;
+    const PILOT_R = 150, PILOT_Y = 70, CRUISE = 4, BURN = 24;
+    function readPad(){
+      const gp = [...(navigator.getGamepads?.() || [])].find(g => g && g.connected);
+      if(!gp) return false;
+      const ax = gp.axes, b = (i: number) => !!gp.buttons[i]?.pressed;
+      let x = Math.abs(ax[0] || 0) > .5 ? Math.sign(ax[0]) : 0;
+      let y = Math.abs(ax[1] || 0) > .5 ? Math.sign(ax[1]) : 0;
+      if(gp.mapping === 'standard'){ if(b(14)) x = -1; if(b(15)) x = 1; if(b(12)) y = -1; if(b(13)) y = 1; }
+      // some sticks report as a hat switch on axis 9: -1 is up, then clockwise in steps of 2/7, idle sits above 1
+      const hat = ax[9];
+      if(!x && !y && hat !== undefined && hat >= -1.05 && hat <= 1.05){
+        const k = Math.round((hat+1)*3.5) % 8;
+        x = [0,1,1,1,0,-1,-1,-1][k]; y = [-1,-1,0,1,1,1,0,-1][k];
+      }
+      pad.x = x; pad.y = y;
+      pad.prev = pad.held;
+      pad.held = [0,1,2,3].map(b);
+      return true;
+    }
+    const tap = (i: number) => pad.held[i] && !pad.prev[i];
+    function pollPad(now: number){
+      if(!readPad()) return;
+      if(!pad.x) padRepeat = 0;
+      if(!pad.x && !pad.y && !pad.held.some(Boolean)) return;
+      touched();
+      if(anyOpen()){ if(tap(2)) closeSheets(); return; }
+      if(boarded){ if(tap(2) && !delivering) leaveBalloon(); return; }
+      if(focused >= 0){
+        if(pad.x && now > padRepeat){ stepFocus(pad.x); padRepeat = now + 480; }
+        if(tap(1)) stepFocus(1);
+        if(tap(2)) backOut();
+        if(tap(3)) board();
+        return;
+      }
+      if(!pilot){
+        if(tap(3)) board();
+        else if(!pad.held[2] && !flight && balloon?.mode === 'cruise') enterPilot();
+        return;
+      }
+      if(tap(1)) openNearest();
+      if(tap(2)) exitPilot();
+      if(tap(3)) board();
+    }
+    function enterPilot(){
+      if(!balloon || !controls) return;
+      const fwd = camera.getWorldDirection(new THREE.Vector3());
+      scene.attach(balloon.group);
+      balloon.group.scale.setScalar(BALLOON_SCALE);
+      balloon.mode = 'pilot';
+      balloon.peek = 0;
+      pilot = { pos:balloon.group.position.clone(), heading:Math.atan2(fwd.x, fwd.z), turn:0, vy:0, speed:CRUISE, overview:camera.position.clone() };
+      controls.enabled = false;
+      hovered = -1;
+      showMeta(0);
+      document.body.classList.add('pilot');
+      playNote(NOTES[2]);
+    }
+    function exitPilot(){
+      if(!pilot || !balloon) return;
+      const to = pilot.overview;
+      pilot = null;
+      document.body.classList.remove('pilot');
+      balloon.mode = 'away'; // it drifts back into its own route a moment later
+      balloon.t0 = performance.now()-3800;
+      flyTo(to.clone(), CENTER.clone(), 1700, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } });
+    }
+    // the closest piece, preferring what's ahead of you
+    function openNearest(){
+      const fwd = camera.getWorldDirection(new THREE.Vector3());
+      let best = -1, score = Infinity;
+      for(const q of pieces){
+        if(q.st.kind === 'home') continue;
+        const d = q.mesh.position.clone().sub(camera.position), dist = d.length();
+        const sc = dist*(d.dot(fwd)/dist > .2 ? 1 : 3);
+        if(sc < score){ score = sc; best = q.i; }
+      }
+      if(best > 0) focusOn(best, 1300);
+    }
+    function updatePilot(dt: number){
+      if(!pilot || !balloon) return 0;
+      const p = pilot, k = 1-Math.exp(-dt*2.2);
+      // a digital stick is all or nothing: inertia makes it feel like a balloon
+      p.turn += (-pad.x - p.turn)*k;
+      p.heading += p.turn*1.2*dt;
+      p.vy += (-pad.y*9 - p.vy)*k;
+      const burning = pad.held[0];
+      p.speed += ((burning ? BURN : CRUISE) - p.speed)*(1-Math.exp(-dt*(burning ? .9 : .5)));
+      const f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+      p.pos.addScaledVector(f, p.speed*dt);
+      p.pos.y = Math.max(-PILOT_Y, Math.min(PILOT_Y, p.pos.y + p.vy*dt));
+      const r = Math.hypot(p.pos.x, p.pos.z);
+      if(r > PILOT_R){ p.pos.x *= PILOT_R/r; p.pos.z *= PILOT_R/r; } // the edge of the archive holds it back
+      const g = balloon.group;
+      g.position.copy(p.pos);
+      if(!reduced) g.position.y += Math.sin(performance.now()*.0011)*.25;
+      // turns slowly, banks a touch into the turn, tips forward with speed
+      g.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0), p.heading)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), -p.turn*.14))
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), p.speed/BURN*.07));
+      // the camera rides behind and a little above
+      const c = 1-Math.exp(-dt*2.4);
+      camera.position.lerp(p.pos.clone().addScaledVector(f, -22).add(new THREE.Vector3(0, 6 + p.vy*.3, 0)), c);
+      look.lerp(p.pos.clone().addScaledVector(f, 12).add(new THREE.Vector3(0, 2.5, 0)), c);
+      camera.lookAt(look);
+      return burning ? .22 : 0;
+    }
+
     function backOut(){
       if(focused < 0) return;
       const p = pieces[focused];
@@ -1342,8 +1464,11 @@ import Layout from '../layouts/Layout.astro';
       btnBack.hidden = true;
       lamp.classList.remove('on');
       showMeta(0);
-      const to = overviewPos.lengthSq() ? overviewPos.clone() : new THREE.Vector3(0, overviewR*.34, overviewR);
-      flyTo(to, CENTER.clone(), 1700, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } });
+      if(pilot) flight = null; // back behind the balloon: the chase camera takes it from here
+      else {
+        const to = overviewPos.lengthSq() ? overviewPos.clone() : new THREE.Vector3(0, overviewR*.34, overviewR);
+        flyTo(to, CENTER.clone(), 1700, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } });
+      }
       const url = new URL(location.href);
       url.hash = '';
       history.replaceState(null, '', url.toString());
@@ -1383,6 +1508,7 @@ import Layout from '../layouts/Layout.astro';
       pointerFresh = true;
     });
     screen.addEventListener('pointerdown', e => {
+      if(pilot && focused < 0){ exitPilot(); return; } // the mouse takes the universe back
       press = { x:e.clientX, y:e.clientY, t:performance.now() };
       touched();
     });
@@ -1414,6 +1540,7 @@ import Layout from '../layouts/Layout.astro';
       if(e.key === 'Escape'){
         if(boarded){ if(!delivering) leaveBalloon(); }
         else if(anyOpen()) closeSheets();
+        else if(pilot && focused < 0) exitPilot();
         else { touched(); backOut(); }
         return;
       }
@@ -1449,6 +1576,7 @@ import Layout from '../layouts/Layout.astro';
     let lastFrame = 0, calm = 0, slowAvg = 1/60, lowPower = false;
     function frame(now: number){
       requestAnimationFrame(frame);
+      if(renderer && !document.hidden) pollPad(now);
       if(!renderer || document.hidden || anyOpen()){ lastFrame = now; return; }
       const dt = Math.min(now-lastFrame, 100)/1000;
       lastFrame = now;
@@ -1470,6 +1598,8 @@ import Layout from '../layouts/Layout.astro';
         camera.lookAt(look);
         flightEnergy = Math.sin(Math.PI*t);
         if(t >= 1){ const f = flight; flight = null; f.done?.(); }
+      } else if(pilot && focused < 0){
+        flightEnergy = updatePilot(dt);
       } else if(focused < 0 && controls?.enabled){
         controls.autoRotate = !reduced && now-lastInput > 2600;
         controls.update();
