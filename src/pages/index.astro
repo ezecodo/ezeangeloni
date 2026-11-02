@@ -93,8 +93,26 @@ import Layout from '../layouts/Layout.astro';
       #pilot-hud { position: fixed; left: 50%; top: 3.4rem; transform: translateX(-50%); z-index: 12; font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .5s; text-shadow: 0 0 10px rgba(8,8,16,.9); }
       body.pilot #pilot-hud { opacity: .72; }
       body.aboard #pilot-hud { opacity: 0; }
-      #pilot-hud .at-piece, body.focus #pilot-hud .flying { display: none; }
+      #pilot-hud .at-piece, #pilot-hud .choosing, body.focus #pilot-hud .flying, body.selecting #pilot-hud .flying { display: none; }
       body.focus #pilot-hud .at-piece { display: inline; }
+      body.selecting:not(.focus) #pilot-hud .choosing { display: inline; }
+      body.kb #pilot-hud .pad, body:not(.kb) #pilot-hud .kb { display: none; }
+      #pilot-hud .wind { display: block; margin-top: .55rem; text-align: center; color: #6ef9f5; }
+      #wind-arrow { display: inline-block; margin-right: .7em; font-weight: 400; transition: transform .4s; }
+      #selector { position: fixed; left: 0; top: 0; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .25s, transform .22s ease-out, width .22s ease-out, height .22s ease-out; }
+      #selector.on { opacity: 1; animation: breathe 1.6s ease-in-out infinite; }
+      #blast-light { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 9; pointer-events: none; opacity: 0; mix-blend-mode: screen; box-shadow: 0 0 0 200vmax rgba(255,120,30,.42); }
+      #cands { position: fixed; inset: 0; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .3s; }
+      #cands.on { opacity: .45; }
+      .cand { position: absolute; left: 0; top: 0; }
+      .cand[hidden] { display: none; }
+      .cand i, #selector i { position: absolute; width: 20px; height: 20px; border: 0 solid #6ef9f5; filter: drop-shadow(0 0 6px rgba(110,249,245,.6)); }
+      .cand i { width: 10px; height: 10px; filter: none; }
+      .cand i:nth-child(1), #selector i:nth-child(1) { left: 0; top: 0; border-width: 2px 0 0 2px; }
+      .cand i:nth-child(2), #selector i:nth-child(2) { right: 0; top: 0; border-width: 2px 2px 0 0; }
+      .cand i:nth-child(3), #selector i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 2px 2px; }
+      .cand i:nth-child(4), #selector i:nth-child(4) { right: 0; bottom: 0; border-width: 0 2px 2px 0; }
+      @keyframes breathe { 50% { opacity: .55; } }
       body.pilot #balloon-tag, body.pilot #trapo-fab { opacity: 0; pointer-events: none; }
 
       #index-grid { columns: 5 200px; column-gap: 10px; }
@@ -181,7 +199,7 @@ import Layout from '../layouts/Layout.astro';
       <span id="lamp"></span>
       <span id="meta-id"></span>
       <span id="meta-cap"></span>
-      <span id="hint">drag to orbit · click a signal</span>
+      <span id="hint">drag to orbit · click a signal · wasd to fly</span>
     </div>
   </div>
   <p id="now" class="sr" aria-live="polite"></p>
@@ -194,7 +212,10 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <button id="balloon-tag">leave a word</button>
-  <div id="pilot-hud" aria-hidden="true"><span class="flying">piloting · stick steer &amp; climb · 1 burner · 2 open nearest · 3 land · 4 leave a word</span><span class="at-piece">stick ←→ browse · 2 next · 3 back to the balloon</span></div>
+  <div id="cands" aria-hidden="true"></div>
+  <div id="blast-light" aria-hidden="true"></div>
+  <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span></span><span class="choosing"><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
@@ -481,7 +502,9 @@ import Layout from '../layouts/Layout.astro';
     let renderer: THREE.WebGLRenderer | null = null;
     try { renderer = new THREE.WebGLRenderer({ canvas:screen, antialias:true, powerPreference:'high-performance' }); }
     catch { renderer = null; }
-    const DPR = Math.min(window.devicePixelRatio || 1, 1.75);
+    // 1.25 instead of the full retina ratio: half the pixels, and the grain and halftone hide the difference.
+    // (Fanless laptops ran hot drawing ~4M pixels every frame.)
+    const DPR = Math.min(window.devicePixelRatio || 1, 1.25);
     THREE.ColorManagement.enabled = false;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, .1, 900);
@@ -674,6 +697,7 @@ import Layout from '../layouts/Layout.astro';
       });
       buildThread();
       buildDust();
+      buildWind();
       buildBalloon();
       cards();
       queuePhotos();
@@ -830,6 +854,9 @@ import Layout from '../layouts/Layout.astro';
       composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type:THREE.HalfFloatType, samples:4 }));
       composer.addPass(new RenderPass(scene, camera));
       bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth/2, window.innerHeight/2), BLOOM, .55, .78);
+      // bloom is a soft glow: render it at half resolution, a quarter of the cost, nothing visible lost
+      const bloomSize = bloom.setSize.bind(bloom);
+      bloom.setSize = (w: number, h: number) => bloomSize(Math.max(1, Math.round(w/2)), Math.max(1, Math.round(h/2)));
       composer.addPass(bloom);
       lens = new ShaderPass({
         uniforms:{ tDiffuse:{value:null}, uEnergy:{value:0}, uGrain:{value:1}, uTime:{value:0} },
@@ -1060,6 +1087,232 @@ import Layout from '../layouts/Layout.astro';
 
       balloon = { group, engine, lamps, bulbs, home, thread, skin, drops:[], tau:rnd(0, 400), peek:0, peekFrom:0, mode:'cruise', spawn:0, t0:0, p0:new THREE.Vector3(), dir:new THREE.Vector3(0,0,1), lit:0, over:false, sx:0, sy:0, onScreen:false };
       placeBalloon();
+      buildBasketView();
+    }
+    // ── From the basket ──
+    // Opening a piece while flying, you look at it from inside the basket. A camera-glued set (in `rig`, drawn
+    // over everything) frames the edges only: the piece keeps the middle 72% of the screen, untouched.
+    //   bottom: woven wicker walls, a leather-padded rim with stitching, hemp ropes lashed at the corners;
+    //   top: the burner frame bar with its two cans, and the envelope's underside, Wiphala panels quilted and
+    //   lit from inside, rippling in the wind.
+    // Every 10-16 s the burner fires on its own: you hear it, the fabric glows, the wicker warms.
+    const blastLight = $('blast-light');
+    let basketView: THREE.Group | null = null, basketK = 0, nextBlast = 0, blastAt = -1e9, blastPower = 1;
+    const basketMats: THREE.Material[] = [];
+    let basketLow: THREE.Group, basketHigh: THREE.Group, burnerGlow: THREE.Sprite, flameJet: THREE.Sprite, flameCore: THREE.Sprite;
+    let canopyGeo: THREE.BufferGeometry[] = [], canopyBase: Float32Array[] = [];
+    const wickerMats: THREE.MeshBasicMaterial[] = [], canopyMats: THREE.MeshBasicMaterial[] = [];
+    function wickerTexture(){
+      const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+      const g = c.getContext('2d')!;
+      g.fillStyle = '#120b06'; g.fillRect(0, 0, 256, 128);
+      const rowH = 16, stake = 32;
+      for(let r = 0; r < 128/rowH; r++) for(let s = 0; s < 256/stake; s++){
+        const over = (r + s) % 2 === 0, x = s*stake, y = r*rowH;
+        const grad = g.createLinearGradient(0, y, 0, y+rowH);
+        grad.addColorStop(0, over ? '#6e4a2a' : '#3e2916');
+        grad.addColorStop(.45, over ? '#b88a52' : '#6a4728');
+        grad.addColorStop(1, over ? '#4a3019' : '#2a1b0e');
+        g.fillStyle = grad;
+        g.beginPath(); g.roundRect(x + (over ? 0 : 4), y + 2, stake - (over ? 0 : 8), rowH - 4, 6); g.fill();
+      }
+      g.fillStyle = 'rgba(0,0,0,.55)'; // the stakes the reeds weave around
+      for(let s = 0; s < 256/stake; s++) g.fillRect(s*stake - 1, 0, 3, 128);
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.anisotropy = 4;
+      return t;
+    }
+    // flat-shaded meshes still need volume: shade vertex colours by their normal, as if lit from above and in front
+    function shade(geo: THREE.BufferGeometry, base: THREE.Color){
+      geo.computeVertexNormals();
+      const n = geo.attributes.normal as THREE.BufferAttribute, cols = new Float32Array(n.count*3);
+      for(let i = 0; i < n.count; i++){
+        const k = .45 + .5*Math.max(0, n.getY(i)) + .25*Math.max(0, n.getZ(i));
+        cols.set([base.r*k, base.g*k, base.b*k], i*3);
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      return geo;
+    }
+    function buildBasketView(){
+      if(!balloon) return;
+      const view = new THREE.Group(), low = new THREE.Group(), high = new THREE.Group();
+      view.add(low, high);
+      const keep = <T extends THREE.Material>(m: T) => { m.depthTest = false; m.depthWrite = false; m.transparent = true; m.userData.base = m.opacity; basketMats.push(m); return m; };
+      const put = <T extends THREE.Object3D>(parent: THREE.Group, o: T, order: number) => { o.renderOrder = order; o.frustumCulled = false; parent.add(o); return o; };
+      const solid = (color: number) => keep(new THREE.MeshBasicMaterial({ vertexColors:true, color }));
+
+      // ── the basket: round-cornered, as real ones are. Seen from inside, its rim draws a soft arc: highest in
+      // the middle, far from you (~89% down the screen), curving down through the corners out of the frame.
+      const H = 1.3, top = -.7, cz = -1.2, A = 1.45, Bz = .75; // plan: an ellipse around you, centre cz
+      const plan = (phi: number) => new THREE.Vector3(A*Math.sin(phi), top, cz - Bz*Math.cos(phi));
+      const inward = (p: THREE.Vector3) => new THREE.Vector3(-p.x/(A*A), 0, -(p.z - cz)/(Bz*Bz)).normalize();
+      const PHI = 1.45, arc: THREE.Vector3[] = [];
+      for(let i = 0; i <= 96; i++) arc.push(plan(-PHI + 2*PHI*i/96));
+      // the wicker wall: a ribbon hanging from the arc, the weave running along it
+      const tex = wickerTexture();
+      tex.repeat.set(1, H/1.1);
+      const wallMat = keep(new THREE.MeshBasicMaterial({ map:tex, color:new THREE.Color(.82, .78, .74), side:THREE.DoubleSide }));
+      wickerMats.push(wallMat);
+      const wv: number[] = [], wuv: number[] = [], wix: number[] = [];
+      let run = 0;
+      arc.forEach((p, i) => {
+        if(i) run += p.distanceTo(arc[i-1]);
+        wv.push(p.x, top, p.z, p.x, top - H, p.z);
+        wuv.push(run/1.6, 1, run/1.6, 0);
+        if(i) wix.push((i-1)*2, i*2, (i-1)*2+1, i*2, i*2+1, (i-1)*2+1);
+      });
+      const wallGeo = new THREE.BufferGeometry();
+      wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(wv, 3));
+      wallGeo.setAttribute('uv', new THREE.Float32BufferAttribute(wuv, 2));
+      wallGeo.setIndex(wix);
+      put(low, new THREE.Mesh(wallGeo, wallMat), 20);
+      // the leather-padded rim follows the arc, with its stitched seam on the side facing you
+      const rimPath = new THREE.CatmullRomCurve3(arc);
+      put(low, new THREE.Mesh(shade(new THREE.TubeGeometry(rimPath, 160, .042, 12), new THREE.Color(0x5e3519)), solid(0xffffff)), 22);
+      for(const dy of [.026, -.012]){
+        const pts = rimPath.getPoints(240).map(p => p.clone().addScaledVector(inward(p), .036).add(new THREE.Vector3(0, dy, 0)));
+        const seam = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), keep(new THREE.LineDashedMaterial({ color:0xe8d2b0, dashSize:.035, gapSize:.03, opacity:.75 })));
+        seam.computeLineDistances();
+        put(low, seam, 23);
+      }
+      // corner uprights: leather sleeves tapering a touch, a stitched seam down the side facing you,
+      // three straps with small brass buckles. Kept at the screen edges (~97% across), outside any piece.
+      for(const sx of [-1, 1]){
+        const foot = plan(sx*.93), toward = inward(foot);
+        const post = new THREE.CylinderGeometry(.03, .037, 2.4, 16); post.translate(foot.x, top + 1.15, foot.z);
+        put(low, new THREE.Mesh(shade(post, new THREE.Color(0x4a2a15)), solid(0xffffff)), 24);
+        const seamPts = [0, 1].map(k => new THREE.Vector3(foot.x, top + .05 + k*2.3, foot.z).addScaledVector(toward, .037 - k*.007));
+        const seam = new THREE.Line(new THREE.BufferGeometry().setFromPoints(seamPts), keep(new THREE.LineDashedMaterial({ color:0xd9bf98, dashSize:.03, gapSize:.025, opacity:.6 })));
+        seam.computeLineDistances();
+        put(low, seam, 25);
+        for(let k = 0; k < 3; k++){
+          const y = top + .3 + k*.5;
+          const strap = new THREE.CylinderGeometry(.04, .04, .028, 16); strap.translate(foot.x, y, foot.z);
+          put(low, new THREE.Mesh(shade(strap, new THREE.Color(0x22140b)), solid(0xffffff)), 26);
+          const buckle = new THREE.BoxGeometry(.03, .034, .008);
+          buckle.lookAt(toward); buckle.translate(foot.x + toward.x*.042, y, foot.z + toward.z*.042);
+          put(low, new THREE.Mesh(shade(buckle, new THREE.Color(0xb08a3e)), solid(0xffffff)), 27);
+        }
+      }
+
+      // ── overhead: the burner frame bar and its two cans
+      const W = 2.6, far = -1.8; // the frame spans the basket, just in front of you
+      const bar = new THREE.CylinderGeometry(.035, .035, W + .2, 10); bar.rotateZ(Math.PI/2); bar.translate(0, .8, far - .15);
+      put(high, new THREE.Mesh(shade(bar, new THREE.Color(0x4a4a55)), solid(0xffffff)), 24);
+      for(const sx of [-1, 1]){
+        const can = new THREE.CylinderGeometry(.045, .05, .12, 14); can.translate(sx*.075, .76, far - .1); // low enough that the flame above them shows
+        put(high, new THREE.Mesh(shade(can, new THREE.Color(0x8a8f99)), solid(0xffffff)), 25);
+      }
+      burnerGlow = put(high, new THREE.Sprite(keep(new THREE.SpriteMaterial({ map:SPRITE, color:0xff9f1c, opacity:0, blending:THREE.AdditiveBlending }))), 26);
+      burnerGlow.position.set(0, .88, far - .05);
+      burnerGlow.scale.setScalar(.4);
+      // the flame itself, roaring up from the cans into the envelope: only ever in the top band
+      flameJet = put(high, new THREE.Sprite(keep(new THREE.SpriteMaterial({ map:SPRITE, color:0xff8a1c, opacity:0, blending:THREE.AdditiveBlending }))), 27);
+      flameCore = put(high, new THREE.Sprite(keep(new THREE.SpriteMaterial({ map:SPRITE, color:0xfff1c4, opacity:0, blending:THREE.AdditiveBlending }))), 28);
+      // the envelope's underside: quilted Wiphala panels, brightest near the burner, shaped so every point sits
+      // ~19-26° above the view axis (only the top band of the screen)
+      const ROWS = 9, GORE = 16, SEGS = 4, prof: THREE.Vector2[] = [];
+      for(let j = 0; j <= ROWS; j++){ const r = 2 + j*1.3, t = j/ROWS; prof.push(new THREE.Vector2(r, r*(.49 - .14*t))); }
+      const span = Math.PI*2/GORE;
+      for(let gi = 0; gi < GORE; gi++){
+        const lathe = new THREE.LatheGeometry(prof, SEGS, gi*span, span);
+        const lp = lathe.attributes.position as THREE.BufferAttribute;
+        for(let i = 0; i <= SEGS; i++) for(let j = 0; j <= ROWS; j++){ // each gore bulges down between its seams
+          const v = i*(ROWS+1) + j;
+          lp.setY(v, lp.getY(v) - Math.sin(Math.PI*i/SEGS)*.06*(1 + j*.4));
+        }
+        const geo = lathe.toNonIndexed(); lathe.dispose();
+        const pos = geo.attributes.position as THREE.BufferAttribute, cols = new Float32Array(pos.count*3);
+        for(let f = 0; f < pos.count/3; f++){
+          const row = Math.floor(f/2) % ROWS, base = hexRgb(WIPHALA[(gi + row) % WIPHALA.length]);
+          for(let v = 0; v < 3; v++){
+            const x = pos.getX(f*3+v), z = pos.getZ(f*3+v), r = Math.hypot(x, z);
+            const a = ((Math.atan2(x, z) - gi*span)/span % 1 + 1) % 1, jr = ((r - 2)/1.3) % 1;
+            const quilt = (.5 + .5*Math.pow(Math.sin(Math.PI*a), .6))*(.72 + .28*Math.sin(Math.PI*Math.min(1, jr + .001)));
+            const lit = 1.15 - .55*(r - 2)/(ROWS*1.3); // the burner lights it from below, near the middle
+            cols.set(base.map(c => c*quilt*lit), (f*3+v)*3);
+          }
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        const m = keep(new THREE.MeshBasicMaterial({ vertexColors:true, color:new THREE.Color(.5, .47, .43), side:THREE.DoubleSide }));
+        canopyMats.push(m);
+        put(high, new THREE.Mesh(geo, m), 20);
+        canopyGeo.push(geo);
+        canopyBase.push((pos.array as Float32Array).slice());
+      }
+      // load tapes along every other seam
+      const tapes: number[] = [];
+      for(let gi = 0; gi < GORE; gi += 2) for(let j = 0; j < ROWS; j++){
+        const a = gi*span, p0 = prof[j], p1 = prof[j+1];
+        tapes.push(Math.sin(a)*p0.x, p0.y - .01, Math.cos(a)*p0.x, Math.sin(a)*p1.x, p1.y - .01, Math.cos(a)*p1.x);
+      }
+      const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.Float32BufferAttribute(tapes, 3));
+      put(high, new THREE.LineSegments(tg, keep(new THREE.LineBasicMaterial({ color:0xe8dcc8, opacity:.55 }))), 21);
+
+      view.visible = false;
+      rig.add(view);
+      basketView = view; basketLow = low; basketHigh = high;
+    }
+    function burnerBreath(len: number, peak: number){
+      if(!audioCtx || !masterGain) return;
+      const t = audioCtx.currentTime;
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*len, audioCtx.sampleRate), data = buf.getChannelData(0);
+      for(let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
+      const src = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+      src.buffer = buf;
+      f.type = 'bandpass'; f.Q.value = .7;
+      f.frequency.setValueAtTime(900, t);
+      f.frequency.exponentialRampToValueAtTime(300, t+len);
+      g.gain.setValueAtTime(.001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t+.12);
+      g.gain.exponentialRampToValueAtTime(.001, t+len);
+      src.connect(f); f.connect(g); g.connect(masterGain);
+      src.start(t); src.stop(t+len);
+    }
+    function updateBasketView(dt: number, now: number){
+      if(!basketView) return;
+      const want = pilot && focused >= 0 ? 1 : 0;
+      basketK += (want - basketK)*(1-Math.exp(-dt*(want ? 2 : 4)));
+      basketView.visible = basketK > .01;
+      if(!basketView.visible){ nextBlast = 0; blastLight.style.opacity = '0'; return; }
+      const k = basketK, e = k*k*(3-2*k);
+      for(const m of basketMats) m.opacity = m.userData.base*Math.min(1, k*1.4);
+      // arrival: the basket rises from below, the canopy comes down from above
+      basketLow.position.y = -(1-e)*.55;
+      basketHigh.position.y = (1-e)*.9;
+      if(reduced) return;
+      // the burner fires on its own every so often
+      if(!nextBlast) nextBlast = now + rnd(3500, 6000);
+      if(k > .9 && now > nextBlast){ blastAt = now; nextBlast = now + rnd(10000, 16000); burnerBreath(1.4, .35); }
+      const b = Math.max(0, Math.min(1, (now-blastAt)/150))*Math.exp(-Math.max(0, now-blastAt-150)/(700*blastPower))*blastPower;
+      (burnerGlow.material as THREE.SpriteMaterial).opacity = Math.min(1, .15 + b*.85)*e;
+      burnerGlow.scale.setScalar(.36 + Math.min(1, b)*.22 + Math.sin(now*.03)*.02); // small: its light must stay in the canopy, off the piece
+      // a tongue of fire rising from the cans, flickering; its lowest point stays above ~6% of the screen
+      const fire = Math.min(1, b), flick = 1 + .12*Math.sin(now*.047) + .08*Math.sin(now*.031 + 1);
+      for(const [sp, w, h, o] of [[flameJet, .34, .9, .95], [flameCore, .14, .55, 1]] as [THREE.Sprite, number, number, number][]){
+        sp.scale.set(w*flick*(.6 + .4*fire), h*flick*fire, 1);
+        sp.position.set(0, .8 + sp.scale.y*.42, -1.9); // from the mouths of the cans, roaring up
+        (sp.material as THREE.SpriteMaterial).opacity = fire*o*e;
+      }
+      for(const m of canopyMats) m.color.setRGB(.5 + b*.6, .47 + b*.45, .43 + b*.18); // the fabric lit near white-gold
+      for(const m of wickerMats) m.color.setRGB(.82 + b*.4, .78 + b*.22, .74 - b*.05);
+      // firelight floods the whole view around the piece (the piece itself is cut out, untouched)
+      const wash = Math.min(1, Math.max(0, b - .15)*.8)*e;
+      blastLight.style.opacity = String(wash);
+      if(wash > .01 && focused >= 0) frameOf(pieces[focused], blastLight, 0);
+      // the fabric ripples, the basket sways a touch
+      const t = now*.001;
+      canopyGeo.forEach((geo, gi) => {
+        const pos = geo.attributes.position as THREE.BufferAttribute, base = canopyBase[gi];
+        for(let i = 0; i < pos.count; i++){
+          const x = base[i*3], z = base[i*3+2], r = Math.hypot(x, z);
+          pos.setY(i, base[i*3+1] + Math.sin(t*1.3 + Math.atan2(x, z)*6 + r*.5)*.035*(r - 1.5)*.25);
+        }
+        pos.needsUpdate = true;
+      });
+      basketView.rotation.z = Math.sin(t*.7)*.006 + Math.sin(now*.09)*.0035*Math.max(0, b-.3); // the burner shakes the basket
+      basketView.rotation.x = Math.sin(t*.5)*.004;
     }
     // Its own route, in view space: incommensurate waves, so it never repeats and always stays in frame.
     function route(tau: number){
@@ -1121,6 +1374,7 @@ import Layout from '../layouts/Layout.astro';
       camera.updateMatrixWorld(); // the screen label must read this frame's camera, not the last one
       rig.position.copy(camera.position);
       rig.quaternion.copy(camera.quaternion);
+      updateBasketView(dt, now);
       rig.updateMatrixWorld(true);
       let energy = 0;
       if(s.mode === 'cruise'){
@@ -1190,8 +1444,9 @@ import Layout from '../layouts/Layout.astro';
       // each burst lights the envelope from inside, warmest at full burn
       const full = s.lit === 11 && !s.over;
       const blast = Math.pow(Math.max(0, Math.sin(now*.0007)), 14);
-      const burning = s.mode === 'pilot' && (pad.held[0] || pad.y < 0);
-      const power = s.mode === 'launch' ? 1.2 + 4*Math.exp(-(now-s.t0)/900) : full || burning ? 2.6 : .5 + blast*2.2;
+      const burning = s.mode === 'pilot' && !!pilot && !pilot.selecting && pad.held[0];
+      const roar = s.mode === 'pilot' ? Math.exp(-Math.max(0, now-burstAt)/600) : 0; // the burst on leaving a piece
+      const power = Math.max(roar*5.5, s.mode === 'launch' ? 1.2 + 4*Math.exp(-(now-s.t0)/900) : full || burning ? 2.6 : .5 + blast*2.2);
       const heat = Math.min(1, (power-.5)/3);
       s.skin.forEach(({ m, base }) => m.color.copy(base).multiplyScalar(1 + heat*.3).lerp(new THREE.Color(0xc9a070), heat*.12));
       const flame = .55*power*(1 + .16*Math.sin(now*.05) + .08*Math.sin(now*.083));
@@ -1225,7 +1480,7 @@ import Layout from '../layouts/Layout.astro';
       balloon.group.scale.setScalar(BALLOON_SCALE);
       resetForm();
       if(controls){ controls.enabled = false; overviewPos.copy(pilot ? pilot.overview : camera.position); }
-      if(pilot){ pilot = null; document.body.classList.remove('pilot'); }
+      if(pilot){ endSelection(); pilot = null; document.body.classList.remove('pilot'); }
       // from here on it's a physical object in the universe, parked where you caught it, upright in the world
       scene.attach(balloon.group);
       balloon.group.quaternion.copy(upright(balloon.tau*.2));
@@ -1322,20 +1577,7 @@ import Layout from '../layouts/Layout.astro';
         flyTo(mid.clone().addScaledVector(across, D).add(new THREE.Vector3(0, 3, 0)), mid.clone().add(new THREE.Vector3(0, 3, 0)), 1600);
       }
       if(audioCtx && masterGain){
-        // the burner: one long breath of filtered noise
-        const t = audioCtx.currentTime, len = 1.8;
-        const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*len, audioCtx.sampleRate), data = buf.getChannelData(0);
-        for(let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
-        const src = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
-        src.buffer = buf;
-        f.type = 'bandpass'; f.Q.value = .7;
-        f.frequency.setValueAtTime(900, t);
-        f.frequency.exponentialRampToValueAtTime(300, t+len);
-        g.gain.setValueAtTime(.001, t);
-        g.gain.exponentialRampToValueAtTime(.9, t+.12);
-        g.gain.exponentialRampToValueAtTime(.001, t+len);
-        src.connect(f); f.connect(g); g.connect(masterGain);
-        src.start(t); src.stop(t+len);
+        burnerBreath(1.8, .9); // the burner: one long breath of filtered noise
       }
       setTimeout(() => { msgThanks.style.display = 'block'; }, DELIVERY*1000+500);
       setTimeout(() => { delivering = false; leaveBalloon(); }, DELIVERY*1000+4300);
@@ -1344,40 +1586,85 @@ import Layout from '../layouts/Layout.astro';
     // ── Pilot ─────────────────────────────────────────────
     // With a joystick (Gamepad API) you fly the balloon through the universe: the camera rides behind it,
     // and pieces open up as you approach them. Built for a digital 8-way stick and 4 buttons (Competition Pro).
-    const pad = { x:0, y:0, held:[false,false,false,false], prev:[false,false,false,false] };
-    let pilot: { pos: THREE.Vector3; heading: number; turn: number; vy: number; speed: number; overview: THREE.Vector3 } | null = null;
+    const pad = { x:0, y:0, px:0, py:0, held:[false,false,false,false], prev:[false,false,false,false] };
+    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null } | null = null;
     let padRepeat = 0;
-    const PILOT_R = 150, PILOT_Y = 70, CRUISE = 4, BURN = 24;
+    const PILOT_R = 150, PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
+    // The keyboard drives the same virtual pad, so everything below works the same without a joystick:
+    // WASD always (that's how you take off); arrows, space, E/Enter, Q/Backspace only once you're flying,
+    // so before that they keep browsing the archive as always. T (leave a word) and Esc have their own keys.
+    const keys = new Set<string>();
+    const KB_ALWAYS = ['w','a','s','d'], KB_PILOT = ['arrowup','arrowdown','arrowleft','arrowright',' ','e','enter','q','backspace'];
+    window.addEventListener('keydown', e => {
+      if(boarded || anyOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = (e.target as HTMLElement).tagName;
+      if(t === 'INPUT' || t === 'TEXTAREA') return;
+      const k = e.key.toLowerCase();
+      if(KB_ALWAYS.includes(k) || (pilot && KB_PILOT.includes(k))){ keys.add(k); if(pilot) e.preventDefault(); }
+    });
+    window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+    window.addEventListener('blur', () => keys.clear());
     function readPad(){
+      let x = 0, y = 0, held = [false, false, false, false], usedPad = false;
       const gp = [...(navigator.getGamepads?.() || [])].find(g => g && g.connected);
-      if(!gp) return false;
-      const ax = gp.axes, b = (i: number) => !!gp.buttons[i]?.pressed;
-      let x = Math.abs(ax[0] || 0) > .5 ? Math.sign(ax[0]) : 0;
-      let y = Math.abs(ax[1] || 0) > .5 ? Math.sign(ax[1]) : 0;
-      if(gp.mapping === 'standard'){ if(b(14)) x = -1; if(b(15)) x = 1; if(b(12)) y = -1; if(b(13)) y = 1; }
-      // some sticks report as a hat switch on axis 9: -1 is up, then clockwise in steps of 2/7, idle sits above 1
-      const hat = ax[9];
-      if(!x && !y && hat !== undefined && hat >= -1.05 && hat <= 1.05){
-        const k = Math.round((hat+1)*3.5) % 8;
-        x = [0,1,1,1,0,-1,-1,-1][k]; y = [-1,-1,0,1,1,1,0,-1][k];
+      if(gp){
+        const ax = gp.axes, b = (i: number) => !!gp.buttons[i]?.pressed;
+        x = Math.abs(ax[0] || 0) > .5 ? Math.sign(ax[0]) : 0;
+        y = Math.abs(ax[1] || 0) > .5 ? Math.sign(ax[1]) : 0;
+        if(gp.mapping === 'standard'){ if(b(14)) x = -1; if(b(15)) x = 1; if(b(12)) y = -1; if(b(13)) y = 1; }
+        // some sticks report as a hat switch on axis 9: -1 is up, then clockwise in steps of 2/7, idle sits above 1.
+        // A real hat never reads exactly 0; the Competition Pro leaves axis 9 at 0, which would read as "down"
+        const hat = ax[9];
+        if(!x && !y && hat !== undefined && Math.abs(hat) > .01 && hat >= -1.05 && hat <= 1.05){
+          const k = Math.round((hat+1)*3.5) % 8;
+          x = [0,1,1,1,0,-1,-1,-1][k]; y = [-1,-1,0,1,1,1,0,-1][k];
+        }
+        // roles: burner, select, back, board. The Competition Pro (DragonRise chip, vendor 0079) reports its
+        // four buttons as 0, 1, 3, 4: left round = 3, right round = 0, triangles = 1 and 4 (read from the device)
+        held = (/Vendor: 0079/i.test(gp.id) ? [3, 0, 1, 4] : [0, 1, 2, 3]).map(b);
+        usedPad = !!(x || y || held.some(Boolean));
       }
+      const k = (...names: string[]) => names.some(n => keys.has(n));
+      const kx = (k('d','arrowright') ? 1 : 0) - (k('a','arrowleft') ? 1 : 0);
+      const ky = (k('s','arrowdown') ? 1 : 0) - (k('w','arrowup') ? 1 : 0);
+      const kheld = [k(' '), k('e','enter'), k('q','backspace'), false];
+      if(!x) x = kx;
+      if(!y) y = ky;
+      held = held.map((h, i) => h || kheld[i]);
+      // the HUD speaks the language of whatever you're using
+      if(kx || ky || kheld.some(Boolean)) document.body.classList.add('kb');
+      else if(usedPad) document.body.classList.remove('kb');
+      pad.px = pad.x; pad.py = pad.y;
       pad.x = x; pad.y = y;
       pad.prev = pad.held;
-      pad.held = [0,1,2,3].map(b);
+      pad.held = held;
       return true;
     }
     const tap = (i: number) => pad.held[i] && !pad.prev[i];
     function pollPad(now: number){
       if(!readPad()) return;
-      if(!pad.x) padRepeat = 0;
-      if(!pad.x && !pad.y && !pad.held.some(Boolean)) return;
-      touched();
+      const dir = pad.x || pad.y;
+      if(!dir) padRepeat = 0;
+      if(!dir && !pad.held.some(Boolean)) return;
+      // holding still counts as presence, but only a new press or push interrupts the slideshow
+      lastInput = now;
+      hint.hidden = true;
+      const fresh = pad.held.some((h, i) => h && !pad.prev[i]) || (pad.x !== pad.px || pad.y !== pad.py) && !!dir;
+      if(fresh && !tap(0)) stopScan();
+      const wasScanning = scanning;
+      // held stick: one step now, then repeat while held
+      const step = () => { if(!dir || now < padRepeat) return false; padRepeat = now + (padRepeat ? 260 : 420); return true; };
       if(anyOpen()){ if(tap(2)) closeSheets(); return; }
       if(boarded){ if(tap(2) && !delivering) leaveBalloon(); return; }
-      if(focused >= 0){
-        if(pad.x && now > padRepeat){ stepFocus(pad.x); padRepeat = now + 480; }
+      if(focused >= 0 && leaving) return; // the burners are firing: you're on your way out
+      if(focused >= 0){ // the slideshow
+        if(pilot?.picked){
+          // opened from a pause: the stick takes you back to the pieces you were choosing from
+          if(dir && fresh){ backToPicked(); padRepeat = now + 420; return; }
+        } else if(pad.x && step()) stepFocus(pad.x);
+        if(tap(0)){ scanning = !wasScanning; syncScan(); lockedAt = now; } // 1: auto slideshow on/off
         if(tap(1)) stepFocus(1);
-        if(tap(2)) backOut();
+        if(tap(2)) flyOn();
         if(tap(3)) board();
         return;
       }
@@ -1386,7 +1673,14 @@ import Layout from '../layouts/Layout.astro';
         else if(!pad.held[2] && !flight && balloon?.mode === 'cruise') enterPilot();
         return;
       }
-      if(tap(1)) openNearest();
+      if(pilot.selecting){
+        if(step()) moveSelection(pad.x, pad.y);
+        if(tap(1) && pilot.sel === 0) board();
+        else if(tap(1) && pilot.sel > 0){ const i = pilot.sel, group = pilot.cands; endSelection(); pilot.picked = group; focusOn(i, 1300); }
+        if(tap(2)) endSelection();
+        return;
+      }
+      if(tap(1)) startSelection();
       if(tap(2)) exitPilot();
       if(tap(3)) board();
     }
@@ -1397,7 +1691,8 @@ import Layout from '../layouts/Layout.astro';
       balloon.group.scale.setScalar(BALLOON_SCALE);
       balloon.mode = 'pilot';
       balloon.peek = 0;
-      pilot = { pos:balloon.group.position.clone(), heading:Math.atan2(fwd.x, fwd.z), turn:0, vy:0, speed:CRUISE, overview:camera.position.clone() };
+      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null };
+      if(windMotes) windMotes.visible = true;
       controls.enabled = false;
       hovered = -1;
       showMeta(0);
@@ -1406,56 +1701,267 @@ import Layout from '../layouts/Layout.astro';
     }
     function exitPilot(){
       if(!pilot || !balloon) return;
+      endSelection();
+      pilot.picked = null;
       const to = pilot.overview;
       pilot = null;
       document.body.classList.remove('pilot');
+      if(windMotes) windMotes.visible = false;
       balloon.mode = 'away'; // it drifts back into its own route a moment later
       balloon.t0 = performance.now()-3800;
       flyTo(to.clone(), CENTER.clone(), 1700, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } });
     }
-    // the closest piece, preferring what's ahead of you
-    function openNearest(){
-      const fwd = camera.getWorldDirection(new THREE.Vector3());
-      let best = -1, score = Infinity;
+    // Selection: you pause the universe and what you were looking at, the pieces in front of you, becomes
+    // choosable with the stick. Only what reads as an image or a phrase counts, not the far stars.
+    function inView(only?: number[]){
+      const out: { i: number; x: number; y: number; d: number; shown: boolean }[] = [];
       for(const q of pieces){
-        if(q.st.kind === 'home') continue;
-        const d = q.mesh.position.clone().sub(camera.position), dist = d.length();
-        const sc = dist*(d.dot(fwd)/dist > .2 ? 1 : 3);
-        if(sc < score){ score = sc; best = q.i; }
+        if(only && !only.includes(q.i)) continue; // the logo counts too: choosing it means writing a word
+        const d = camera.position.distanceTo(q.mesh.position);
+        const v = q.mesh.position.clone().project(camera);
+        // |y| < .85 keeps clear of the HUD lines
+        if(v.z < 1 && Math.abs(v.x) < .95 && Math.abs(v.y) < .85 && d < 220) out.push({ i:q.i, x:v.x*camera.aspect, y:v.y, d, shown:q.starMix < .6 });
       }
-      if(best > 0) focusOn(best, 1300);
+      return out;
     }
-    function updatePilot(dt: number){
+    function select(i: number){
+      if(!pilot) return;
+      pilot.sel = i;
+      hovered = i;
+      showMeta(i);
+      if(i === 0){ metaCap.textContent = 'leave a word'; playNote(NOTES[4]); }
+      else playNote(NOTES[pieces[i].st.n % NOTES.length]);
+    }
+    // the viewfinder: four cyan corners around the chosen piece, sliding from one to the next;
+    // faint corners mark every other piece you can choose
+    const selector = $('selector'), candBox = $('cands');
+    function frameOf(q: Piece, el: HTMLElement, pad: number){
+      const v = q.mesh.position.clone().project(camera);
+      const unit = window.innerHeight/(2*camera.position.distanceTo(q.mesh.position)*Math.tan(camera.fov*Math.PI/360));
+      const vis = q.starMix > .6 ? 0 : 1; // a piece still showing as a star gets a small frame
+      const w = Math.max(26, (q.w*q.grow*unit)*vis) + pad, h = Math.max(26, (q.h*q.grow*unit)*vis) + pad;
+      const x = (v.x+1)/2*window.innerWidth, y = (1-v.y)/2*window.innerHeight;
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+      el.style.transform = `translate(${x-w/2}px, ${y-h/2}px)`;
+    }
+    function placeSelector(){
+      const on = !!pilot?.selecting && focused < 0;
+      selector.classList.toggle('on', on && pilot!.sel >= 0);
+      candBox.classList.toggle('on', on);
+      if(!on || !pilot) return;
+      if(pilot.sel >= 0) frameOf(pieces[pilot.sel], selector, 22);
+      while(candBox.children.length < pilot.cands.length){
+        const c = document.createElement('div');
+        c.className = 'cand';
+        c.innerHTML = '<i></i><i></i><i></i><i></i>';
+        candBox.appendChild(c);
+      }
+      [...candBox.children].forEach((c, k) => {
+        const el = c as HTMLElement, i = pilot!.cands[k];
+        el.hidden = i === undefined || i === pilot!.sel;
+        if(!el.hidden) frameOf(pieces[i], el, 12);
+      });
+    }
+    // while paused the balloon turns to a ghost, so nothing behind it is hidden
+    function ghostBalloon(on: boolean){
+      balloon?.group.traverse(o => {
+        const mats = (o as THREE.Mesh).material;
+        if(!mats) return;
+        for(const m of Array.isArray(mats) ? mats : [mats]){
+          if(m.userData.solid === undefined) m.userData.solid = { opacity:m.opacity, transparent:m.transparent };
+          const solid = m.userData.solid;
+          m.transparent = on || solid.transparent;
+          m.opacity = solid.opacity*(on ? .18 : 1);
+          m.needsUpdate = true;
+        }
+      });
+    }
+    function startSelection(){
+      if(!pilot) return;
+      const seen = inView();
+      // everything in front of you, stars included, nearest first (capped so the screen stays readable)
+      let cands = seen.sort((a, b) => a.d - b.d).slice(0, 40);
+      if(!cands.length){ playNote(NOTES[0]/2); return; }
+      pilot.selecting = true;
+      pilot.cands = cands.map(c => c.i);
+      document.body.classList.add('selecting');
+      ghostBalloon(true);
+      playNote(NOTES[0]/2); // time stops
+      // start from the one nearest the centre of the screen that the balloon wasn't covering
+      const b = balloon ? { x:(balloon.sx/window.innerWidth*2-1)*camera.aspect, y:1-balloon.sy/window.innerHeight*2 } : { x:0, y:0 };
+      const covered = (c: { x: number; y: number }) => Math.abs(c.x-b.x) < .3 && c.y-b.y < .55 && c.y-b.y > -.35;
+      cands.sort((a, b) => (Math.hypot(a.x, a.y) + (covered(a) ? 9 : 0)) - (Math.hypot(b.x, b.y) + (covered(b) ? 9 : 0)));
+      select(cands[0].i);
+    }
+    function backToPicked(){
+      if(!pilot?.picked) return;
+      const group = pilot.picked, at = focused;
+      pilot.picked = null;
+      backOut(true); // the chase camera brings the view back to where you paused
+      pilot.selecting = true;
+      pilot.cands = group.includes(at) ? group : [...group, at];
+      document.body.classList.add('selecting');
+      ghostBalloon(true);
+      select(at);
+    }
+    function endSelection(){
+      if(!pilot) return;
+      pilot.selecting = false;
+      pilot.sel = -1;
+      pilot.cands = [];
+      ghostBalloon(false);
+      hovered = -1;
+      document.body.classList.remove('selecting');
+      showMeta(0);
+    }
+    // jump to the next of those pieces in the pushed direction on screen, preferring the closest
+    function moveSelection(dx: number, dy: number){
+      if(!pilot) return;
+      const seen = inView(pilot.cands), cur = seen.find(c => c.i === pilot!.sel);
+      if(!cur) return;
+      const len = Math.hypot(dx, dy), ux = dx/len, uy = -dy/len; // stick down is screen down
+      let best = -1, score = Infinity;
+      for(const c of seen){
+        if(c.i === cur.i) continue;
+        const ox = c.x-cur.x, oy = c.y-cur.y, along = ox*ux + oy*uy;
+        if(along <= .02) continue;
+        const sc = along + Math.abs(ox*uy - oy*ux)*2;
+        if(sc < score){ score = sc; best = c.i; }
+      }
+      if(best >= 0) select(best);
+      else playNote(NOTES[0]); // nothing further that way
+    }
+    // ── Wind ──
+    // Layers of wind by altitude, following the visitor's real local time: calm at night, rising at dawn,
+    // strongest in the afternoon with thermal gusts. Each layer veers through the day (higher ones faster and
+    // stronger); every day starts from new directions, and everyone flying at the same hour feels the same wind.
+    const WIND_LAYERS = [-56, -28, 0, 28, 56];
+    function windLayer(L: number, ms: number){
+      const d = new Date(ms), hours = d.getHours() + d.getMinutes()/60 + d.getSeconds()/3600;
+      const day = Math.floor((ms - d.getTimezoneOffset()*60000)/86400000);
+      const base = makeRng(day*31 + L*977)()*Math.PI*2, t = ms/1000;
+      const angle = base + hours/24*Math.PI*2*(.5 + .25*L) + .5*Math.sin(t*.031 + L*1.7);
+      const sun = Math.max(0, Math.sin(Math.PI*(hours-6)/14)); // 0 before 6h and after 20h, peak around 13h
+      const diurnal = .35 + .65*sun;
+      const gust = 1 + .7*Math.max(0, Math.sin(t*.23 + L)*Math.sin(t*.071 + L*2.3))*(.4 + sun); // thermals: more by day
+      const speed = (3 + L*2.4)*diurnal*gust;
+      return new THREE.Vector3(Math.sin(angle)*speed, 0, Math.cos(angle)*speed);
+    }
+    function windAt(y: number, ms = Date.now()){
+      const f = Math.max(0, Math.min(WIND_LAYERS.length-1.0001, (y - WIND_LAYERS[0])/(WIND_LAYERS[1]-WIND_LAYERS[0])));
+      const i = Math.floor(f), k = f - i, s = k*k*(3-2*k);
+      return windLayer(i, ms).lerp(windLayer(i+1, ms), s);
+    }
+    // wind made visible: faint streaks drifting with the local wind around the balloon
+    const MOTES = 260, MOTE_BOX = 70;
+    let windMotes: THREE.LineSegments | null = null;
+    const motePos: THREE.Vector3[] = [];
+    function buildWind(){
+      const pos = new Float32Array(MOTES*6), col = new Float32Array(MOTES*6);
+      for(let i = 0; i < MOTES; i++){
+        motePos.push(new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(MOTE_BOX/2));
+        col.set([.55, .6, .62, 0, 0, 0], i*6); // bright head, dark tail
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      windMotes = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, opacity:.8, depthWrite:false, blending:THREE.AdditiveBlending }));
+      windMotes.frustumCulled = false;
+      windMotes.visible = false;
+      scene.add(windMotes);
+    }
+    function updateWind(dt: number, around: THREE.Vector3){
+      if(!windMotes) return;
+      const attr = windMotes.geometry.attributes.position as THREE.BufferAttribute, ms = Date.now(), h = MOTE_BOX/2;
+      const layer = WIND_LAYERS.map((_, L) => windLayer(L, ms));
+      motePos.forEach((m, i) => {
+        const y = around.y + m.y;
+        const f = Math.max(0, Math.min(WIND_LAYERS.length-1.0001, (y - WIND_LAYERS[0])/28)), j = Math.floor(f);
+        const w = layer[j].clone().lerp(layer[j+1], f-j).multiplyScalar(2.2); // drawn faster than it blows, to read it
+        if(!reduced) m.addScaledVector(w, dt);
+        for(const ax of ['x','y','z'] as const){ if(m[ax] > h) m[ax] -= 2*h; if(m[ax] < -h) m[ax] += 2*h; } // wrap around the balloon
+        const head = m.clone().add(around), tail = head.clone().addScaledVector(w, -.45);
+        attr.setXYZ(i*2, head.x, head.y, head.z);
+        attr.setXYZ(i*2+1, tail.x, tail.y, tail.z);
+      });
+      attr.needsUpdate = true;
+    }
+    function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
-      const p = pilot, k = 1-Math.exp(-dt*2.2);
-      // a digital stick is all or nothing: inertia makes it feel like a balloon
-      p.turn += (-pad.x - p.turn)*k;
-      p.heading += p.turn*1.2*dt;
-      p.vy += (-pad.y*9 - p.vy)*k;
-      const burning = pad.held[0];
-      p.speed += ((burning ? BURN : CRUISE) - p.speed)*(1-Math.exp(-dt*(burning ? .9 : .5)));
+      const p = pilot, free = !p.selecting; // while choosing a piece the stick belongs to the selection
+      const sx = free ? pad.x : 0, sy = free ? pad.y : 0, burning = free && pad.held[0];
+      // driven like a car: stick up accelerates, down brakes and backs up slowly, left/right turns
+      const k = 1-Math.exp(-dt*2.2);
+      p.turn += (-sx - p.turn)*(p.selecting ? 1-Math.exp(-dt*6) : k);
+      p.heading += p.turn*1.3*dt;
+      const target = sy < 0 ? TOP : sy > 0 ? (p.speed > .5 ? 0 : REVERSE) : 0;
+      p.speed += (target - p.speed)*(1-Math.exp(-dt*(p.selecting ? 4 : sy ? 1.1 : .7))); // choosing: it stops so the view holds
+      // no air physics: hold the burner and it goes up, let go and gravity takes it down gently; paused, it hangs still
+      const climb = p.selecting ? 0 : burning ? CLIMB : SINK;
+      p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting ? 6 : 1.8)));
+      p.pos.y += p.vy*dt;
+      if(p.pos.y < -PILOT_Y){ p.pos.y = -PILOT_Y; p.vy = Math.max(0, p.vy); }
+      if(p.pos.y > PILOT_Y){ p.pos.y = PILOT_Y; p.vy = Math.min(0, p.vy); }
+      // and the wind of its layer still pushes it a little
+      const wind = windAt(p.pos.y);
+      p.drift.lerp(wind.clone().multiplyScalar(p.selecting ? 0 : WIND_PUSH), 1-Math.exp(-dt*.5));
       const f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
-      p.pos.addScaledVector(f, p.speed*dt);
-      p.pos.y = Math.max(-PILOT_Y, Math.min(PILOT_Y, p.pos.y + p.vy*dt));
+      p.pos.addScaledVector(f, p.speed*dt).addScaledVector(p.drift, dt);
       const r = Math.hypot(p.pos.x, p.pos.z);
       if(r > PILOT_R){ p.pos.x *= PILOT_R/r; p.pos.z *= PILOT_R/r; } // the edge of the archive holds it back
       const g = balloon.group;
       g.position.copy(p.pos);
-      if(!reduced) g.position.y += Math.sin(performance.now()*.0011)*.25;
-      // turns slowly, banks a touch into the turn, tips forward with speed
+      if(!reduced) g.position.y += Math.sin(now*.0011)*.25;
+      // banks a touch into the turn, tips forward with speed
       g.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0), p.heading)
         .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), -p.turn*.14))
-        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), p.speed/BURN*.07));
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), p.speed/TOP*.07));
       // the camera rides behind and a little above
       const c = 1-Math.exp(-dt*2.4);
       camera.position.lerp(p.pos.clone().addScaledVector(f, -22).add(new THREE.Vector3(0, 6 + p.vy*.3, 0)), c);
       look.lerp(p.pos.clone().addScaledVector(f, 12).add(new THREE.Vector3(0, 2.5, 0)), c);
       camera.lookAt(look);
-      return burning ? .22 : 0;
+      updateWind(p.selecting ? 0 : dt, p.pos); // the wind holds its breath too
+      // readout: the clock that drives the wind, where it blows on screen, how strong
+      if(now > p.hudAt){
+        p.hudAt = now + 250;
+        const right = new THREE.Vector3().crossVectors(f, new THREE.Vector3(0,1,0));
+        const ang = Math.atan2(-wind.dot(right), wind.dot(f))*180/Math.PI;
+        $('wind-arrow').style.transform = `rotate(${-ang}deg)`;
+        const d = new Date();
+        $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
+      }
+      return Math.min(.12, wind.length()/80) + (burning ? .12 : 0) + Math.abs(p.speed)/TOP*.1; // wind, burner and speed, in sound and lens
     }
 
-    function backOut(){
+    let burstAt = -1e9, leaving = false; // last time the burners roared on taking off again from a piece
+    // Flying on from a piece seen from the basket: the burners fire first, overhead, while you still see the
+    // piece (sound, glow, the fabric lighting up, the basket shaking); then the usual way out.
+    function flyOn(){
+      if(leaving || focused < 0) return;
+      if(pilot) pilot.picked = null;
+      if(!pilot || basketK < .5 || reduced){ backOut(); return; }
+      leaving = true;
+      blastAt = performance.now(); blastPower = 2.2; nextBlast = blastAt + 12000;
+      burnerBreath(2.8, .85); // one roar for the whole take-off
+      if(audioCtx && masterGain){ // and a deep rumble under it
+        const t = audioCtx.currentTime, osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+        osc.type = 'sine'; osc.frequency.setValueAtTime(62, t); osc.frequency.exponentialRampToValueAtTime(38, t+1.6);
+        g.gain.setValueAtTime(.001, t); g.gain.exponentialRampToValueAtTime(.9, t+.08); g.gain.exponentialRampToValueAtTime(.001, t+1.7);
+        osc.connect(g); g.connect(masterGain); osc.start(t); osc.stop(t+1.7);
+      }
+      setTimeout(() => { leaving = false; blastPower = 1; if(focused >= 0) backOut(false, true); }, 1200);
+    }
+    function backOut(toPause = false, roaring = false){
       if(focused < 0) return;
+      if(pilot && !toPause){
+        // back to flying: the burners roar, the envelope lights up and the balloon lifts off a touch
+        burstAt = performance.now();
+        pilot.vy = Math.max(pilot.vy, 7);
+        if(!roaring) burnerBreath(1.6, .6);
+      }
+      if(pilot) pilot.picked = null; // leaving a piece any other way forgets the pause it came from
       const p = pieces[focused];
       p.mat.depthTest = true;
       p.mesh.renderOrder = 0;
@@ -1496,13 +2002,14 @@ import Layout from '../layouts/Layout.astro';
     let pointerFresh = false, press: { x: number, y: number, t: number } | null = null, wheelAt = 0;
     function pick(){
       ray.setFromCamera(ndc, camera);
-      const hit = ray.intersectObjects(pieces.slice(1).map(p => p.mesh), false)[0];
-      return hit ? hit.object.userData.i as number : -1;
+      const hit = ray.intersectObjects(pieces.map(p => p.mesh), false)[0];
+      return hit ? hit.object.userData.i as number : -1; // 0 is the logo
     }
     function setNdc(e: PointerEvent){
       ndc.set(e.clientX/window.innerWidth*2-1, -(e.clientY/window.innerHeight)*2+1);
     }
     screen.addEventListener('pointermove', e => {
+      lastMove = performance.now();
       if(e.pointerType !== 'mouse') return;
       setNdc(e);
       pointerFresh = true;
@@ -1523,7 +2030,7 @@ import Layout from '../layouts/Layout.astro';
       if(focused >= 0 && balloon && balloon.peek > .5 && Math.hypot(e.clientX-balloon.sx, e.clientY-balloon.sy) < 64){ backOut(); return; }
       setNdc(e);
       const i = pick();
-      if(focused < 0){ if(i > 0) focusOn(i); }
+      if(focused < 0){ if(i > 0) focusOn(i); else if(i === 0) board(); } // the logo is where words land: it takes you to write one
       else if(i !== focused) { if(i > 0) focusOn(i, 1100); else backOut(); }
     });
     screen.addEventListener('wheel', e => {
@@ -1540,11 +2047,13 @@ import Layout from '../layouts/Layout.astro';
       if(e.key === 'Escape'){
         if(boarded){ if(!delivering) leaveBalloon(); }
         else if(anyOpen()) closeSheets();
+        else if(pilot?.selecting && focused < 0) endSelection();
         else if(pilot && focused < 0) exitPilot();
-        else { touched(); backOut(); }
+        else { touched(); if(pilot && focused >= 0) flyOn(); else backOut(); }
         return;
       }
       if(boarded || anyOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
+      if(pilot && KB_PILOT.includes(e.key.toLowerCase())) return; // flying: the balloon handles these
       const tag = (e.target as HTMLElement).tagName;
       if(e.key === ' ' && tag === 'BUTTON') return;
       switch(e.key){
@@ -1573,16 +2082,33 @@ import Layout from '../layouts/Layout.astro';
     }
     window.addEventListener('resize', resize);
 
-    let lastFrame = 0, calm = 0, slowAvg = 1/60, lowPower = false;
+    let lastFrame = 0, calm = 0, slowAvg = 1/60, lowPower = false, focusedWindow = document.hasFocus(), lastMove = 0;
+    window.addEventListener('focus', () => { focusedWindow = true; });
+    window.addEventListener('blur', () => { focusedWindow = false; });
+    // Frame budget: full rate (capped at 60, even on 120Hz screens) while something moves;
+    // fewer frames when the picture is still, so the machine can rest.
+    function frameBudget(now: number){
+      if(!focusedWindow) return 1000/10;                            // another window has the focus: barely tick
+      const moving = flight || boarded || delivering || impactAt || (pilot && !pilot.selecting && focused < 0) || now-lastInput < 1200;
+      if(moving) return 1000/60;
+      if(focused >= 0 || pilot?.selecting) return 1000/24;           // a piece on screen, or the universe paused
+      if(now-Math.max(lastInput, lastMove) > 20000) return 1000/30;                      // nobody around: the slow auto-rotate is enough at 30
+      return 1000/60;
+    }
+    let sim = 0; // the universe's own clock: it stops while you choose a piece from the balloon
     function frame(now: number){
       requestAnimationFrame(frame);
       if(renderer && !document.hidden) pollPad(now);
       if(!renderer || document.hidden || anyOpen()){ lastFrame = now; return; }
+      const budget = frameBudget(now);
+      if(now-lastFrame < budget - 2) return;
       const dt = Math.min(now-lastFrame, 100)/1000;
       lastFrame = now;
       const ease = 1-Math.exp(-dt*6);
+      const frozen = !!pilot?.selecting;
+      if(!frozen) sim += dt*1000;
       // slow device: drop bloom and resolution rather than the frame rate
-      slowAvg = slowAvg*.97 + dt*.03;
+      if(budget < 20) slowAvg = slowAvg*.97 + dt*.03; // only judge the device when we asked for full rate
       if(!lowPower && now > 8000 && slowAvg > .04){
         lowPower = true;
         renderer.setPixelRatio(1);
@@ -1599,12 +2125,13 @@ import Layout from '../layouts/Layout.astro';
         flightEnergy = Math.sin(Math.PI*t);
         if(t >= 1){ const f = flight; flight = null; f.done?.(); }
       } else if(pilot && focused < 0){
-        flightEnergy = updatePilot(dt);
+        flightEnergy = updatePilot(dt, now);
       } else if(focused < 0 && controls?.enabled){
         controls.autoRotate = !reduced && now-lastInput > 2600;
         controls.update();
         look.copy(controls.target);
       }
+      if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded;
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
       if(pointerFresh && balloon && focused < 0 && !flight && !boarded){
         const near = balloon.mode === 'cruise' && Math.hypot((ndc.x+1)/2*window.innerWidth-balloon.sx, (1-ndc.y)/2*window.innerHeight-balloon.sy) < 56;
@@ -1615,13 +2142,13 @@ import Layout from '../layouts/Layout.astro';
           if(near) playNote(NOTES[4]);
         }
       }
-      if(pointerFresh && focused < 0 && !flight && !boarded && pieces.length){
+      if(pointerFresh && focused < 0 && !flight && !boarded && !pilot?.selecting && pieces.length){
         pointerFresh = false;
         const i = pick();
         if(i !== hovered){
           hovered = i;
           if(i > 0){ showMeta(i); playNote(NOTES[pieces[i].st.n % NOTES.length]); }
-          else showMeta(0);
+          else { showMeta(0); if(i === 0){ metaCap.textContent = 'leave a word'; playNote(NOTES[4]); } }
         }
       } else if(focused >= 0 || flight || boarded) hovered = -1;
 
@@ -1645,10 +2172,11 @@ import Layout from '../layouts/Layout.astro';
         let opacityT = 1;
         if(focused >= 0) opacityT = isOn ? 1 : Math.abs(p.i-focused) === 1 ? .05 : .012;
         else if(boarded) opacityT = home && delivering ? 1 : .28;
+        else if(pilot?.selecting) opacityT = isHov || pilot.cands.includes(p.i) ? 1 : .22; // the chosen few stay lit
         else if(hovered > 0 && !isHov) opacityT = .4;
         p.reveal += (revealT-p.reveal)*ease;
         p.opacity += (opacityT-p.opacity)*ease;
-        p.grow += ((isHov ? 2.1 : 1)-p.grow)*ease;
+        p.grow += ((isHov && !home ? (pilot?.selecting ? 1.35 : 2.1) : 1)-p.grow)*ease;
         // far away it is a star; close up, or under the cursor, the star opens into the original piece
         const starT = home || isOn || isHov ? 0 : 1-Math.min(1, Math.max(0, (near-.1)/.62));
         p.starMix += (starT-p.starMix)*ease;
@@ -1657,13 +2185,13 @@ import Layout from '../layouts/Layout.astro';
         p.mat.uniforms.uOpacity.value = p.opacity*(1-p.starMix);
         if(p.starMat){
           const u = p.starMat.uniforms;
-          u.uTime.value = now*.001;
+          u.uTime.value = sim*.001;
           u.uOpacity.value = p.opacity*p.starMix;
-          u.uBright.value = p.bright*(1 + (reduced ? 0 : .28*Math.sin(now*.001*p.beat*Math.PI*2 + p.st.n)));
+          u.uBright.value = p.bright*(1 + (reduced ? 0 : .28*Math.sin(sim*.001*p.beat*Math.PI*2 + p.st.n)));
         }
         p.mat.uniforms.uGain.value = home ? 1 + logoPulse*1.8 : isOn || isHov ? 1 : .74;
         if(p.halo){
-          const s = Math.max(p.w, p.h)*(.85 + .05*Math.sin(now*.0016));
+          const s = Math.max(p.w, p.h)*(.85 + .05*Math.sin(sim*.0016));
           p.halo.scale.set(s, s, 1);
           (p.halo.material as THREE.MeshBasicMaterial).opacity = p.opacity*.7;
         }
@@ -1672,12 +2200,13 @@ import Layout from '../layouts/Layout.astro';
       const dim = 1-calm*.72;
       if(thread){
         const u = (thread.material as THREE.ShaderMaterial).uniforms;
-        u.uTime.value = now*.001;
+        u.uTime.value = sim*.001;
         u.uDim.value = 1-calm*.9;
       }
       if(dust) (dust.material as THREE.PointsMaterial).opacity = .8*(1-calm*.85);
       (nebula.material as THREE.ShaderMaterial).uniforms.uDim.value = dim;
-      if(!reduced){ stars.rotation.y += dt*.004; nebula.rotation.y += dt*.0015; }
+      if(!reduced && !frozen){ stars.rotation.y += dt*.004; nebula.rotation.y += dt*.0015; }
+      placeSelector();
       if(composer && bloom && lens){
         bloom.strength = BLOOM*(1-calm) + logoPulse*.8;
         bloom.enabled = !lowPower && bloom.strength > .01;
