@@ -7,6 +7,7 @@ import { spawn } from 'child_process';
 import { saveLinks, storeLinkImage } from './links.js';
 import * as galaxies from './galaxies.js';
 import * as xibalba from './xibalba.js';
+import * as threads from './threads.js';
 import { addPhoto, addText, removeItem, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
 
 // === Config ===
@@ -708,6 +709,23 @@ app.put('/api/frases/xibalba/settings', express.json(), checkAuth, galaxyRoute(a
 const xibUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
 app.post('/api/frases/xibalba/photos', checkAuth, xibUpload.single('photo'), galaxyRoute(async (req) => { if (!req.file) throw Object.assign(new Error('photo required'), { status: 400 }); return xibalba.addPhoto(req.file.buffer, req.body?.caption); }));
 app.delete('/api/frases/xibalba/photos/:id', checkAuth, galaxyRoute(async (req) => xibalba.removePhoto(req.params.id)));
+
+// ── threads between pieces of two galaxies ──
+app.post('/api/frases/threads/list', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {
+  doorLimit(req);
+  const who = await visitor(req);
+  return { threads: await threads.list(Array.isArray(req.body?.galaxies) ? req.body.galaxies : [], String(req.body?.device || ''), who?.slug) };
+}));
+const threadLimit = limited(60);
+app.post('/api/frases/threads', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {
+  threadLimit(req);
+  const who = await visitor(req);
+  return threads.create(req.body?.from, req.body?.to, String(req.body?.device || ''), who?.slug, who?.name);
+}));
+app.delete('/api/frases/threads/:id', galaxyRoute(async (req) => {
+  const who = await visitor(req);
+  return threads.cut(req.params.id, who?.slug);
+}));
 
 // Words left with the balloon in someone else's galaxy (Eze's own still go to his Telegram through n8n).
 app.post('/api/frases/words', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {

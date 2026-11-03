@@ -74,6 +74,22 @@ import Layout from '../layouts/Layout.astro';
       .sky-mark.sun { color: #ffb347; }
       .sky-mark.sun i { border-radius: 50%; width: 22px; height: 22px; transform: none; }
       .sky-mark[hidden] { display: none; }
+      /* threads between galaxies */
+      #thread-note { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--dial) + 4.2rem); z-index: 12; display: flex; flex-direction: column; gap: .4rem; align-items: center; text-shadow: 0 0 14px rgba(8,8,16,.95); }
+      #thread-note[hidden] { display: none; }
+      #thread-note div { display: flex; gap: .7rem; align-items: center; font-family: var(--serif); font-style: italic; font-size: 1.05rem; color: #ffd166; }
+      #thread-note button, #connect-piece { font-family: var(--mono); font-style: normal; font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: #ffd166; border: 1px solid rgba(255,209,102,.45); padding: .35rem .6rem; background: rgba(8,8,16,.5); }
+      #thread-note button.cut { color: var(--muted); border-color: rgba(240,237,232,.2); }
+      #connect-piece { position: fixed; left: 1.4rem; bottom: calc(var(--dial) + 3rem); z-index: 12; }
+      #connect-piece[hidden] { display: none; }
+      #link-sheet .link-hint { font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: -.6rem 0 1rem; }
+      #link-search { width: min(520px, 100%); background: rgba(240,237,232,.05); border: 1px solid rgba(240,237,232,.2); color: var(--text); font: inherit; font-size: .8rem; padding: .6rem .8rem; outline: none; margin-bottom: 1.2rem; }
+      #link-grid { columns: 6 160px; column-gap: 10px; }
+      #link-grid button { display: block; width: 100%; margin-bottom: 10px; break-inside: avoid; border: 1px solid transparent; text-align: left; }
+      #link-grid button:hover { border-color: #ffd166; }
+      #link-grid img { display: block; width: 100%; }
+      #link-grid span { display: block; font-family: var(--serif); font-style: italic; font-size: 1rem; padding: .8rem; background: #15131f; }
+      #link-grid small { display: block; font-size: .55rem; letter-spacing: .12em; color: var(--muted); padding: .25rem 0 0; }
       /* only for the galaxy's owner, at one of its pieces */
       #remove-piece { position: fixed; right: 1.4rem; bottom: calc(var(--dial) + 3rem); z-index: 12; font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,63,63,.75); border: 1px solid rgba(255,63,63,.35); padding: .45rem .7rem; background: rgba(8,8,16,.5); }
       #remove-piece:hover { color: #ff3f3f; border-color: #ff3f3f; }
@@ -296,6 +312,8 @@ import Layout from '../layouts/Layout.astro';
   <div id="sky-marks" aria-hidden="true"></div>
   <div id="arrival" aria-live="polite"><p></p><h2></h2></div>
   <button id="remove-piece" hidden>remove from the archive</button>
+  <aside id="thread-note" hidden></aside>
+  <button id="connect-piece" hidden>connect with one of mine</button>
   <div id="xib-dark" aria-hidden="true"></div>
   <aside id="xib-panel" aria-live="polite">
     <p class="kicker">Xibalbá</p>
@@ -320,6 +338,13 @@ import Layout from '../layouts/Layout.astro';
     </form>
   </aside>
 
+  <div id="link-sheet" class="sheet">
+    <button class="close" id="link-close">close ✕</button>
+    <h2>Which of yours?</h2>
+    <p class="link-hint">the memory in your galaxy that goes with this one · a thread of light will join them</p>
+    <input id="link-search" placeholder="search a word, a title or a date…" autocomplete="off">
+    <div id="link-grid"></div>
+  </div>
   <div id="index-sheet" class="sheet">
     <button class="close" id="index-close">close ✕</button>
     <h2>Pasado observado</h2>
@@ -2791,7 +2816,9 @@ import Layout from '../layouts/Layout.astro';
     function closeSheets(){
       if(sheets.set.classList.contains('open')) closeSetModal();
       Object.values(sheets).forEach(s => s.classList.remove('open'));
+      $('link-sheet').classList.remove('open');
     }
+    $('link-close').addEventListener('click', closeSheets);
     $('btn-about').addEventListener('click', () => openSheet(sheets.about));
     $('about-close').addEventListener('click', closeSheets);
     $('btn-index').addEventListener('click', openIndex);
@@ -3097,6 +3124,8 @@ import Layout from '../layouts/Layout.astro';
       }
       buildSpace();
       resize(); // after the layout: the overview stands back as far as the galaxy reaches
+      loadThreads();
+      openArrivedPiece();
       showMeta(0);
       if(controls){
         controls.enableDamping = true; controls.dampingFactor = .06;
@@ -3805,10 +3834,11 @@ import Layout from '../layouts/Layout.astro';
     // and waits; the owner lets them in from their admin. While a knock is pending the doors are asked again every
     // little while, so the nebula opens by itself, with a chime, the moment they say yes.
     const knockForm = $('knock') as HTMLFormElement, lockedKnock = $('locked-knock') as HTMLFormElement;
-    let whoAmI = '', mine = false; // mine: logged in here as this galaxy's owner
+    let whoAmI = '', mine = false, mySlug = '', myDir = ''; // mine: logged in here as this galaxy's owner
     if(ownerPass) fetch('/api/frases/whoami', { headers: { 'X-Auth': ownerPass } }).then(r => r.ok ? r.json() : null).then(w => {
       whoAmI = w ? (w.owner ? 'Eze' : w.name) : '';
       mine = !!w && (GAL ? w.slug === GAL : !!w.owner);
+      mySlug = w ? (w.owner ? 'eze' : w.slug) : ''; myDir = w?.dir || '';
     }).catch(() => {});
     function paintKnock(form: HTMLFormElement, slug: string, owner: string){
       const door = doors[slug]?.status || 'closed', input = form.querySelector('input')!, msg = form.querySelector('.knock-msg')!;
@@ -3855,6 +3885,122 @@ import Layout from '../layouts/Layout.astro';
         else { if(k === GAL) paintKnock(lockedKnock, GAL, galaxyName); else if(knockForm.dataset.slug === k) worldShown = -1; }
       });
     }, 12000);
+    // ── Threads ──
+    // A memory here tied by hand to one in another galaxy: a thread of light from the piece across the void to that
+    // galaxy. At a piece with threads, a note says where its other end is and the balloon can take you there (the
+    // piece opens on arrival). At a piece in someone else's galaxy, its visitor (if they own a galaxy, logged in here)
+    // can tie it to one of their own, chosen from their index. Only those who may enter both see a thread.
+    interface ThreadEnd { galaxy: string; piece: string; }
+    interface Thread { id: string; a: ThreadEnd; b: ThreadEnd; by: string; mine: boolean; }
+    const HERE = () => GAL || 'eze';
+    let threads: Thread[] = [], threadLines: THREE.Line[] = [];
+    const threadsAt = new Map<number, { t: Thread; other: ThreadEnd }[]>();
+    const worldOf = (slug: string) => worlds.find(w => w.link.galaxy && (w.link.galaxy.slug || 'eze') === slug);
+    const galaxyNameOf = (slug: string) => slug === 'eze' ? 'Eze' : registry.find(g => g.slug === slug)?.name || slug;
+    async function loadThreads(){
+      if(!renderer) return;
+      const d = await fetch('/api/frases/threads/list', { method: 'POST', headers: doorHeaders(), body: JSON.stringify({ device: DEVICE, galaxies: [HERE()] }) }).then(r => r.ok ? r.json() : null).catch(() => null);
+      threads = d?.threads || [];
+      drawThreads();
+    }
+    function drawThreads(){
+      threadLines.forEach(l => { scene.remove(l); l.geometry.dispose(); (l.material as THREE.Material).dispose(); });
+      threadLines = []; threadsAt.clear();
+      for(const t of threads){
+        const local = t.a.galaxy === HERE() ? t.a : t.b, other = local === t.a ? t.b : t.a;
+        const i = stations.findIndex(st => st.id === local.piece), w = worldOf(other.galaxy);
+        if(i < 1 || !pieces[i]) continue;
+        if(!threadsAt.has(i)) threadsAt.set(i, []);
+        threadsAt.get(i)!.push({ t, other });
+        if(!w?.home) continue;
+        const from = pieces[i].mesh.position, to = w.mesh.position, mid = from.clone().lerp(to, .5);
+        mid.y += from.distanceTo(to)*.12;
+        const curve = new THREE.QuadraticBezierCurve3(from.clone(), mid, to.clone());
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(80)), new THREE.LineBasicMaterial({ color: 0xffd166, transparent: true, opacity: .4, depthWrite: false, blending: THREE.AdditiveBlending }));
+        line.frustumCulled = false;
+        scene.add(line); threadLines.push(line);
+      }
+    }
+    const threadNote = $('thread-note'), connectBtn = $('connect-piece') as HTMLButtonElement;
+    let notedAt = -2;
+    setInterval(() => {
+      const at = focused > 0 && !flight ? focused : -1;
+      connectBtn.hidden = !(at > 0 && mySlug && mySlug !== HERE() && stations[at]?.kind !== 'home');
+      if(at === notedAt) return;
+      notedAt = at;
+      const list = at > 0 ? threadsAt.get(at) || [] : [];
+      threadNote.hidden = !list.length;
+      threadNote.replaceChildren(...list.slice(0, 3).map(({ t, other }) => {
+        const row = document.createElement('div');
+        const txt = document.createElement('span'); txt.textContent = `connected with a memory in ${galaxyNameOf(other.galaxy)}’s galaxy`;
+        const go = document.createElement('button'); go.textContent = 'go there'; go.addEventListener('click', () => followThread(other));
+        row.append(txt, go);
+        if(t.mine){ const cut = document.createElement('button'); cut.className = 'cut'; cut.textContent = 'cut'; cut.addEventListener('click', () => cutThread(t)); row.append(cut); }
+        return row;
+      }));
+    }, 300);
+    function followThread(other: ThreadEnd){
+      const w = worldOf(other.galaxy);
+      if(!w) return;
+      try { sessionStorage.setItem('cv-open', JSON.stringify({ galaxy: other.galaxy, piece: other.piece, t: Date.now() })); } catch {}
+      goToWorld(w);
+    }
+    async function cutThread(t: Thread){
+      if(!confirm('Cut this thread?')) return;
+      const r = await fetch(`/api/frases/threads/${t.id}`, { method: 'DELETE', headers: doorHeaders() }).catch(() => null);
+      if(r?.ok){ notedAt = -2; loadThreads(); }
+    }
+    // the other end, opened once you've arrived
+    function openArrivedPiece(){
+      let want: { galaxy: string; piece: string; t: number } | null = null;
+      try { want = JSON.parse(sessionStorage.getItem('cv-open') || 'null'); } catch {}
+      if(!want || want.galaxy !== HERE() || Date.now() - want.t > 600000) return;
+      sessionStorage.removeItem('cv-open');
+      const i = stations.findIndex(st => st.id === want!.piece);
+      if(i > 0) setTimeout(() => focusOn(i, 2200), 2600);
+    }
+    // choosing one of yours, from your own index
+    let linkItems: { id: string; src?: string; text: string; date: string }[] = [];
+    connectBtn.addEventListener('click', async () => {
+      const base = mySlug === 'eze' ? '' : `/galaxies/${myDir}`;
+      const [f, st] = await Promise.all([
+        fetch(base + '/frases.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ frases: [] })),
+        mySlug === 'eze' ? fetch('/sets.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ sets: [] })) : Promise.resolve({ sets: [] }),
+      ]);
+      linkItems = [
+        ...(f.frases || []).filter((x: Frase) => x.imagen || x.texto).map((x: Frase) => x.imagen
+          ? { id: x.imagen.split('/').pop()!.replace(/\.\w+$/, ''), src: base + x.imagen, text: x.caption || '', date: x.fecha || '' }
+          : { id: 't' + hash36((x.fecha || '') + x.texto), text: x.texto!, date: x.fecha || '' }),
+        ...(st.sets || []).map((x: SetMeta) => ({ id: 's-' + x.slug, src: x.artwork, text: x.title, date: x.date || '' })),
+      ].sort((a, b) => b.date.localeCompare(a.date));
+      ($('link-search') as HTMLInputElement).value = '';
+      paintLinkGrid();
+      stopScan();
+      $('link-sheet').classList.add('open');
+    });
+    $('link-search').addEventListener('input', paintLinkGrid);
+    function paintLinkGrid(){
+      const q = ($('link-search') as HTMLInputElement).value.trim().toLowerCase();
+      const list = linkItems.filter(x => !q || `${x.text} ${x.date}`.toLowerCase().includes(q)).slice(0, 300);
+      $('link-grid').replaceChildren(...list.map(x => {
+        const b = document.createElement('button');
+        if(x.src){ const img = document.createElement('img'); img.loading = 'lazy'; img.alt = x.text; img.src = thumbOf(x.src); img.onerror = () => { if(img.src.includes('/images/t/')) img.src = x.src!; }; b.append(img); }
+        else { const sp = document.createElement('span'); sp.textContent = x.text; b.append(sp); }
+        const sm = document.createElement('small'); sm.textContent = `${x.date}${x.src && x.text ? ' · ' + x.text : ''}`; b.append(sm);
+        b.addEventListener('click', () => tieTo(x.id));
+        return b;
+      }));
+    }
+    async function tieTo(myPiece: string){
+      const here = stations[focused];
+      if(!here || !mySlug) return;
+      const r = await fetch('/api/frases/threads', { method: 'POST', headers: doorHeaders(), body: JSON.stringify({ device: DEVICE, from: { galaxy: HERE(), piece: here.id }, to: { galaxy: mySlug, piece: myPiece } }) }).then(r => r.json().then(j => ({ ok: r.ok, j }))).catch(() => null);
+      closeSheets();
+      if(!r?.ok){ alert(r?.j?.error || 'could not tie them'); return; }
+      [0, 4, 7].forEach((n, k) => setTimeout(() => playNote(NOTES[n % NOTES.length]*2), k*140));
+      notedAt = -2; loadThreads();
+    }
+
     // The owner, at one of their pieces, can take it out of the archive (to a private trash on the server).
     const removeBtn = $('remove-piece') as HTMLButtonElement;
     setInterval(() => { const st = focused > 0 ? stations[focused] : null; removeBtn.hidden = !(mine && st && st.kind !== 'set' && !flight); }, 300);

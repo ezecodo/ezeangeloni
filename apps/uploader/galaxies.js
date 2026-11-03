@@ -237,6 +237,12 @@ export function turnAway(slug, id) {
   });
 }
 export { MAIN };
+// Can this visitor enter that galaxy? Eze's is open to all.
+export async function canEnterSlug(slug, device, who) {
+  if (slug === MAIN) return true;
+  const g = (await load()).galaxies.find((x) => x.slug === slug);
+  return !!g && canEnter(g, device, who);
+}
 
 // Words left with the balloon in someone's galaxy: kept for them, read in their admin.
 export async function leaveWords(slug, device, who, text) {
