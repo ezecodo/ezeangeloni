@@ -25,7 +25,7 @@ jobs:
       - name: Deploy via rsync
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avz --delete --exclude='frases.json' --exclude='images/' --exclude='sets.json' --exclude='sets/' --exclude='links.json' --exclude='links/'
+          switches: -avz --delete --exclude='frases.json' --exclude='images/' --exclude='sets.json' --exclude='sets/' --exclude='links.json' --exclude='links/' --exclude='galaxies.json' --exclude='galaxies/'
           path: dist/
           remote_path: /var/www/ezeangeloni.xyz/html/
           remote_host: ${{ secrets.VPS_HOST }}

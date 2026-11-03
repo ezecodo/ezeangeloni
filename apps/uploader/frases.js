@@ -7,14 +7,15 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 
-const PUBLIC_ROOT = process.env.PUBLIC_ROOT || '/var/www/ezeangeloni.xyz/html';
-const FRASES_JSON = process.env.FRASES_JSON || path.join(PUBLIC_ROOT, 'frases.json');
-const IMAGES_DIR = process.env.IMAGES_DIR || path.join(PUBLIC_ROOT, 'images');
+// Every galaxy has the same layout under its own root: frases.json, images/, images/t/. Eze's is the web root;
+// the others live in galaxies/<slug>-<token>/ (see galaxies.js). Functions take that root, Eze's by default.
+export const PUBLIC_ROOT = process.env.PUBLIC_ROOT || '/var/www/ezeangeloni.xyz/html';
+const jsonOf = (root) => path.join(root, 'frases.json');
+const imagesOf = (root) => path.join(root, 'images');
 const TZ = process.env.TZ_LOCAL || 'Europe/Madrid';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '';
 const TELEGRAM_CHAT = process.env.TELEGRAM_CHAT || '';
 
-const THUMBS_DIR = path.join(IMAGES_DIR, 't');
 
 const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
@@ -85,21 +86,22 @@ export function monthLabel(fecha) {
 }
 
 // One writer at a time, and never a half-written file: the site reads it on every visit.
-let chain = Promise.resolve();
-function withLock(fn) {
-  const p = chain.then(fn);
-  chain = p.catch(() => {});
+const chains = new Map(); // one queue per galaxy
+function withLock(root, fn) {
+  const p = (chains.get(root) || Promise.resolve()).then(fn);
+  chains.set(root, p.catch(() => {}));
   return p;
 }
-async function load() {
-  const data = JSON.parse(await fs.readFile(FRASES_JSON, 'utf-8'));
+async function load(root) {
+  let data = { frases: [] };
+  try { data = JSON.parse(await fs.readFile(jsonOf(root), 'utf-8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
   if (!Array.isArray(data.frases)) data.frases = [];
   return data;
 }
-async function save(data) {
-  const tmp = FRASES_JSON + '.tmp';
+async function save(root, data) {
+  const tmp = jsonOf(root) + '.tmp';
   await fs.writeFile(tmp, JSON.stringify(data, null, 2) + '\n');
-  await fs.rename(tmp, FRASES_JSON);
+  await fs.rename(tmp, jsonOf(root));
 }
 
 const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
@@ -111,7 +113,9 @@ export function sniff(buf) {
 }
 
 // Same naming as the bot always used (unix seconds), which is also the photo's share link (#1773216235).
-async function storeImage(buf) {
+async function storeImage(root, buf) {
+  const IMAGES_DIR = imagesOf(root);
+  await fs.mkdir(IMAGES_DIR, { recursive: true });
   const type = sniff(buf);
   if (!type) throw Object.assign(new Error('not a jpg, png or webp image'), { status: 415 });
   // The number alone is the link, so it must be free in every extension.
@@ -133,45 +137,46 @@ function ffmpeg(args) {
     p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(err.slice(-300) || `ffmpeg ${code}`))));
   });
 }
-export async function makeThumb(name) {
+export async function makeThumb(name, root = PUBLIC_ROOT) {
+  const THUMBS_DIR = path.join(imagesOf(root), 't');
   const out = path.join(THUMBS_DIR, name.replace(/\.\w+$/, '.jpg'));
   if (existsSync(out)) return false;
   await fs.mkdir(THUMBS_DIR, { recursive: true });
-  await ffmpeg(['-v', 'error', '-y', '-i', path.join(IMAGES_DIR, name), '-frames:v', '1',
+  await ffmpeg(['-v', 'error', '-y', '-i', path.join(imagesOf(root), name), '-frames:v', '1',
     '-vf', "scale='min(384,iw)':'min(384,ih)':force_original_aspect_ratio=decrease", '-q:v', '4', out]);
   return true;
 }
 // On start: thumbnails for any photo that has none yet (the ones from before this existed, or the bot's).
-export async function backfillThumbs() {
-  const names = (await fs.readdir(IMAGES_DIR)).filter((n) => /\.(jpe?g|png|webp)$/i.test(n));
+export async function backfillThumbs(root = PUBLIC_ROOT) {
+  const names = (await fs.readdir(imagesOf(root))).filter((n) => /\.(jpe?g|png|webp)$/i.test(n));
   let made = 0;
   for (const n of names) {
-    try { if (await makeThumb(n)) made++; } catch (e) { console.error('[thumbs]', n, e.message); }
+    try { if (await makeThumb(n, root)) made++; } catch (e) { console.error('[thumbs]', n, e.message); }
   }
   if (made) console.log(`[thumbs] made ${made}`);
 }
 
 // `subida` marks the upload day: a piece dated before it went into the past, which the site uses
 // to keep the old #NNN links pointing where they did.
-export function addPhoto(buf, { fecha, caption }) {
-  return withLock(async () => {
-    const { imagen, type } = await storeImage(buf);
-    await makeThumb(imagen.split('/').pop()).catch((e) => console.error('[thumbs]', e.message));
+export function addPhoto(buf, { fecha, caption }, root = PUBLIC_ROOT) {
+  return withLock(root, async () => {
+    const { imagen, type } = await storeImage(root, buf);
+    await makeThumb(imagen.split('/').pop(), root).catch((e) => console.error('[thumbs]', e.message));
     const date = validDate(fecha) ? fecha : (type === 'image/jpeg' && exifDate(buf)) || today();
     const entry = { imagen, caption: String(caption || '').trim().slice(0, 300), fecha: date, subida: today() };
-    const data = await load();
+    const data = await load(root);
     data.frases.push(entry);
-    await save(data);
+    await save(root, data);
     return entry;
   });
 }
 
-export function addText(texto, fecha) {
-  return withLock(async () => {
+export function addText(texto, fecha, root = PUBLIC_ROOT) {
+  return withLock(root, async () => {
     const entry = { texto: String(texto).trim().slice(0, 2000), fecha: validDate(fecha) ? fecha : today(), subida: today() };
-    const data = await load();
+    const data = await load(root);
     data.frases.push(entry);
-    await save(data);
+    await save(root, data);
     return entry;
   });
 }
@@ -221,6 +226,6 @@ export async function fromTelegram(msg) {
   return { status: 200, reply: '🤷 Solo guardo texto y fotos.' };
 }
 
-export async function ensureImagesDir() {
-  await fs.mkdir(IMAGES_DIR, { recursive: true });
+export async function ensureImagesDir(root = PUBLIC_ROOT) {
+  await fs.mkdir(imagesOf(root), { recursive: true });
 }

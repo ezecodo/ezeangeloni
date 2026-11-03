@@ -54,6 +54,15 @@ import Layout from '../layouts/Layout.astro';
       #act[hidden] { display: none; }
       .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
+      #locked { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 1rem; background: radial-gradient(ellipse at center, rgba(40,24,60,.5), rgba(8,8,16,.92) 60%); padding: 2rem; }
+      #locked[hidden] { display: none; }
+      #locked .kicker { font-size: .64rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+      #locked h2 { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(2.6rem, 7vw, 5rem); }
+      #locked p:not(.kicker) { font-family: var(--serif); font-size: 1.15rem; max-width: 30rem; color: var(--muted); }
+      #locked a { margin-top: 1rem; font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; text-decoration: none; border: 1px solid rgba(110,249,245,.45); padding: .6rem .9rem; }
+      /* crossing into another galaxy: everything goes to light */
+      #warp { position: fixed; inset: 0; z-index: 40; pointer-events: none; background: #f0ede8; opacity: 0; transition: opacity .9s ease-in; }
+      #warp.on { opacity: 1; }
       /* a world (a piece of Eze's other work): what it is, beside the planet, and the only way out to it */
       #world-info { position: fixed; right: 2.4rem; top: 50%; transform: translateY(-46%); z-index: 12; width: min(400px, 38vw); opacity: 0; pointer-events: none; transition: opacity .45s, transform .45s; text-shadow: 0 0 18px rgba(8,8,16,.9); }
       #world-info.show { opacity: 1; pointer-events: auto; transform: translateY(-50%); }
@@ -64,6 +73,7 @@ import Layout from '../layouts/Layout.astro';
       #world-tags span { font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; padding: .3rem .5rem; border: 1px solid rgba(240,237,232,.22); }
       #world-visit { display: inline-block; font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; text-decoration: none; padding: .6rem .9rem; border: 1px solid rgba(110,249,245,.45); background: rgba(8,8,16,.55); }
       #world-visit:hover { background: rgba(110,249,245,.12); }
+      #world-visit[hidden] { display: none; }
       @media (max-width: 640px) {
         #world-info { right: 1rem; left: 1rem; width: auto; top: auto; bottom: 4.4rem; transform: translateY(12px); }
         #world-info.show { transform: none; }
@@ -219,6 +229,13 @@ import Layout from '../layouts/Layout.astro';
     </div>
   </div>
   <p id="now" class="sr" aria-live="polite"></p>
+  <div id="locked" hidden>
+    <p class="kicker">a private galaxy</p>
+    <h2 id="locked-title"></h2>
+    <p>It can only be entered with a visa: a link from the person whose galaxy this is.</p>
+    <a href="/">← back to Eze's galaxy</a>
+  </div>
+  <div id="warp" aria-hidden="true"></div>
   <aside id="world-info" aria-live="polite">
     <p id="world-kicker"></p>
     <h2 id="world-title"></h2>
@@ -433,6 +450,17 @@ import Layout from '../layouts/Layout.astro';
     let stations: Station[] = [{ kind:'home', n:0, id:'', date:'', text:'', tint:'#c77dff', flood:false }];
     let total = 0;
 
+    // ── Which galaxy ──────────────────────────────────────
+    // ezeangeloni.xyz is Eze's galaxy. Others (family, invite-only, created from his admin) open with ?g=<slug>
+    // (or /g/<slug> where nginx sends it here); a private one also needs its visa, ?v=<token>, remembered on this
+    // device once used. Their data lives in /galaxies/<slug>-<token>/, same files as Eze's at the root.
+    interface GalaxyEntry { slug: string; name: string; public: boolean; dir?: string; }
+    const qs = new URLSearchParams(location.search);
+    const GAL = (location.pathname.match(/^\/g\/([a-z0-9-]+)/)?.[1] || qs.get('g') || '').toLowerCase();
+    const visaOf = (slug: string) => { try { return localStorage.getItem('visa:' + slug) || ''; } catch { return ''; } };
+    if(GAL && qs.get('v')){ try { localStorage.setItem('visa:' + GAL, qs.get('v')!); } catch {} }
+    let BASE = '', galaxyName = 'Eze', locked = false;
+    let registry: GalaxyEntry[] = [];
     type Frase = {texto?: string, imagen?: string, caption?: string, fecha?: string, subida?: string};
     function hash36(s: string){
       let h = 0x811c9dc5;
@@ -452,7 +480,7 @@ import Layout from '../layouts/Layout.astro';
         const back = !!(m.f?.subida && m.f.subida > m.date);
         const old = back ? undefined : ++legacy;
         if(m.s) return { kind:'set', n, id:'s-'+m.s.slug, legacy:old, date:m.date, text:m.s.title, src:m.s.artwork, set:m.s, tint:'#ff6eb4', flood:!m.s.artwork };
-        if(m.f!.imagen) return { kind:'photo', n, id:m.f!.imagen.split('/').pop()!.replace(/\.\w+$/, ''), legacy:old, date:m.date, text:m.f!.caption || '', src:m.f!.imagen, tint, flood:false };
+        if(m.f!.imagen) return { kind:'photo', n, id:m.f!.imagen.split('/').pop()!.replace(/\.\w+$/, ''), legacy:old, date:m.date, text:m.f!.caption || '', src:BASE + m.f!.imagen, tint, flood:false };
         return { kind:'text', n, id:'t'+hash36(m.date+m.f!.texto), legacy:old, date:m.date, text:m.f!.texto!, tint, flood: n % 3 === 0 };
       });
       total = out.length;
@@ -489,6 +517,17 @@ import Layout from '../layouts/Layout.astro';
       const cv = document.createElement('canvas');
       cv.width = cv.height = S;
       const c = cv.getContext('2d')!;
+      if(st.kind === 'home' && GAL){
+        c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#f0ede8';
+        let size = S*.3;
+        c.font = `italic 300 ${size}px 'Cormorant Garamond', serif`;
+        while(c.measureText(galaxyName).width > S*.86 && size > 20){ size -= 4; c.font = `italic 300 ${size}px 'Cormorant Garamond', serif`; }
+        c.fillText(galaxyName, S/2, S*.44);
+        c.font = `${S*.024}px 'DM Mono', monospace`;
+        c.globalAlpha = .6;
+        c.fillText('G A L A X Y  ·  C R O N O V I S O R', S/2, S*.7);
+        return cv;
+      }
       if(st.kind === 'home'){
         const h = S*.68, w = h*1447.5/1821.75;
         if(logo?.complete && logo.naturalWidth){
@@ -822,7 +861,8 @@ import Layout from '../layouts/Layout.astro';
     // back to the full image.
     const THUMB_NEAR = 100, THUMB_FAR = 160, THUMB_MAX = 120;
     let thumbBusy = 0, thumbAt = 0;
-    const thumbOf = (src: string) => /^\/images\/[^/]+\.\w+$/.test(src) ? src.replace(/^\/images\/([^/]+)\.\w+$/, '/images/t/$1.jpg') : src;
+    const THUMB_RE = /^((?:\/galaxies\/[^/]+)?\/images)\/([^/]+)\.\w+$/;
+    const thumbOf = (src: string) => THUMB_RE.test(src) ? src.replace(THUMB_RE, '$1/t/$2.jpg') : src;
     function queuePhotos(){ thumbAt = 0; }
     function loadThumb(p: Piece){
       if(p.lo || p.loBusy || !p.st.src) return;
@@ -1792,6 +1832,7 @@ import Layout from '../layouts/Layout.astro';
         return;
       }
       if(pilot.home){ if(tap(2)) exitPilot(); return; } // the wind has the balloon now
+      if(pilot.dock >= 0 && worlds[pilot.dock]?.link.galaxy && tap(1)){ enterGalaxy(worlds[pilot.dock]); return; } // moored at a galaxy: in you go
       if(tap(1)) startSelection();
       if(tap(2)) exitPilot();
       if(tap(3)) board();
@@ -2146,7 +2187,7 @@ import Layout from '../layouts/Layout.astro';
       // Arriving at a world (Eze's other work) the journey pauses: the balloon moors there, hovering still, no gas
       // spent, no wind, while its story reads beside it. A fresh push of the stick or the burner sails on.
       const wants = !!(pad.x || pad.y || pad.held[0]);
-      const near = p.home || p.selecting ? -1 : worlds.findIndex(w => w.home && w.mesh.position.distanceTo(p.pos) < 22);
+      const near = p.home || p.selecting ? -1 : worlds.findIndex(w => w.home && w.mesh.position.distanceTo(p.pos) < w.size*1.7);
       if(p.undock >= 0 && near !== p.undock) p.undock = -1; // out of its reach: it can moor there again
       if(p.dock < 0 && near >= 0 && near !== p.undock){ p.dock = near; p.dockFree = !wants; playNote(NOTES[5]); }
       if(p.dock >= 0){
@@ -2248,7 +2289,9 @@ import Layout from '../layouts/Layout.astro';
         $('wind-arrow').style.transform = `rotate(${-ang}deg)`;
         const d = new Date();
         $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
-        $('gas-msg').textContent = moored ? `moored at ${worlds[p.dock].link.label || 'a world'} · ${document.body.classList.contains('kb') ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
+        const mw = moored ? worlds[p.dock].link : null, kb = document.body.classList.contains('kb');
+        $('gas-msg').textContent = mw?.galaxy ? `${mw.label}'s galaxy · ${mw.galaxy.open ? `${kb ? 'E' : '● right'} to enter · ` : 'private, needs a visa · '}${kb ? 'W S A D' : 'the stick'} to sail on`
+          : moored ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
           : gas < GAS_LOW ? 'low gas · nebulae lie in the past' : '';
@@ -2788,11 +2831,14 @@ import Layout from '../layouts/Layout.astro';
       msgSend.disabled = true;
       msgSend.textContent = 'lighting the burner...';
       try {
-        const res = await fetch('https://n8n.ezeangeloni.xyz/webhook/mensaje', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mensaje: msgInput.value.trim() })
-        });
+        // Eze's words go to his Telegram through n8n; in someone else's galaxy they're kept for them, in their admin
+        const res = GAL
+          ? await fetch('/api/frases/words', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ galaxy: GAL, token: visaOf(GAL), text: msgInput.value.trim() }) })
+          : await fetch('https://n8n.ezeangeloni.xyz/webhook/mensaje', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mensaje: msgInput.value.trim() })
+            });
         if(res.ok){
           launch();
         } else {
@@ -2827,11 +2873,24 @@ import Layout from '../layouts/Layout.astro';
       document.fonts.load("10px 'DM Mono'"),
     ]).catch(() => {});
 
+    const galaxyReady = fetch('/galaxies.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null).then(d => {
+      registry = Array.isArray(d?.galaxies) ? d.galaxies : [];
+      if(!GAL) return;
+      const g = registry.find(x => x.slug === GAL), visa = visaOf(GAL);
+      if(!g){ locked = true; return; }
+      galaxyName = g.name;
+      document.title = `${g.name} — Cronovisor`;
+      if(g.public && g.dir) BASE = `/galaxies/${g.dir}`;
+      else if(visa) BASE = `/galaxies/${GAL}-${visa}`;
+      else locked = true;
+    });
     Promise.all([
-      fetch('/frases.json').then(r => r.json()).catch(() => ({ frases: [] })),
-      fetch('/sets.json').then(r => r.json()).catch(() => ({ sets: [] })),
+      galaxyReady.then(() => locked ? { frases: [] } : fetch(BASE + '/frases.json', { cache: GAL ? 'no-store' : 'default' })
+        .then(r => { if(!r.ok) throw new Error(); return r.json(); }).catch(() => { if(GAL) locked = true; return { frases: [] }; })),
+      GAL ? Promise.resolve({ sets: [] }) : fetch('/sets.json').then(r => r.json()).catch(() => ({ sets: [] })),
       fontsReady,
     ]).then(([frasesData, setsData]) => {
+      if(locked) showLocked();
       buildStations(frasesData.frases || [], setsData.sets || []);
       buildIndex();
       if(!renderer){ // no WebGL: the contact sheet is the whole site
@@ -2879,7 +2938,8 @@ import Layout from '../layouts/Layout.astro';
     // tab → links.json on the VPS: text or logo, a description, the stack); these defaults show until that file exists.
     // Hovering names one; clicking flies there and opens what it is beside the planet (`#world-info`), with the only
     // button that leaves for the site. Piloting, coming close to one opens the same, as pieces reveal themselves.
-    interface SiteLink { label: string; url: string; image?: string; font?: 'malvinas' | 'serif' | 'mono'; description?: string; tags?: string[]; }
+    interface SiteLink { label: string; url: string; image?: string; font?: 'malvinas' | 'serif' | 'mono'; description?: string; tags?: string[];
+      galaxy?: { slug: string; public: boolean; open: boolean; home?: boolean }; }
     const DEFAULT_LINKS: SiteLink[] = [
       { label: 'Fábrica de trapos', url: 'https://trapos.xyz', font: 'malvinas',
         description: 'Una herramienta para escribir con la letra que nació de una sábana de hotel: en la semifinal de Argentina contra Inglaterra alguien la pintó a mano y los jugadores la mostraron a cámara. Juanma la convirtió en tipografía; yo construí la fábrica alrededor y extendí la fuente, con sus acentos dibujados a mano. Escribís, elegís tamaño, color y formato, y la descargás para la bandera, la remera o la pared. Todo pasa en tu navegador.',
@@ -2888,7 +2948,8 @@ import Layout from '../layouts/Layout.astro';
         description: 'La nueva casa digital de ila, la revista sobre América Latina que se publica en Alemania desde 1975. Migré más de 2.000 artículos desde Drupal 7 a una base propia y construí el sitio bilingüe, en alemán y español: el archivo de todas las ediciones, búsqueda por región y tema, un mapa de artículos, suscripciones y un panel editorial con traducción automática.',
         tags: ['Next.js', 'Prisma', 'MySQL', 'DeepL', 'DE · ES'] },
     ];
-    interface World { link: SiteLink; mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; home: THREE.Vector3 | null; phase: number; seed: number; }
+    interface World { link: SiteLink; mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; home: THREE.Vector3 | null; phase: number; seed: number; size: number; }
+    let linkList: SiteLink[] = [];
     let worlds: World[] = [];
     let worldAt = -1, hoverWorld = -1, worldShown = -1;
     const worldInfo = $('world-info'), visitEl = $('world-visit') as HTMLAnchorElement;
@@ -2951,25 +3012,68 @@ import Layout from '../layouts/Layout.astro';
       ring(true);
       return new THREE.CanvasTexture(cv);
     }
-    function buildWorlds(list: SiteLink[]){
+    // The neighbouring galaxies, seen from this one: everyone else's (and Eze's, from theirs). A public one is a
+    // spiral of light you can fly into; a private one a blurred nebula, open only with its visa on this device.
+    function neighbours(): SiteLink[] {
+      const out: SiteLink[] = registry.filter(g => g.slug !== GAL).map(g => {
+        const visa = visaOf(g.slug), open = g.public || !!visa;
+        return { label: g.name, url: `/?g=${g.slug}${!g.public && visa ? `&v=${encodeURIComponent(visa)}` : ''}`, galaxy: { slug: g.slug, public: g.public, open } };
+      });
+      if(GAL) out.unshift({ label: 'Eze', url: '/', galaxy: { slug: '', public: true, open: true, home: true } });
+      return out;
+    }
+    function galaxyCard(name: string, open: boolean, seed: number){
+      const S = 512, cv = document.createElement('canvas');
+      cv.width = cv.height = S;
+      const c = cv.getContext('2d')!, rng = makeRng(seed), cx = S/2, cy = S/2;
+      const core = c.createRadialGradient(cx, cy, 0, cx, cy, S*.32);
+      core.addColorStop(0, open ? 'rgba(255,240,220,.9)' : 'rgba(199,125,255,.35)'); core.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = core; c.fillRect(0, 0, S, S);
+      if(open){
+        // two arms of stars in the palette, tilted like a disc seen at an angle
+        const tilt = .45 + rng()*.25, turn = rng()*Math.PI*2;
+        for(let i = 0; i < 1400; i++){
+          const arm = i % 2, t = Math.pow(rng(), .7), a = turn + arm*Math.PI + t*Math.PI*2.4 + (rng()-.5)*.5, r = 18 + t*205;
+          const x = Math.cos(a)*r, y = Math.sin(a)*r*tilt;
+          c.globalAlpha = (1 - t*.75)*(.35 + rng()*.65);
+          c.fillStyle = rng() < .25 ? '#f0ede8' : COLORS[Math.floor(rng()*COLORS.length)];
+          const d = 1 + rng()*2.2*(1-t);
+          c.fillRect(cx + x, cy + y, d, d);
+        }
+      } else {
+        // closed: only a soft glow, its shape unreadable from here
+        for(let i = 0; i < 26; i++){
+          const a = rng()*Math.PI*2, r = rng()*120, g = c.createRadialGradient(cx + Math.cos(a)*r, cy + Math.sin(a)*r*.6, 0, cx + Math.cos(a)*r, cy + Math.sin(a)*r*.6, 70 + rng()*70);
+          g.addColorStop(0, rng() < .5 ? 'rgba(199,125,255,.22)' : 'rgba(110,249,245,.14)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+          c.globalAlpha = 1; c.fillStyle = g; c.fillRect(0, 0, S, S);
+        }
+      }
+      return new THREE.CanvasTexture(cv);
+    }
+    function buildWorlds(){
       if(!renderer) return;
       if(worldAt >= 0) leaveWorld();
       worlds.forEach(w => { scene.remove(w.mesh); w.mat.map?.dispose(); w.mat.dispose(); const k = billboards.indexOf(w.mesh); if(k >= 0) billboards.splice(k, 1); });
-      const ok = list.filter(l => l && /^https?:\/\//.test(l.url) && (l.label || l.image)).slice(0, 12);
+      const ok = [...linkList.filter(l => l && /^https?:\/\//.test(l.url) && (l.label || l.image)).slice(0, 12), ...neighbours()];
       worlds = ok.map((link, k) => {
-        const tint = COLORS[(k*3 + 2) % COLORS.length];
+        const tint = COLORS[(k*3 + 2) % COLORS.length], size = link.galaxy ? 40 : 13;
         const mat = new THREE.MeshBasicMaterial({ transparent:true, depthWrite:false, color:new THREE.Color(.82, .82, .82) }); // under the bloom
+        if(link.galaxy) mat.blending = THREE.AdditiveBlending;
         const mesh = new THREE.Mesh(plane, mat);
-        mesh.scale.set(13, 13, 1);
+        mesh.scale.set(size, size, 1);
         mesh.userData.world = k;
         mesh.visible = false; // until it has a place
         scene.add(mesh);
         billboards.push(mesh);
-        const paint = (img?: HTMLImageElement) => { mat.map?.dispose(); mat.map = worldCard(link, tint, img); mat.needsUpdate = true; };
-        if(link.image){ const img = new Image(); img.onload = () => paint(img); img.src = link.image; }
-        else document.fonts.ready.then(() => paint());
-        paint();
-        return { link, mesh, mat, home: null, phase: 0, seed: Number.parseInt(hash36(link.url), 36) };
+        const seed = Number.parseInt(hash36(link.galaxy ? 'galaxy:' + link.galaxy.slug : link.url), 36);
+        if(link.galaxy){ mat.map = galaxyCard(link.label, link.galaxy.open, seed); }
+        else {
+          const paint = (img?: HTMLImageElement) => { mat.map?.dispose(); mat.map = worldCard(link, tint, img); mat.needsUpdate = true; };
+          if(link.image){ const img = new Image(); img.onload = () => paint(img); img.src = link.image.startsWith('/links/') ? BASE + link.image : link.image; }
+          else document.fonts.ready.then(() => paint());
+          paint();
+        }
+        return { link, mesh, mat, home: null, phase: 0, seed, size };
       });
       placeWorlds();
     }
@@ -2978,16 +3082,18 @@ import Layout from '../layouts/Layout.astro';
     function placeWorlds(){
       if(!pieces.length) return; // the galaxy isn't laid out yet: buildSpace calls back
       const taken: THREE.Vector3[] = [];
+      let reach = 0;
       for(const w of worlds){
-        const rng = makeRng(w.seed);
+        const rng = makeRng(w.seed), far = !!w.link.galaxy;
         let best: THREE.Vector3 | null = null, bestGap = -1;
         for(let t = 0; t < 80; t++){
-          const a = rng()*Math.PI*2, r = 46 + rng()*Math.max(70, galaxyR - 22), y = (rng()-.5)*44;
+          // planets out among the barrios; neighbouring galaxies beyond the oldest one, across the dark
+          const a = rng()*Math.PI*2, r = far ? galaxyR + 80 + rng()*40 : 46 + rng()*Math.max(70, galaxyR - 22), y = (rng()-.5)*(far ? 30 : 44);
           const p = new THREE.Vector3(Math.cos(a)*r, y, Math.sin(a)*r);
           const gap = Math.min(
             ...pieces.slice(1).map(q => q.mesh.position.distanceTo(p) - 14),
             ...gasSpots.map(g => g.distanceTo(p) - 30),
-            ...taken.map(o => o.distanceTo(p) - 36),
+            ...taken.map(o => o.distanceTo(p) - (far ? 70 : 36)),
           );
           if(gap > bestGap){ best = p; bestGap = gap; }
           if(gap > 0) break;
@@ -2996,7 +3102,9 @@ import Layout from '../layouts/Layout.astro';
         w.phase = rng()*Math.PI*2;
         taken.push(best!);
         w.mesh.visible = true;
+        reach = Math.max(reach, Math.hypot(best!.x, best!.z));
       }
+      PILOT_R = Math.max(PILOT_R, reach + 30); // the balloon can reach every neighbour
       updateWorlds(0);
     }
     function pickWorld(){
@@ -3007,6 +3115,7 @@ import Layout from '../layouts/Layout.astro';
     }
     function showWorldMeta(k: number){
       const l = worlds[k].link;
+      if(l.galaxy){ metaId.textContent = l.galaxy.home ? 'where it all began' : l.galaxy.open ? 'a neighbouring galaxy' : 'a private galaxy'; metaCap.textContent = `${l.label}'s galaxy`; return; }
       metaId.textContent = `elsewhere · ${host(l.url)}`;
       metaCap.textContent = l.label || host(l.url);
     }
@@ -3014,6 +3123,20 @@ import Layout from '../layouts/Layout.astro';
       if(worldShown === k) return;
       worldShown = k;
       const l = worlds[k].link;
+      if(l.galaxy){
+        const g = l.galaxy;
+        $('world-kicker').textContent = g.home ? 'where it all began' : g.open ? 'a neighbouring galaxy' : 'a private galaxy';
+        $('world-title').textContent = `${l.label}'s galaxy`;
+        $('world-desc').textContent = g.home ? 'The first universe of this sky, Eze’s past turned into space. Fly back in.'
+          : g.open ? `Someone else’s past, under the same sky: ${l.label}’s photos and words, each in the barrio of its month. Fly in.`
+          : `Its light reaches you blurred. It can only be entered with a visa: a link from ${l.label}.`;
+        $('world-tags').replaceChildren();
+        visitEl.hidden = !g.open;
+        visitEl.href = l.url; visitEl.target = '_self';
+        visitEl.textContent = g.home ? 'back to Eze’s galaxy' : `enter ${l.label}’s galaxy`;
+        return;
+      }
+      visitEl.hidden = false; visitEl.target = '_blank';
       $('world-kicker').textContent = `elsewhere · ${host(l.url)}`;
       $('world-title').textContent = l.label || host(l.url);
       $('world-desc').textContent = l.description || '';
@@ -3030,10 +3153,10 @@ import Layout from '../layouts/Layout.astro';
       const at = w.mesh.position.clone();
       // from the side of the galaxy's centre, the planet a little to the left: its story reads to the right
       const dir = at.clone().setY(0).normalize().negate().add(new THREE.Vector3(0, .25, 0)).normalize();
-      const from = at.clone().addScaledVector(dir, 26);
+      const from = at.clone().addScaledVector(dir, w.size*2);
       const fwd = at.clone().sub(from).normalize(), right = fwd.clone().cross(new THREE.Vector3(0, 1, 0)).normalize();
       const narrow = window.innerWidth < 640;
-      const look = narrow ? at.clone().add(new THREE.Vector3(0, -6, 0)) : at.clone().addScaledVector(right, 7);
+      const look = narrow ? at.clone().add(new THREE.Vector3(0, -w.size*.46, 0)) : at.clone().addScaledVector(right, w.size*.54);
       btnBack.hidden = false;
       showWorldMeta(k);
       playNote(NOTES[5]);
@@ -3054,7 +3177,8 @@ import Layout from '../layouts/Layout.astro';
         if(!w.home) return;
         if(k !== worldAt) w.phase += dt*Math.PI*2/90;
         w.mesh.position.set(w.home.x + Math.cos(w.phase)*2.4, w.home.y + Math.sin(w.phase*2)*.8, w.home.z + Math.sin(w.phase)*2.4);
-        w.mesh.scale.setScalar(k === hoverWorld || k === worldAt ? 14 : 13);
+        w.mesh.scale.setScalar(w.size*(k === hoverWorld || k === worldAt ? 1.08 : 1));
+        if(w.link.galaxy && !reduced && w.mat.map){ w.mat.map.center.set(.5, .5); w.mat.map.rotation += dt*.02; } // a galaxy turns, slowly
       });
       if(pilot && focused < 0 && pilot.dock >= 0) open = pilot.dock;
       if(worldAt >= 0 && !flight) open = worldAt;
@@ -3062,10 +3186,29 @@ import Layout from '../layouts/Layout.astro';
       if(show) fillWorldInfo(open);
       worldInfo.classList.toggle('show', show);
     }
-    buildWorlds(DEFAULT_LINKS);
-    fetch('/links.json', { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if(Array.isArray(d?.links)) buildWorlds(d.links); })
-      .catch(() => {});
+    // Crossing into another galaxy: everything goes to light, then the other universe loads.
+    function enterGalaxy(w: World){
+      if(!w.link.galaxy?.open) return;
+      $('warp').classList.add('on');
+      if(audioCtx) burnerBreath(1.2, .5);
+      setTimeout(() => { location.href = w.link.url; }, 900);
+    }
+    visitEl.addEventListener('click', e => {
+      const w = worlds.find(x => x.link.url === visitEl.getAttribute('href') && x.link.galaxy);
+      if(w){ e.preventDefault(); enterGalaxy(w); }
+    });
+    function showLocked(){
+      $('locked-title').textContent = registry.find(g => g.slug === GAL) ? `${galaxyName}'s galaxy` : 'No galaxy here';
+      $('locked').hidden = false;
+    }
+    galaxyReady.then(() => {
+      linkList = GAL ? [] : DEFAULT_LINKS;
+      buildWorlds();
+      if(locked) return;
+      fetch(BASE + '/links.json', { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if(Array.isArray(d?.links)){ linkList = d.links; buildWorlds(); } })
+        .catch(() => {});
+    });
   </script>
 </Layout>

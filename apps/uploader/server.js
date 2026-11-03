@@ -5,6 +5,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { saveLinks, storeLinkImage } from './links.js';
+import * as galaxies from './galaxies.js';
 import { addPhoto, addText, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
 
 // === Config ===
@@ -578,13 +579,32 @@ app.delete('/api/sets/:slug', express.json(), checkAuth, async (req, res) => {
 
 // === frases / photos (the archive the Cronovisor draws) ===
 
+// Who's asking: Eze's password opens his own galaxy (and everything else); a galaxy's password opens only that
+// galaxy. The routes below write into whichever root that is.
+async function checkWho(req, res, next) {
+  const ip = req.ip || 'unknown';
+  if (!checkRateLimit(ip)) return res.status(429).json({ error: 'rate limited, try later' });
+  const pass = req.header('X-Auth');
+  if (pass && pass === UPLOAD_PASSWORD) { req.who = { owner: true, root: undefined }; return next(); }
+  const g = await galaxies.byPassword(pass).catch(() => null);
+  if (!g) { recordFailure(ip); return res.status(401).json({ error: 'unauthorized' }); }
+  req.who = { owner: false, slug: g.slug, name: g.name, dir: g.dir, root: g.root, public: g.public, token: g.token };
+  next();
+}
+const rootFor = (req) => req.who.root; // undefined = Eze's, the functions' default
+
+app.get('/api/frases/whoami', checkWho, (req, res) => {
+  const w = req.who;
+  res.json(w.owner ? { owner: true } : { owner: false, slug: w.slug, name: w.name, dir: w.dir, public: w.public, token: w.token });
+});
+
 const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 1 } });
 
 // One photo per request (the admin sends a batch one by one, so each gets its own progress and retry).
-app.post('/api/frases/photo', checkAuth, photoUpload.single('photo'), async (req, res) => {
+app.post('/api/frases/photo', checkWho, photoUpload.single('photo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'photo required' });
   try {
-    const entry = await addPhoto(req.file.buffer, { fecha: req.body.fecha, caption: req.body.caption });
+    const entry = await addPhoto(req.file.buffer, { fecha: req.body.fecha, caption: req.body.caption }, rootFor(req));
     res.json({ ok: true, entry, barrio: monthLabel(entry.fecha) });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -592,11 +612,11 @@ app.post('/api/frases/photo', checkAuth, photoUpload.single('photo'), async (req
 });
 
 // A frase from the admin's words tab. The date is optional (today when missing).
-app.post('/api/frases/text', express.json({ limit: '64kb' }), checkAuth, async (req, res) => {
+app.post('/api/frases/text', express.json({ limit: '64kb' }), checkWho, async (req, res) => {
   const texto = String(req.body?.texto || '').trim();
   if (!texto) return res.status(400).json({ error: 'text required' });
   try {
-    const entry = await addText(texto, req.body.fecha);
+    const entry = await addText(texto, req.body.fecha, rootFor(req));
     res.json({ ok: true, entry, barrio: monthLabel(entry.fecha) });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -604,22 +624,48 @@ app.post('/api/frases/text', express.json({ limit: '64kb' }), checkAuth, async (
 });
 
 // Floating links (admin's links tab). Under /api/frases so the existing nginx route serves them.
-app.put('/api/frases/links', express.json({ limit: '64kb' }), checkAuth, async (req, res) => {
+app.put('/api/frases/links', express.json({ limit: '64kb' }), checkWho, async (req, res) => {
   try {
-    res.json({ ok: true, links: await saveLinks(req.body?.links) });
+    res.json({ ok: true, links: await saveLinks(req.body?.links, rootFor(req)) });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
 });
 const linkImageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4 * 1024 * 1024, files: 1 } });
-app.post('/api/frases/links/image', checkAuth, linkImageUpload.single('image'), async (req, res) => {
+app.post('/api/frases/links/image', checkWho, linkImageUpload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'image required' });
   try {
-    res.json({ ok: true, image: await storeLinkImage(req.file.buffer) });
+    res.json({ ok: true, image: await storeLinkImage(req.file.buffer, rootFor(req)) });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
 });
+
+// === galaxies (Eze only) ===
+const galaxyRoute = (fn) => async (req, res) => {
+  try { res.json(await fn(req)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+};
+app.get('/api/frases/galaxies', checkAuth, galaxyRoute(async () => ({ galaxies: await galaxies.list() })));
+app.post('/api/frases/galaxies', express.json(), checkAuth, galaxyRoute(async (req) => galaxies.create(req.body?.name)));
+app.patch('/api/frases/galaxies/:slug', express.json(), checkAuth, galaxyRoute(async (req) => galaxies.update(req.params.slug, req.body || {})));
+app.post('/api/frases/galaxies/:slug/password', checkAuth, galaxyRoute(async (req) => galaxies.resetPassword(req.params.slug)));
+app.delete('/api/frases/galaxies/:slug', checkAuth, galaxyRoute(async (req) => { await galaxies.remove(req.params.slug); return { ok: true }; }));
+
+// Words left with the balloon in someone else's galaxy (Eze's own still go to his Telegram through n8n).
+// Public, so it has its own gentle rate limit.
+const wordsSent = new Map();
+app.post('/api/frases/words', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {
+  const ip = req.ip || 'unknown', now = Date.now();
+  const recent = (wordsSent.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
+  if (recent.length >= 6) throw Object.assign(new Error('too many, try later'), { status: 429 });
+  await galaxies.leaveWords(String(req.body?.galaxy || ''), String(req.body?.token || ''), req.body?.text);
+  recent.push(now); wordsSent.set(ip, recent);
+  return { ok: true };
+}));
+app.get('/api/frases/messages', checkWho, galaxyRoute(async (req) => {
+  if (req.who.owner) return { messages: [] }; // Eze's arrive on Telegram
+  return { messages: await galaxies.readWords(req.who.slug) };
+}));
 
 // Called by n8n (over SSH, on loopback) with the raw Telegram message. Answers with the bot's reply.
 app.post('/api/frases/telegram', express.json({ limit: '1mb' }), checkAuth, async (req, res) => {

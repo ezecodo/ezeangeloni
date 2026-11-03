@@ -161,6 +161,7 @@
   .tabs button { flex:1; background:none; border:none; color:var(--muted); font-family:'DM Mono',monospace; font-size:.68rem; letter-spacing:.2em; text-transform:uppercase; padding:.6rem; cursor:pointer; border-radius:6px; transition: color .2s, background .2s; }
   .tabs button:hover { color:var(--text); }
   .tabs button.active { color:var(--text); background:rgba(255,110,180,0.08); }
+  .tabs button[hidden] { display:none; }
   section.tab { display:none; }
   section.tab.active { display:block; }
 
@@ -266,11 +267,13 @@
 
   <div id="app">
     <nav class="tabs">
-      <button data-tab="upload" class="active">new set</button>
-      <button data-tab="manage">manage</button>
+      <button data-tab="upload" class="active" data-owner>new set</button>
+      <button data-tab="manage" data-owner>manage</button>
       <button data-tab="photos">photos</button>
       <button data-tab="words">words</button>
       <button data-tab="links">links</button>
+      <button data-tab="messages" data-guest hidden>messages</button>
+      <button data-tab="galaxies" data-owner>galaxies</button>
     </nav>
 
     <section class="tab active" id="tab-upload">
@@ -367,6 +370,22 @@
       <div class="recent"><h3>last words</h3><ul id="wordRecent"></ul></div>
     </section>
 
+    <section class="tab" id="tab-galaxies">
+      <p class="hint">other people's universes beside yours · invite-only · each gets its own admin password</p>
+      <div class="words-meta" style="margin-top:.6rem">
+        <div><label for="galName">new galaxy · whose?</label><input type="text" id="galName" maxlength="40" placeholder="Lucho"></div>
+        <button class="ghost" id="galCreate" type="button" style="margin-bottom:.1rem">create</button>
+      </div>
+      <div id="galSecret" class="share-url" style="display:none"></div>
+      <div id="galList"></div>
+      <p id="galStatus" class="status"></p>
+    </section>
+
+    <section class="tab" id="tab-messages">
+      <p class="hint">words people left with the balloon in your galaxy</p>
+      <ul id="msgList" class="recent" style="margin-top:.6rem"></ul>
+    </section>
+
     <section class="tab" id="tab-links">
       <p class="hint">your other work, as planets in the galaxy · a name or a logo, what it is, its stack</p>
       <div id="linkRows"></div>
@@ -443,10 +462,24 @@
   }
 
   async function api(path, opts = {}) { return fetch(path, { ...opts, headers: { 'X-Auth': password, ...(opts.headers || {}) } }); }
+  // Who the password belongs to: Eze (everything) or someone's galaxy (only theirs: photos, words, links, messages).
   async function verify(p) {
-    const r = await fetch('/api/sets/auth', { method:'POST', headers:{ 'X-Auth':p, 'Content-Type':'application/json' }, body:'{}' });
-    return r.ok;
+    const r = await fetch('/api/frases/whoami', { headers: { 'X-Auth': p } });
+    return r.ok ? r.json() : null;
   }
+  let me = { owner: true }, BASE = '', siteLink = '/';
+  function setRole(who) {
+    me = who;
+    BASE = me.owner ? '' : `/galaxies/${me.dir}`;
+    siteLink = me.owner ? '/' : `/?g=${me.slug}${me.public ? '' : '&v=' + encodeURIComponent(me.token)}`;
+    document.querySelector('h1').textContent = `${me.owner ? 'eze' : me.name.toLowerCase()} · admin`;
+    document.title = document.querySelector('h1').textContent;
+    document.querySelectorAll('[data-owner]').forEach(b => { b.hidden = !me.owner; });
+    document.querySelectorAll('[data-guest]').forEach(b => { b.hidden = me.owner; });
+    const active = document.querySelector('.tabs button.active');
+    if (!active || active.hidden) document.querySelector('.tabs button[data-tab=photos]').click();
+  }
+  function enter(who) { setRole(who); setView('app'); if (who.owner) loadList(); }
 
   // ===== KNOB =====
   function makeKnob(el, onChange) {
@@ -1619,14 +1652,14 @@
   }
 
   // ===== LOGIN / TABS =====
-  async function tryAutoLogin() { if (!password) return; try { if (await verify(password)) { setView('app'); loadList(); } } catch {} }
+  async function tryAutoLogin() { if (!password) return; try { const who = await verify(password); if (who) enter(who); } catch {} }
   $('loginBtn').addEventListener('click', async () => {
     const p = $('pass').value;
     if (!p) return;
     $('loginStatus').textContent = 'checking...'; $('loginStatus').className = 'status';
     try {
-      const ok = await verify(p);
-      if (ok) { password = p; localStorage.setItem(PASS_KEY, p); $('loginStatus').textContent = ''; setView('app'); loadList(); }
+      const who = await verify(p);
+      if (who) { password = p; localStorage.setItem(PASS_KEY, p); $('loginStatus').textContent = ''; enter(who); }
       else { $('loginStatus').textContent = 'wrong password'; $('loginStatus').className = 'status error'; }
     } catch { $('loginStatus').textContent = 'connection error'; $('loginStatus').className = 'status error'; }
   });
@@ -2054,7 +2087,7 @@
     $('photoStatus').className = failed ? 'status error' : 'status';
     $('photoStatus').innerHTML = failed
       ? `${ok} uploaded · ${failed} failed, fix and upload again`
-      : `${ok} in the universe · <a href="/" style="color:var(--cyan)">go see them</a>`;
+      : `${ok} in the universe · <a href="${siteLink}" style="color:var(--cyan)">go see them</a>`;
     renderShots();
   });
 
@@ -2077,9 +2110,9 @@
   wordDate.addEventListener('change', wordReady);
   async function loadRecent() {
     try {
-      const d = await fetch('/frases.json', { cache: 'no-store' }).then(r => r.json());
+      const d = await fetch(BASE + '/frases.json', { cache: 'no-store' }).then(r => r.json());
       const list = (d.frases || []).filter(f => f.texto).slice(-8).reverse();
-      $('wordRecent').innerHTML = list.map(f => `<li><a href="/#t${hash36((f.fecha || '') + f.texto)}"><q>${escapeHtml(f.texto)}</q></a><span>${escapeHtml(f.fecha || '')}</span></li>`).join('')
+      $('wordRecent').innerHTML = list.map(f => `<li><a href="${siteLink}#t${hash36((f.fecha || '') + f.texto)}"><q>${escapeHtml(f.texto)}</q></a><span>${escapeHtml(f.fecha || '')}</span></li>`).join('')
         || '<li><span>nothing yet</span></li>';
     } catch {}
   }
@@ -2092,7 +2125,7 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || `error ${r.status}`);
       const when = j.entry.fecha === todayStr() ? 'today' : `barrio ${j.barrio}`;
-      $('wordStatus').innerHTML = `saved · ${escapeHtml(when)} · <a href="/#t${hash36(j.entry.fecha + j.entry.texto)}" style="color:var(--cyan)">see it</a>`;
+      $('wordStatus').innerHTML = `saved · ${escapeHtml(when)} · <a href="${siteLink}#t${hash36(j.entry.fecha + j.entry.texto)}" style="color:var(--cyan)">see it</a>`;
       wordText.value = '';
       wordDate.value = todayStr();
       wordReady();
@@ -2146,7 +2179,7 @@
       prev.href = l.url || '#';
       prev.className = 'link-preview ' + (l.image ? 'image' : (l.font || 'serif'));
       prev.replaceChildren();
-      if (l.image) { const im = new Image(); im.src = l.image; im.alt = l.label || ''; prev.append(im); }
+      if (l.image) { const im = new Image(); im.src = l.image.startsWith('/links/') ? BASE + l.image : l.image; im.alt = l.label || ''; prev.append(im); }
       else prev.textContent = l.label || '…';
     };
     const q = (k) => row.querySelector(`[data-k=${k}]`);
@@ -2191,10 +2224,10 @@
   }
   async function loadLinks() {
     try {
-      const r = await fetch('/links.json', { cache: 'no-store' });
+      const r = await fetch(BASE + '/links.json', { cache: 'no-store' });
       const d = r.ok ? await r.json() : null;
-      links = Array.isArray(d?.links) ? d.links : DEFAULT_LINKS.map(l => ({ ...l }));
-    } catch { links = DEFAULT_LINKS.map(l => ({ ...l })); }
+      links = Array.isArray(d?.links) ? d.links : me.owner ? DEFAULT_LINKS.map(l => ({ ...l })) : [];
+    } catch { links = me.owner ? DEFAULT_LINKS.map(l => ({ ...l })) : []; }
     renderLinks();
   }
   $('linkAdd').addEventListener('click', () => { links.push({ label: '', url: 'https://', font: 'serif' }); renderLinks(); });
@@ -2206,11 +2239,81 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || `error ${r.status}`);
       links = j.links; renderLinks();
-      $('linkStatus').innerHTML = 'saved · <a href="/" style="color:var(--cyan)">see them floating</a>';
+      $('linkStatus').innerHTML = `saved · <a href="${siteLink}" style="color:var(--cyan)">see them in the galaxy</a>`;
     } catch (e) { $('linkStatus').className = 'status error'; $('linkStatus').textContent = e.message; }
     $('linkSave').disabled = false;
   });
   document.querySelector('.tabs button[data-tab=links]').addEventListener('click', loadLinks);
+
+  // ===== GALAXIES (Eze) =====
+  // Create someone's galaxy: its password shows once, to pass on. Private ones are reached through their visa link.
+  const visaLink = (g) => `${location.origin}/?g=${g.slug}${g.public ? '' : '&v=' + encodeURIComponent(g.token)}`;
+  function showSecret(g, what) {
+    const el = $('galSecret');
+    el.style.display = 'block';
+    el.innerHTML = `<small>${what} · shown only now, pass it on</small>${escapeHtml(g.name)}'s admin password: <b>${escapeHtml(g.password)}</b><br>admin: ${escapeHtml(location.origin)}/admin/<br>galaxy: ${escapeHtml(visaLink(g))}`;
+  }
+  async function loadGalaxies() {
+    try {
+      const r = await api('/api/frases/galaxies');
+      const { galaxies } = await r.json();
+      $('galList').replaceChildren(...galaxies.map(galaxyRow));
+      if (!galaxies.length) $('galList').innerHTML = '<p class="empty">no galaxies yet</p>';
+    } catch { $('galStatus').textContent = 'connection error'; }
+  }
+  function galaxyRow(g) {
+    const row = document.createElement('div');
+    row.className = 'link-row';
+    row.innerHTML = `<div class="set-row-head"><div class="set-info"><h3>${escapeHtml(g.name)}'s galaxy</h3>
+      <div class="meta">${g.public ? 'public · anyone flying by can enter' : 'private · only with its visa link'} · since ${escapeHtml(g.created)}</div></div></div>
+      <div class="link-actions">
+        <button class="ghost" type="button" data-a="copy">copy ${g.public ? 'link' : 'visa link'}</button>
+        <button class="ghost" type="button" data-a="pub">${g.public ? 'make private' : 'make public'}</button>
+        <button class="ghost" type="button" data-a="pass">new password</button>
+        <span class="grow"></span>
+        <button class="ghost danger" type="button" data-a="del">remove</button>
+      </div>`;
+    const act = (a) => row.querySelector(`[data-a=${a}]`);
+    act('copy').addEventListener('click', async () => { await navigator.clipboard.writeText(visaLink(g)).catch(() => {}); $('galStatus').textContent = `copied: ${visaLink(g)}`; });
+    act('pub').addEventListener('click', async () => {
+      const r = await api(`/api/frases/galaxies/${g.slug}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ public: !g.public }) });
+      $('galStatus').textContent = r.ok ? '' : 'could not change it'; loadGalaxies();
+    });
+    act('pass').addEventListener('click', async () => {
+      const r = await api(`/api/frases/galaxies/${g.slug}/password`, { method: 'POST' });
+      const j = await r.json(); if (r.ok) showSecret(j, 'new password'); else $('galStatus').textContent = j.error || 'error';
+    });
+    act('del').addEventListener('click', async () => {
+      const typed = prompt(`Remove ${g.name}'s galaxy? Its photos are moved aside on the server, not erased. Type ${g.slug} to confirm.`);
+      if (typed !== g.slug) return;
+      const r = await api(`/api/frases/galaxies/${g.slug}`, { method: 'DELETE' });
+      $('galStatus').textContent = r.ok ? 'removed' : 'could not remove it'; loadGalaxies();
+    });
+    return row;
+  }
+  $('galCreate').addEventListener('click', async () => {
+    const name = $('galName').value.trim();
+    if (!name) return;
+    $('galStatus').className = 'status'; $('galStatus').textContent = 'creating...';
+    try {
+      const r = await api('/api/frases/galaxies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `error ${r.status}`);
+      showSecret(j, `${j.name}'s galaxy is born (private)`);
+      $('galName').value = ''; $('galStatus').textContent = '';
+      loadGalaxies();
+    } catch (e) { $('galStatus').className = 'status error'; $('galStatus').textContent = e.message; }
+  });
+  document.querySelector('.tabs button[data-tab=galaxies]').addEventListener('click', loadGalaxies);
+
+  // ===== MESSAGES (someone's galaxy) =====
+  async function loadMessages() {
+    try {
+      const { messages } = await api('/api/frases/messages').then(r => r.json());
+      $('msgList').innerHTML = messages.map(m => `<li><q>${escapeHtml(m.text)}</q><span>${escapeHtml(m.at.slice(0, 10))}</span></li>`).join('') || '<li><span>no words yet</span></li>';
+    } catch { $('msgList').innerHTML = '<li><span>connection error</span></li>'; }
+  }
+  document.querySelector('.tabs button[data-tab=messages]').addEventListener('click', loadMessages);
 
   // /admin/#photos or #words opens that tab (the home screen app starts on photos).
   const startTab = location.hash.slice(1);

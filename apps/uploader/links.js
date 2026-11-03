@@ -3,11 +3,11 @@
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import { sniff } from './frases.js';
+import { sniff, PUBLIC_ROOT } from './frases.js';
 
-const PUBLIC_ROOT = process.env.PUBLIC_ROOT || '/var/www/ezeangeloni.xyz/html';
-const LINKS_JSON = process.env.LINKS_JSON || path.join(PUBLIC_ROOT, 'links.json');
-const LINKS_DIR = path.join(PUBLIC_ROOT, 'links');
+// per galaxy root, like frases.json: links.json and links/ beside it
+const jsonOf = (root) => path.join(root, 'links.json');
+const dirOf = (root) => path.join(root, 'links');
 const FONTS = ['malvinas', 'serif', 'mono'];
 const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
@@ -35,15 +35,16 @@ export function cleanLinks(list) {
   });
 }
 
-export async function saveLinks(list) {
+export async function saveLinks(list, root = PUBLIC_ROOT) {
   const links = cleanLinks(list);
-  const tmp = LINKS_JSON + '.tmp';
+  const tmp = jsonOf(root) + '.tmp';
   await fs.writeFile(tmp, JSON.stringify({ links }, null, 2) + '\n');
-  await fs.rename(tmp, LINKS_JSON);
+  await fs.rename(tmp, jsonOf(root));
   return links;
 }
 
-export async function storeLinkImage(buf) {
+export async function storeLinkImage(buf, root = PUBLIC_ROOT) {
+  const LINKS_DIR = dirOf(root);
   const type = sniff(buf);
   if (!type) throw Object.assign(new Error('the image must be a png, jpg or webp'), { status: 415 });
   await fs.mkdir(LINKS_DIR, { recursive: true });
