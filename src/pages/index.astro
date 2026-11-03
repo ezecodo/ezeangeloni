@@ -74,6 +74,10 @@ import Layout from '../layouts/Layout.astro';
       .sky-mark.sun { color: #ffb347; }
       .sky-mark.sun i { border-radius: 50%; width: 22px; height: 22px; transform: none; }
       .sky-mark[hidden] { display: none; }
+      /* only for the galaxy's owner, at one of its pieces */
+      #remove-piece { position: fixed; right: 1.4rem; bottom: calc(var(--dial) + 3rem); z-index: 12; font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,63,63,.75); border: 1px solid rgba(255,63,63,.35); padding: .45rem .7rem; background: rgba(8,8,16,.5); }
+      #remove-piece:hover { color: #ff3f3f; border-color: #ff3f3f; }
+      #remove-piece[hidden] { display: none; }
       /* arriving in a galaxy: its name, like the title of a chapter, then gone */
       #arrival { position: fixed; left: 0; right: 0; top: 22vh; z-index: 13; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.6s ease; text-shadow: 0 0 24px rgba(8,8,16,.9); }
       #arrival.show { opacity: 1; transition-duration: 1.2s; }
@@ -291,6 +295,7 @@ import Layout from '../layouts/Layout.astro';
   <div id="warp" aria-hidden="true"></div>
   <div id="sky-marks" aria-hidden="true"></div>
   <div id="arrival" aria-live="polite"><p></p><h2></h2></div>
+  <button id="remove-piece" hidden>remove from the archive</button>
   <div id="xib-dark" aria-hidden="true"></div>
   <aside id="xib-panel" aria-live="polite">
     <p class="kicker">Xibalbá</p>
@@ -3799,8 +3804,11 @@ import Layout from '../layouts/Layout.astro';
     // and waits; the owner lets them in from their admin. While a knock is pending the doors are asked again every
     // little while, so the nebula opens by itself, with a chime, the moment they say yes.
     const knockForm = $('knock') as HTMLFormElement, lockedKnock = $('locked-knock') as HTMLFormElement;
-    let whoAmI = '';
-    if(ownerPass) fetch('/api/frases/whoami', { headers: { 'X-Auth': ownerPass } }).then(r => r.ok ? r.json() : null).then(w => { whoAmI = w ? (w.owner ? 'Eze' : w.name) : ''; }).catch(() => {});
+    let whoAmI = '', mine = false; // mine: logged in here as this galaxy's owner
+    if(ownerPass) fetch('/api/frases/whoami', { headers: { 'X-Auth': ownerPass } }).then(r => r.ok ? r.json() : null).then(w => {
+      whoAmI = w ? (w.owner ? 'Eze' : w.name) : '';
+      mine = !!w && (GAL ? w.slug === GAL : !!w.owner);
+    }).catch(() => {});
     function paintKnock(form: HTMLFormElement, slug: string, owner: string){
       const door = doors[slug]?.status || 'closed', input = form.querySelector('input')!, msg = form.querySelector('.knock-msg')!;
       const known = whoAmI || store.get('cv-name');
@@ -3846,6 +3854,20 @@ import Layout from '../layouts/Layout.astro';
         else { if(k === GAL) paintKnock(lockedKnock, GAL, galaxyName); else if(knockForm.dataset.slug === k) worldShown = -1; }
       });
     }, 12000);
+    // The owner, at one of their pieces, can take it out of the archive (to a private trash on the server).
+    const removeBtn = $('remove-piece') as HTMLButtonElement;
+    setInterval(() => { const st = focused > 0 ? stations[focused] : null; removeBtn.hidden = !(mine && st && st.kind !== 'set' && !flight); }, 300);
+    removeBtn.addEventListener('click', async () => {
+      const st = stations[focused];
+      if(!st || st.kind === 'set') return;
+      if(!confirm(`Take this out of your galaxy?\n\n${st.text || 'a photo'} · ${st.date}\n\n(It goes to a private trash on the server.)`)) return;
+      const imagen = st.kind === 'photo' && st.src ? st.src.slice(BASE.length) : '';
+      const r = await fetch('/api/frases/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Auth': ownerPass }, body: JSON.stringify({ imagen, texto: st.kind === 'text' ? st.text : undefined, fecha: st.date }) }).catch(() => null);
+      if(!r?.ok){ alert('could not remove it'); return; }
+      const p = pieces[focused];
+      backOut();
+      if(p){ p.mesh.visible = false; if(p.star) p.star.visible = false; if(p.halo) p.halo.visible = false; } // gone; the map closes over it on the next visit
+    });
     function showLocked(){
       const known = !!registry.find(g => g.slug === GAL);
       $('locked-title').textContent = known ? `${galaxyName}'s galaxy` : 'No galaxy here';

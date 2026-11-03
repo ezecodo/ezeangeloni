@@ -171,6 +171,32 @@ export function addPhoto(buf, { fecha, caption }, root = PUBLIC_ROOT) {
   });
 }
 
+// Taking a piece out of the archive. Nothing is erased: the entry and its photo (and thumbnail) go to a private
+// trash outside the web root, one folder per galaxy, so a mistake can be undone by hand.
+const TRASH = process.env.ARCHIVE_TRASH || '/root/cronovisor-trash';
+export function removeItem({ index, imagen, texto, fecha }, root = PUBLIC_ROOT) {
+  return withLock(root, async () => {
+    const data = await load(root);
+    const same = (f) => (imagen ? f.imagen === imagen : f.texto === texto && (f.fecha || '') === (fecha || ''));
+    let k = Number.isInteger(index) && data.frases[index] && same(data.frases[index]) ? index : data.frases.findIndex(same);
+    if (k < 0) throw Object.assign(new Error('not found (already removed?)'), { status: 404 });
+    const [entry] = data.frases.splice(k, 1);
+    const bin = path.join(TRASH, root === PUBLIC_ROOT ? 'eze' : path.basename(root));
+    await fs.mkdir(path.join(bin, 'images'), { recursive: true });
+    if (entry.imagen) {
+      const name = path.basename(entry.imagen), thumb = name.replace(/\.\w+$/, '.jpg');
+      await fs.rename(path.join(imagesOf(root), name), path.join(bin, 'images', name)).catch(() => {});
+      await fs.rm(path.join(imagesOf(root), 't', thumb), { force: true });
+    }
+    let trash = [];
+    try { trash = JSON.parse(await fs.readFile(path.join(bin, 'trash.json'), 'utf-8')); } catch {}
+    trash.push({ ...entry, removed: new Date().toISOString() });
+    await fs.writeFile(path.join(bin, 'trash.json'), JSON.stringify(trash, null, 1));
+    await save(root, data);
+    return { ok: true };
+  });
+}
+
 export function addText(texto, fecha, root = PUBLIC_ROOT) {
   return withLock(root, async () => {
     const entry = { texto: String(texto).trim().slice(0, 2000), fecha: validDate(fecha) ? fecha : today(), subida: today() };

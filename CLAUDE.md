@@ -90,6 +90,10 @@ The landing fetches `sets.json` at runtime, so no rebuild needed when adding set
 
 The project's reason for being is **digital independence**. The user (Eze) is a DJ who wanted to publish his sets without depending on SoundCloud / Mixcloud — no ads injected over his music, no algorithm dictating reach, no third party owning his stats or audience. The whole site exists so that when a venue, label or festival receives a link to his set, they hear pure music in his own visual identity, on his own infrastructure. This positioning ("digital independence, my own system, not the same channel as every other DJ") matters when scoping new features: prefer self-hosted, prefer ownership, avoid dependencies that would dilute that story.
 
+## Removing pieces
+
+`POST /api/frases/remove` (`removeItem` in `frases.js`, any galaxy's own password, for its own root): finds the entry (by index and/or `imagen`, or `texto`+`fecha`), takes it out of `frases.json` and moves its photo to a private trash outside the web root, `/root/cronovisor-trash/<galaxy>/` (env `ARCHIVE_TRASH`), logging the entry in `trash.json` there, so it can be put back by hand; the thumbnail is dropped. Two doors: the admin's **archive** tab (every piece by month, newest first, searchable, ✕ with a confirm) and, on the site, `#remove-piece` ("remove from the archive") shown only to the galaxy's owner logged in on that device (`mine`) at a photo or frase (not sets). Telegram's `/delete N` (by index) still works too.
+
 ## Photos and frases with their own date (barrios)
 
 The site makes barrios from the month of `fecha`, so backdating is all it takes. Two doors write `frases.json`, both through `apps/uploader/frases.js` (one writer at a time, atomic rename; new entries get `subida`):

@@ -277,6 +277,7 @@
       <button data-tab="photos">photos</button>
       <button data-tab="words">words</button>
       <button data-tab="links">links</button>
+      <button data-tab="archive">archive</button>
       <button data-tab="door" data-guest hidden>door</button>
       <button data-tab="messages" data-guest hidden>messages</button>
       <button data-tab="galaxies" data-owner>galaxies</button>
@@ -375,6 +376,13 @@
       <button class="primary" id="wordSave" disabled>save</button>
       <p id="wordStatus" class="status"></p>
       <div class="recent"><h3>last words</h3><ul id="wordRecent"></ul></div>
+    </section>
+
+    <section class="tab" id="tab-archive">
+      <p class="hint">everything in your galaxy, newest first · remove what you don't want any more (it goes to a private trash on the server, not erased)</p>
+      <input type="text" id="archSearch" placeholder="search a word, a title or a date (2019-07)…" style="margin-top:.6rem">
+      <p id="archCount" class="hint"></p>
+      <div id="archList"></div>
     </section>
 
     <section class="tab" id="tab-galaxies">
@@ -2357,6 +2365,48 @@
     } catch (e) { $('galStatus').className = 'status error'; $('galStatus').textContent = e.message; }
   });
   document.querySelector('.tabs button[data-tab=galaxies]').addEventListener('click', loadGalaxies);
+
+  // ===== ARCHIVE =====
+  // Every piece, grouped by month, newest first; each can be taken out (moved to a private trash on the server).
+  let archive = [];
+  async function loadArchive() {
+    try {
+      const d = await fetch(BASE + '/frases.json', { cache: 'no-store' }).then(r => r.json());
+      archive = (d.frases || []).map((f, index) => ({ ...f, index })).filter(f => f.imagen || f.texto).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+      renderArchive();
+    } catch { $('archCount').textContent = 'connection error'; }
+  }
+  function renderArchive() {
+    const q = $('archSearch').value.trim().toLowerCase();
+    const list = archive.filter(f => !q || [(f.texto || ''), (f.caption || ''), (f.fecha || '')].join(' ').toLowerCase().includes(q));
+    $('archCount').textContent = `${list.length} of ${archive.length} pieces`;
+    const months = new Map();
+    list.slice(0, 400).forEach(f => { const m = (f.fecha || '????-??').slice(0, 7); if (!months.has(m)) months.set(m, []); months.get(m).push(f); });
+    $('archList').replaceChildren(...[...months].map(([m, items]) => {
+      const g = document.createElement('div'); g.className = 'barrio';
+      const [y, mo] = m.split('-');
+      g.innerHTML = `<h3>${MONTHS[+mo - 1] || '?'} ${escapeHtml(y)} <small>${items.length}</small></h3><div class="shots"></div>`;
+      g.querySelector('.shots').append(...items.map(f => {
+        const el = document.createElement('div'); el.className = 'shot';
+        const thumb = f.imagen ? BASE + f.imagen.replace(/\/images\/([^/]+)\.\w+$/, '/images/t/$1.jpg') : '';
+        el.innerHTML = (f.imagen ? `<img alt="" loading="lazy">` : `<div style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;padding:.7rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.05rem;text-align:center;background:#11111f"></div>`)
+          + `<button class="x" type="button" aria-label="remove" title="remove from the archive">✕</button><div class="fields"><span class="hint"></span></div>`;
+        if (f.imagen) { const im = el.querySelector('img'); im.src = thumb; im.onerror = () => { im.onerror = null; im.src = BASE + f.imagen; }; }
+        else el.querySelector('div').textContent = f.texto;
+        el.querySelector('.hint').textContent = `${f.fecha || ''}${f.caption ? ' · ' + f.caption : ''}`;
+        el.querySelector('.x').addEventListener('click', async () => {
+          if (!confirm(`Take this out of your galaxy?\n\n${f.texto || f.caption || f.imagen}\n${f.fecha || ''}\n\n(It goes to a private trash on the server.)`)) return;
+          const r = await api('/api/frases/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: f.index, imagen: f.imagen || '', texto: f.texto, fecha: f.fecha }) });
+          if (r.ok) { el.style.opacity = '.2'; el.style.pointerEvents = 'none'; setTimeout(loadArchive, 400); }
+          else { const j = await r.json().catch(() => ({})); alert(j.error || 'could not remove it'); }
+        });
+        return el;
+      }));
+      return g;
+    }));
+  }
+  $('archSearch').addEventListener('input', renderArchive);
+  document.querySelector('.tabs button[data-tab=archive]').addEventListener('click', loadArchive);
 
   // ===== XIBALBÁ (Eze only) =====
   // His father's journey: name, the day he left (the journey runs in real time from it), who in the family can go
