@@ -74,6 +74,11 @@ import Layout from '../layouts/Layout.astro';
       .sky-mark.sun { color: #ffb347; }
       .sky-mark.sun i { border-radius: 50%; width: 22px; height: 22px; transform: none; }
       .sky-mark[hidden] { display: none; }
+      /* arriving in a galaxy: its name, like the title of a chapter, then gone */
+      #arrival { position: fixed; left: 0; right: 0; top: 22vh; z-index: 13; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.6s ease; text-shadow: 0 0 24px rgba(8,8,16,.9); }
+      #arrival.show { opacity: 1; transition-duration: 1.2s; }
+      #arrival p { font-size: .64rem; letter-spacing: .3em; text-transform: uppercase; color: var(--muted); }
+      #arrival h2 { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(2.6rem, 7vw, 5.5rem); line-height: 1; margin-top: .5rem; }
       /* Xibalbá: the deeper you go, the darker and redder the edges */
       #xib-dark { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(20,4,8,.15) 30%, rgba(40,6,10,.85) 100%); }
       #xib-panel { position: fixed; left: 2.4rem; bottom: 5rem; z-index: 12; width: min(380px, 80vw); opacity: 0; pointer-events: none; transition: opacity .6s; text-shadow: 0 0 18px rgba(8,8,16,.95); }
@@ -285,6 +290,7 @@ import Layout from '../layouts/Layout.astro';
   </div>
   <div id="warp" aria-hidden="true"></div>
   <div id="sky-marks" aria-hidden="true"></div>
+  <div id="arrival" aria-live="polite"><p></p><h2></h2></div>
   <div id="xib-dark" aria-hidden="true"></div>
   <aside id="xib-panel" aria-live="polite">
     <p class="kicker">Xibalbá</p>
@@ -877,6 +883,7 @@ import Layout from '../layouts/Layout.astro';
       buildWind();
       buildBalloon();
       placeWorlds();
+      addGateNebulae();
       cards();
       queuePhotos();
     }
@@ -2158,8 +2165,28 @@ import Layout from '../layouts/Layout.astro';
     const gasTint = new THREE.Color();
     let gasTintK = 0;
     function buildNebulae(){
-      gasClouds = gasSpots.map((pos, j) => {
-        const rng = makeRng(911 + j*37), last = j === gasSpots.length-1, r = last ? 19 : 14;
+      gasClouds = gasSpots.map((pos, j) => makeCloud(pos, j, j === gasSpots.length-1));
+      // sets gone supernova stay as nebulae: they can be drawn from as well
+      for(const q of pieces) if(q.stage === 'supernova remnant') gasClouds.push({ pos: q.mesh.position, r: 9, color: new THREE.Color('#ff6eb4'), reserve: 1 });
+      buildIntake();
+    }
+    // A nebula at each gate: at the edge facing each neighbouring galaxy, beside where a traveller from there
+    // arrives, so whoever comes in short of gas has somewhere to fill up in sight.
+    let gatesBuilt = false;
+    function addGateNebulae(){
+      if(gatesBuilt || !renderer) return;
+      gatesBuilt = true;
+      const out = Math.max(58, galaxyR*.9);
+      worlds.filter(w => w.link.galaxy && w.home).forEach((w, k) => {
+        const dir = w.home!.clone().setY(0).normalize(), side = new THREE.Vector3(-dir.z, 0, dir.x);
+        const at = dir.clone().multiplyScalar(Math.max(40, out - 34)).addScaledVector(side, 52).setY(10 + Math.max(0, out - 58)*.12);
+        if(gasClouds.some(c => c.pos.distanceTo(at) < 60)) return; // one is already there
+        gasClouds.push(makeCloud(at, 40 + k, false));
+      });
+    }
+    function makeCloud(pos: THREE.Vector3, j: number, last: boolean): GasCloud {
+      {
+        const rng = makeRng(911 + j*37), r = last ? 19 : 14;
         const color = new THREE.Color(GAS_COLORS[j % GAS_COLORS.length]), other = new THREE.Color(GAS_COLORS[(j+2) % GAS_COLORS.length]);
         const lobes = [0, 1, 2].map(() => new THREE.Vector3((rng()-.5)*r*.9, (rng()-.5)*r*.4, (rng()-.5)*r*.9));
         const cloud = (n: number, spread: number, light: number) => {
@@ -2187,9 +2214,9 @@ import Layout from '../layouts/Layout.astro';
         group.position.copy(pos);
         scene.add(group);
         return { pos, r: r*1.05, color, reserve: 1, group, mats: [fine, puff, core] };
-      });
-      // sets gone supernova stay as nebulae: they can be drawn from as well
-      for(const q of pieces) if(q.stage === 'supernova remnant') gasClouds.push({ pos: q.mesh.position, r: 9, color: new THREE.Color('#ff6eb4'), reserve: 1 });
+      }
+    }
+    function buildIntake(){
       // the gas flowing from a nebula into the envelope
       const N = 70, geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3), 3));
@@ -3738,6 +3765,12 @@ import Layout from '../layouts/Layout.astro';
       camera.position.copy(pilot.pos).addScaledVector(inward, -22).add(new THREE.Vector3(0, 6, 0));
       look.copy(CENTER);
       camera.lookAt(look);
+      // its name, as you come out of the light
+      const title = $('arrival');
+      title.querySelector('p')!.textContent = GAL ? 'you have arrived at' : 'back where it all began';
+      title.querySelector('h2')!.textContent = `${galaxyName}’s galaxy`;
+      setTimeout(() => title.classList.add('show'), 500);
+      setTimeout(() => title.classList.remove('show'), 5200);
       // out of the light you crossed in
       const warp = $('warp');
       warp.style.transition = 'none'; warp.style.opacity = '1';
