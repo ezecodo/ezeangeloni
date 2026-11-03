@@ -1865,7 +1865,7 @@ import Layout from '../layouts/Layout.astro';
         return;
       }
       if(pilot.home){ if(tap(2)) exitPilot(); return; } // the wind has the balloon now
-      if(pilot.nearGalaxy >= 0 && worlds[pilot.nearGalaxy]?.link.galaxy?.open && tap(1)){ enterGalaxy(worlds[pilot.nearGalaxy], true); return; } // at a galaxy: in you go
+      if(pilot.nearGalaxy >= 0 && worlds[pilot.nearGalaxy]?.link.galaxy?.open && gas >= CROSS_COST && tap(1)){ enterGalaxy(worlds[pilot.nearGalaxy], true); return; } // at a galaxy: in you go
       if(tap(1)) startSelection();
       if(tap(2)) exitPilot();
       if(tap(3)) board();
@@ -2090,6 +2090,10 @@ import Layout from '../layouts/Layout.astro';
     let gas = 1, burnerOn = false, inhaledAt = 0, gallons = 11;
     let reach = 0, reachCloud: GasCloud | null = null; // the string of lights stretching into a nebula
     const GAS_BURN = 1/190, GAS_IDLE = 1/1200, GAS_LOW = .15, GAS_DRAW = .16, GAS_REGEN = 1/90;
+    // between galaxies there's nothing to drift on: out past the barrios the pilot flame burns five times faster and
+    // the burner twice, and crossing into another galaxy takes two gallons of the eleven
+    const VOID_IDLE = 5, VOID_BURN = 2, CROSS_COST = 2/11;
+    const inVoid = (p: THREE.Vector3) => Math.hypot(p.x, p.z) > galaxyR + 30;
     const GAS_COLORS = ['#c77dff', '#6ef9f5', '#ff6eb4', '#38bdf8', '#b8f75b', '#ffd166'];
     interface GasCloud { pos: THREE.Vector3; r: number; color: THREE.Color; reserve: number; group?: THREE.Group; mats?: THREE.Material[]; }
     let gasClouds: GasCloud[] = [];
@@ -2233,7 +2237,8 @@ import Layout from '../layouts/Layout.astro';
       const free = !p.selecting && !p.home && !moored; // while choosing a piece the stick belongs to the selection
       const sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
       // the tank: the burner and the pilot flame spend it; low, the flame coughs
-      if(free) gas = Math.max(0, gas - dt*(GAS_IDLE + (held ? GAS_BURN : 0)));
+      const voidK = inVoid(p.pos);
+      if(free) gas = Math.max(0, gas - dt*(GAS_IDLE*(voidK ? VOID_IDLE : 1) + (held ? GAS_BURN*(voidK ? VOID_BURN : 1) : 0)));
       const cough = gas < GAS_LOW && Math.sin(now*.023) + Math.sin(now*.0071)*1.3 < -.35;
       const burning = held && gas > 0 && !cough;
       burnerOn = burning;
@@ -2262,8 +2267,8 @@ import Layout from '../layouts/Layout.astro';
         if(p.nearGalaxy >= 0){
           const w = worlds[p.nearGalaxy], c = w.mesh.position, heart = w.size*.42, d = p.pos.distanceTo(c);
           if(d < heart){
-            if(w.link.galaxy!.open) enterGalaxy(w, true);
-            else { p.pos.copy(c).add(p.pos.clone().sub(c).normalize().multiplyScalar(heart)); p.speed = Math.min(p.speed, 0); }
+            if(w.link.galaxy!.open && gas >= CROSS_COST) enterGalaxy(w, true);
+            else { p.pos.copy(c).add(p.pos.clone().sub(c).normalize().multiplyScalar(heart)); p.speed = Math.min(p.speed, 0); } // closed, or not enough gas
           }
         }
         // a nebula: the balloon slows down and drinks
@@ -2333,11 +2338,12 @@ import Layout from '../layouts/Layout.astro';
         const d = new Date();
         $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
         const mw = moored ? worlds[p.dock].link : p.nearGalaxy >= 0 ? worlds[p.nearGalaxy].link : null, kb = document.body.classList.contains('kb');
-        $('gas-msg').textContent = mw?.galaxy ? `${mw.label}'s galaxy · ${mw.galaxy.open ? 'fly into its heart to cross over' : 'closed: knock at its door with the mouse'}`
+        $('gas-msg').textContent = mw?.galaxy ? `${mw.label}'s galaxy · ${!mw.galaxy.open ? 'closed: knock at its door with the mouse' : gas < CROSS_COST ? 'you need 2 gallons to cross' : 'fly into its heart to cross over'}`
           : moored ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
-          : gas < GAS_LOW ? 'low gas · nebulae lie in the past' : '';
+          : gas < GAS_LOW ? 'low gas · nebulae lie in the past'
+          : inVoid(p.pos) ? 'between galaxies · gas burns fast out here' : '';
       }
       return Math.min(.12, wind.length()/80) + (burning ? .12 : 0) + Math.abs(p.speed)/TOP*.1; // wind, burner and speed, in sound and lens
     }
@@ -3237,7 +3243,7 @@ import Layout from '../layouts/Layout.astro';
         if(w.link.galaxy && !reduced && w.mat.map){ w.mat.map.center.set(.5, .5); w.mat.map.rotation += dt*.02; } // a galaxy turns, slowly
       });
       if(pilot && focused < 0 && pilot.dock >= 0) open = pilot.dock;
-      else if(pilot && focused < 0 && pilot.nearGalaxy >= 0) open = pilot.nearGalaxy;
+      else if(pilot && focused < 0 && pilot.nearGalaxy >= 0 && !worlds[pilot.nearGalaxy].link.galaxy?.open) open = pilot.nearGalaxy; // open ones: just fly in
       if(worldAt >= 0 && !flight) open = worldAt;
       const show = open >= 0 && !boarded;
       if(show) fillWorldInfo(open);
@@ -3255,7 +3261,7 @@ import Layout from '../layouts/Layout.astro';
       pilot.pos.copy(gate).addScaledVector(inward, worlds[k].size*1.9);
       pilot.heading = Math.atan2(inward.x, inward.z);
       pilot.speed = TOP*.6;
-      gas = Math.max(.2, Math.min(1, a.gas));
+      gas = Math.max(0, Math.min(1, a.gas)); // what's left after crossing
       balloon.group.position.copy(pilot.pos);
       camera.position.copy(pilot.pos).addScaledVector(inward, -22).add(new THREE.Vector3(0, 6, 0));
       look.copy(pilot.pos).addScaledVector(inward, 12);
@@ -3273,7 +3279,7 @@ import Layout from '../layouts/Layout.astro';
       if(!w.link.galaxy?.open || crossing) return;
       crossing = true;
       // arriving still in the balloon, at the edge you came in from, with the gas you had
-      if(flying || pilot){ try { sessionStorage.setItem('cv-arrive', JSON.stringify({ from: GAL, gas, t: Date.now() })); } catch {} }
+      if(flying || pilot){ try { sessionStorage.setItem('cv-arrive', JSON.stringify({ from: GAL, gas: gas - CROSS_COST, t: Date.now() })); } catch {} }
       $('warp').classList.add('on');
       if(audioCtx) burnerBreath(1.2, .5);
       setTimeout(() => { location.href = w.link.url; }, 900);
