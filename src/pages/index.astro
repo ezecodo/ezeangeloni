@@ -768,7 +768,7 @@ import Layout from '../layouts/Layout.astro';
       const ks: number[] = [];
       for(let k = 0; k < months.length-1; k++) if(months[k].slice(0,4) !== months[k+1].slice(0,4)) ks.push(k + .5);
       ks.push(months.length - 1 + .7);
-      for(let extra = 1; ks.length < 3; extra++) ks.push(months.length*extra/4); // few years yet: a couple more along the way
+      for(let extra = 1; ks.length < 3; extra++) ks.push(Math.max(months.length, 4)*extra/4); // few years yet: a couple more along the way
       gasSpots = ks.map((k, j) => {
         const g = along(k, j === ks.length-1 ? 24 : 16);
         for(let t = 0; t < 30 && out.some(o => o.distanceTo(g) < 22); t++){ g.multiplyScalar(1.05); g.y += j % 2 ? 1.6 : -1.6; } // clear of the pieces
@@ -826,6 +826,7 @@ import Layout from '../layouts/Layout.astro';
     }
     // The chronology is one continuous curve; pulses run along it from the present into the past.
     function buildThread(){
+      if(pieces.length < 3) return; // a new galaxy, nothing to thread yet
       const pts = pieces.map(p => p.mesh.position.clone());
       const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
       const N = pts.length*14;
@@ -852,6 +853,7 @@ import Layout from '../layouts/Layout.astro';
       scene.add(thread);
     }
     function buildDust(){
+      if(pieces.length < 2) return; // a new, empty galaxy: no dust yet
       const rng = makeRng(23), N = 5200, pos = new Float32Array(N*3), col = new Float32Array(N*3);
       for(let i = 0; i < N; i++){
         const q = pieces[1 + Math.floor(rng()*(pieces.length-1))];
