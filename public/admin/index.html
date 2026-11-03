@@ -234,6 +234,11 @@
   .link-actions .grow { flex:1; }
   @media (max-width: 640px) { .link-fields { grid-template-columns:1fr; } .tabs { overflow-x:auto; } .tabs button { flex:1 0 auto; padding:.6rem .5rem; letter-spacing:.12em; } }
 
+  .door-h { font-size:.6rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); font-weight:400; border-bottom:1px solid var(--line); padding-bottom:.4rem; margin-top:1.4rem; }
+  .door-row { display:flex; gap:.6rem; align-items:center; padding:.75rem 0; border-bottom:1px solid var(--line); }
+  .door-row .who { flex:1; font-family:'Cormorant Garamond', serif; font-style:italic; font-size:1.2rem; }
+  .door-row .who small { display:block; font-family:'DM Mono', monospace; font-style:normal; font-size:.55rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+
   /* words: write a frase, like the bot */
   #wordText { font-family:'Cormorant Garamond', serif; font-style:italic; font-weight:300; font-size:1.5rem; line-height:1.35; min-height:150px; padding:1rem; }
   .words-meta { display:flex; gap:.7rem; align-items:end; }
@@ -272,6 +277,7 @@
       <button data-tab="photos">photos</button>
       <button data-tab="words">words</button>
       <button data-tab="links">links</button>
+      <button data-tab="door" data-guest hidden>door</button>
       <button data-tab="messages" data-guest hidden>messages</button>
       <button data-tab="galaxies" data-owner>galaxies</button>
     </nav>
@@ -381,6 +387,15 @@
       <p id="galStatus" class="status"></p>
     </section>
 
+    <section class="tab" id="tab-door">
+      <p class="hint">your galaxy is private: people knock, you decide who comes in</p>
+      <h3 class="door-h">knocking</h3>
+      <div id="knockList"></div>
+      <h3 class="door-h">let in</h3>
+      <div id="guestList"></div>
+      <p id="doorStatus" class="status"></p>
+    </section>
+
     <section class="tab" id="tab-messages">
       <p class="hint">words people left with the balloon in your galaxy</p>
       <ul id="msgList" class="recent" style="margin-top:.6rem"></ul>
@@ -471,7 +486,7 @@
   function setRole(who) {
     me = who;
     BASE = me.owner ? '' : `/galaxies/${me.dir}`;
-    siteLink = me.owner ? '/' : `/?g=${me.slug}${me.public ? '' : '&v=' + encodeURIComponent(me.token)}`;
+    siteLink = me.owner ? '/' : `/?g=${me.slug}`;
     document.querySelector('h1').textContent = `${me.owner ? 'eze' : me.name.toLowerCase()} · admin`;
     document.title = document.querySelector('h1').textContent;
     document.querySelectorAll('[data-owner]').forEach(b => { b.hidden = !me.owner; });
@@ -479,7 +494,7 @@
     const active = document.querySelector('.tabs button.active');
     if (!active || active.hidden) document.querySelector('.tabs button[data-tab=photos]').click();
   }
-  function enter(who) { setRole(who); setView('app'); if (who.owner) loadList(); }
+  function enter(who) { setRole(who); setView('app'); if (who.owner) loadList(); else loadDoor(); }
 
   // ===== KNOB =====
   function makeKnob(el, onChange) {
@@ -2246,12 +2261,12 @@
   document.querySelector('.tabs button[data-tab=links]').addEventListener('click', loadLinks);
 
   // ===== GALAXIES (Eze) =====
-  // Create someone's galaxy: its password shows once, to pass on. Private ones are reached through their visa link.
-  const visaLink = (g) => `${location.origin}/?g=${g.slug}${g.public ? '' : '&v=' + encodeURIComponent(g.token)}`;
+  // Create someone's galaxy: its password shows once, to pass on. Into a private one, people knock and its owner lets them in.
+  const galaxyLink = (g) => `${location.origin}/?g=${g.slug}`;
   function showSecret(g, what) {
     const el = $('galSecret');
     el.style.display = 'block';
-    el.innerHTML = `<small>${what} · shown only now, pass it on</small>${escapeHtml(g.name)}'s admin password: <b>${escapeHtml(g.password)}</b><br>admin: ${escapeHtml(location.origin)}/admin/<br>galaxy: ${escapeHtml(visaLink(g))}`;
+    el.innerHTML = `<small>${what} · shown only now, pass it on</small>${escapeHtml(g.name)}'s admin password: <b>${escapeHtml(g.password)}</b><br>admin: ${escapeHtml(location.origin)}/admin/<br>galaxy: ${escapeHtml(galaxyLink(g))}`;
   }
   async function loadGalaxies() {
     try {
@@ -2265,16 +2280,16 @@
     const row = document.createElement('div');
     row.className = 'link-row';
     row.innerHTML = `<div class="set-row-head"><div class="set-info"><h3>${escapeHtml(g.name)}'s galaxy</h3>
-      <div class="meta">${g.public ? 'public · anyone flying by can enter' : 'private · only with its visa link'} · since ${escapeHtml(g.created)}</div></div></div>
+      <div class="meta">${g.public ? 'public · anyone flying by can enter' : `private · ${escapeHtml(g.name)} lets people in from their admin`} · since ${escapeHtml(g.created)}</div></div></div>
       <div class="link-actions">
-        <button class="ghost" type="button" data-a="copy">copy ${g.public ? 'link' : 'visa link'}</button>
+        <button class="ghost" type="button" data-a="copy">copy link</button>
         <button class="ghost" type="button" data-a="pub">${g.public ? 'make private' : 'make public'}</button>
         <button class="ghost" type="button" data-a="pass">new password</button>
         <span class="grow"></span>
         <button class="ghost danger" type="button" data-a="del">remove</button>
       </div>`;
     const act = (a) => row.querySelector(`[data-a=${a}]`);
-    act('copy').addEventListener('click', async () => { await navigator.clipboard.writeText(visaLink(g)).catch(() => {}); $('galStatus').textContent = `copied: ${visaLink(g)}`; });
+    act('copy').addEventListener('click', async () => { await navigator.clipboard.writeText(galaxyLink(g)).catch(() => {}); $('galStatus').textContent = `copied: ${galaxyLink(g)}`; });
     act('pub').addEventListener('click', async () => {
       const r = await api(`/api/frases/galaxies/${g.slug}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ public: !g.public }) });
       $('galStatus').textContent = r.ok ? '' : 'could not change it'; loadGalaxies();
@@ -2305,6 +2320,42 @@
     } catch (e) { $('galStatus').className = 'status error'; $('galStatus').textContent = e.message; }
   });
   document.querySelector('.tabs button[data-tab=galaxies]').addEventListener('click', loadGalaxies);
+
+  // ===== DOOR (someone's galaxy) =====
+  // Who's knocking and who's been let in. Turning someone away gives the galaxy a new address: everyone still
+  // welcome is told it at the door, the one turned away isn't.
+  async function loadDoor() {
+    try {
+      const { requests, guests } = await api('/api/frases/requests').then(r => r.json());
+      const row = (x, buttons) => { const el = document.createElement('div'); el.className = 'door-row';
+        el.innerHTML = `<div class="who">${escapeHtml(x.name)}<small>${x.galaxy ? 'with their galaxy · on every device' : 'on one device'} · ${escapeHtml(x.at.slice(0, 10))}</small></div>${buttons}`; return el; };
+      $('knockList').replaceChildren(...requests.map(r => {
+        const el = row(r, '<button class="ghost" type="button" data-a="in">let in</button><button class="ghost danger" type="button" data-a="no">not now</button>');
+        el.querySelector('[data-a=in]').addEventListener('click', () => decide(r.id, 'approve'));
+        el.querySelector('[data-a=no]').addEventListener('click', () => decide(r.id, 'decline'));
+        return el;
+      }));
+      if (!requests.length) $('knockList').innerHTML = '<p class="empty">nobody knocking</p>';
+      $('guestList').replaceChildren(...guests.map(g => {
+        const el = row(g, '<button class="ghost danger" type="button" data-a="out">turn away</button>');
+        el.querySelector('[data-a=out]').addEventListener('click', async () => {
+          if (!confirm(`Turn ${g.name} away? Your galaxy gets a new address; everyone else you let in keeps coming in.`)) return;
+          const r = await api(`/api/frases/guests/${g.id}`, { method: 'DELETE' });
+          $('doorStatus').textContent = r.ok ? `${g.name} can't come in any more` : 'could not do it'; loadDoor();
+        });
+        return el;
+      }));
+      if (!guests.length) $('guestList').innerHTML = '<p class="empty">nobody yet</p>';
+      const t = document.querySelector('.tabs button[data-tab=door]');
+      t.textContent = requests.length ? `door · ${requests.length}` : 'door';
+    } catch { $('doorStatus').textContent = 'connection error'; }
+  }
+  async function decide(id, action) {
+    const r = await api(`/api/frases/requests/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+    $('doorStatus').textContent = r.ok ? (action === 'approve' ? 'let in: their nebula opens for them now' : '') : 'could not do it';
+    loadDoor();
+  }
+  document.querySelector('.tabs button[data-tab=door]').addEventListener('click', loadDoor);
 
   // ===== MESSAGES (someone's galaxy) =====
   async function loadMessages() {

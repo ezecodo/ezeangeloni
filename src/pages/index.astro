@@ -74,17 +74,17 @@ import Layout from '../layouts/Layout.astro';
       #world-visit { display: inline-block; font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; text-decoration: none; padding: .6rem .9rem; border: 1px solid rgba(110,249,245,.45); background: rgba(8,8,16,.55); }
       #world-visit:hover { background: rgba(110,249,245,.12); }
       #world-visit[hidden] { display: none; }
-      /* a visa, given at the gate of a private galaxy */
-      .visa { display: flex; flex-direction: column; gap: .45rem; margin-top: .2rem; }
-      .visa[hidden] { display: none; }
-      .visa label { font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
-      .visa span { display: flex; gap: .4rem; }
-      .visa input { flex: 1; min-width: 0; background: rgba(8,8,16,.6); border: 1px solid rgba(240,237,232,.25); color: var(--text); font: inherit; font-size: .72rem; padding: .55rem .6rem; outline: none; }
-      .visa input:focus { border-color: rgba(110,249,245,.6); }
-      .visa button { font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; border: 1px solid rgba(110,249,245,.45); padding: .5rem .8rem; }
-      .visa-msg { font-size: .62rem; letter-spacing: .1em; color: var(--muted); min-height: 1em; }
-      .visa-msg.bad { color: #ff3f3f; }
-      #locked .visa { width: min(420px, 90vw); text-align: left; }
+      /* knocking at a private galaxy's door */
+      .knock { display: flex; flex-direction: column; gap: .45rem; margin-top: .2rem; }
+      .knock[hidden], .knock [hidden] { display: none; }
+      .knock label { font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+      .knock span { display: flex; gap: .4rem; }
+      .knock input { flex: 1; min-width: 0; background: rgba(8,8,16,.6); border: 1px solid rgba(240,237,232,.25); color: var(--text); font: inherit; font-size: .72rem; padding: .55rem .6rem; outline: none; }
+      .knock input:focus { border-color: rgba(110,249,245,.6); }
+      .knock button { font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; border: 1px solid rgba(110,249,245,.45); padding: .5rem .8rem; white-space: nowrap; }
+      .knock-msg { font-family: var(--serif); font-size: 1.05rem; color: var(--text); min-height: 1em; }
+      .knock-msg.bad { color: #ff3f3f; font-family: inherit; font-size: .62rem; letter-spacing: .1em; }
+      #locked .knock { width: min(420px, 90vw); text-align: left; }
       @media (max-width: 640px) {
         #world-info { right: 1rem; left: 1rem; width: auto; top: auto; bottom: 4.4rem; transform: translateY(12px); }
         #world-info.show { transform: none; }
@@ -243,11 +243,11 @@ import Layout from '../layouts/Layout.astro';
   <div id="locked" hidden>
     <p class="kicker">a private galaxy</p>
     <h2 id="locked-title"></h2>
-    <p>It can only be entered with a visa: a link from the person whose galaxy this is.</p>
-    <form class="visa" id="locked-visa">
-      <label for="locked-input">have a visa? paste it here</label>
-      <span><input id="locked-input" autocomplete="off" spellcheck="false" placeholder="the link or the code"><button type="submit">open</button></span>
-      <p class="visa-msg" id="locked-msg"></p>
+    <p id="locked-text"></p>
+    <form class="knock" id="locked-knock" hidden>
+      <label for="locked-knock-name">ask to be let in</label>
+      <span><input id="locked-knock-name" autocomplete="name" maxlength="40" placeholder="your name"><button type="submit">knock</button></span>
+      <p class="knock-msg" id="locked-knock-msg"></p>
     </form>
     <a href="/">← back to Eze's galaxy</a>
   </div>
@@ -258,10 +258,10 @@ import Layout from '../layouts/Layout.astro';
     <p id="world-desc"></p>
     <p id="world-tags"></p>
     <a id="world-visit" target="_blank" rel="noopener"></a>
-    <form class="visa" id="visa-form" hidden>
-      <label for="visa-input">have a visa? paste it here</label>
-      <span><input id="visa-input" autocomplete="off" spellcheck="false" placeholder="the link or the code"><button type="submit">open</button></span>
-      <p class="visa-msg" id="visa-msg"></p>
+<form class="knock" id="knock" hidden>
+      <label for="knock-name">ask to be let in</label>
+      <span><input id="knock-name" autocomplete="name" maxlength="40" placeholder="your name"><button type="submit">knock</button></span>
+      <p class="knock-msg" id="knock-msg"></p>
     </form>
   </aside>
 
@@ -473,14 +473,24 @@ import Layout from '../layouts/Layout.astro';
 
     // ── Which galaxy ──────────────────────────────────────
     // ezeangeloni.xyz is Eze's galaxy. Others (family, invite-only, created from his admin) open with ?g=<slug>
-    // (or /g/<slug> where nginx sends it here); a private one also needs its visa, ?v=<token>, remembered on this
-    // device once used. Their data lives in /galaxies/<slug>-<token>/, same files as Eze's at the root.
+    // (or /g/<slug> where nginx sends it here). Their data lives in /galaxies/<slug>-<token>/, same files as Eze's
+    // at the root. A private one's folder is only told at its door (/api/frases/doors): to this device once its
+    // owner let it in, or to anyone logged into the admin as the owner of a galaxy that was let in.
     interface GalaxyEntry { slug: string; name: string; public: boolean; dir?: string; }
+    interface Door { status: 'open' | 'pending' | 'declined' | 'closed'; dir?: string; }
     const qs = new URLSearchParams(location.search);
     const GAL = (location.pathname.match(/^\/g\/([a-z0-9-]+)/)?.[1] || qs.get('g') || '').toLowerCase();
-    const visaOf = (slug: string) => { try { return localStorage.getItem('visa:' + slug) || ''; } catch { return ''; } };
-    if(GAL && qs.get('v')){ try { localStorage.setItem('visa:' + GAL, qs.get('v')!); } catch {} }
+    const store = { get: (k: string) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } }, set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} } };
+    const DEVICE = store.get('cv-device') || (() => { const d = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join(''); store.set('cv-device', d); return d; })();
+    const ownerPass = store.get('eze-upload-pass'); // logged into an admin here: this device belongs to a galaxy's owner
+    const doorHeaders = (): Record<string, string> => ({ 'Content-Type': 'application/json', ...(ownerPass ? { 'X-Auth': ownerPass } : {}) });
+    let doors: Record<string, Door> = {};
     let BASE = '', galaxyName = 'Eze', locked = false;
+    async function askDoors(slugs: string[]){
+      if(!slugs.length) return;
+      const d = await fetch('/api/frases/doors', { method: 'POST', headers: doorHeaders(), body: JSON.stringify({ device: DEVICE, galaxies: slugs }) }).then(r => r.ok ? r.json() : null).catch(() => null);
+      if(d?.doors) doors = { ...doors, ...d.doors };
+    }
     let registry: GalaxyEntry[] = [];
     type Frase = {texto?: string, imagen?: string, caption?: string, fecha?: string, subida?: string};
     function hash36(s: string){
@@ -2313,7 +2323,7 @@ import Layout from '../layouts/Layout.astro';
         const d = new Date();
         $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
         const mw = moored ? worlds[p.dock].link : null, kb = document.body.classList.contains('kb');
-        $('gas-msg').textContent = mw?.galaxy ? `${mw.label}'s galaxy · ${mw.galaxy.open ? `${kb ? 'E' : '● right'} to enter · ` : 'private, needs a visa · '}${kb ? 'W S A D' : 'the stick'} to sail on`
+        $('gas-msg').textContent = mw?.galaxy ? `${mw.label}'s galaxy · ${mw.galaxy.open ? `${kb ? 'E' : '● right'} to enter · ` : 'closed, knock with the mouse · '}${kb ? 'W S A D' : 'the stick'} to sail on`
           : moored ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
@@ -2446,7 +2456,7 @@ import Layout from '../layouts/Layout.astro';
       if(boarded || anyOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
       if(pilot && KB_PILOT.includes(e.key.toLowerCase())) return; // flying: the balloon handles these
       const tag = (e.target as HTMLElement).tagName;
-      if(tag === 'INPUT' || tag === 'TEXTAREA') return; // typing a visa, not steering
+      if(tag === 'INPUT' || tag === 'TEXTAREA') return; // typing, not steering
       if(e.key === ' ' && tag === 'BUTTON') return;
       switch(e.key){
         case 'ArrowDown': case 'ArrowRight': case 'PageDown': case ' ': case 'j': touched(); stepFocus(1); e.preventDefault(); break;
@@ -2857,7 +2867,7 @@ import Layout from '../layouts/Layout.astro';
       try {
         // Eze's words go to his Telegram through n8n; in someone else's galaxy they're kept for them, in their admin
         const res = GAL
-          ? await fetch('/api/frases/words', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ galaxy: GAL, token: visaOf(GAL), text: msgInput.value.trim() }) })
+          ? await fetch('/api/frases/words', { method: 'POST', headers: doorHeaders(), body: JSON.stringify({ galaxy: GAL, device: DEVICE, text: msgInput.value.trim() }) })
           : await fetch('https://n8n.ezeangeloni.xyz/webhook/mensaje', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -2900,14 +2910,17 @@ import Layout from '../layouts/Layout.astro';
     const galaxyReady = fetch('/galaxies.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null).then(d => {
       registry = Array.isArray(d?.galaxies) ? d.galaxies : [];
       if(!GAL) return;
-      const g = registry.find(x => x.slug === GAL), visa = visaOf(GAL);
+      const g = registry.find(x => x.slug === GAL);
       if(!g){ locked = true; return; }
       galaxyName = g.name;
       document.title = `${g.name} — Cronovisor`;
-      if(g.public && g.dir) BASE = `/galaxies/${g.dir}`;
-      else if(visa) BASE = `/galaxies/${GAL}-${visa}`;
-      else locked = true;
-    });
+      if(g.public && g.dir){ BASE = `/galaxies/${g.dir}`; return; }
+      return askDoors([GAL]).then(() => {
+        const door = doors[GAL];
+        if(door?.status === 'open' && door.dir) BASE = `/galaxies/${door.dir}`;
+        else locked = true;
+      });
+    }).then(() => askDoors(registry.filter(g => !g.public && g.slug !== GAL).map(g => g.slug)));
     Promise.all([
       galaxyReady.then(() => locked ? { frases: [] } : fetch(BASE + '/frases.json', { cache: GAL ? 'no-store' : 'default' })
         .then(r => { if(!r.ok) throw new Error(); return r.json(); }).catch(() => { if(GAL) locked = true; return { frases: [] }; })),
@@ -3037,11 +3050,11 @@ import Layout from '../layouts/Layout.astro';
       return new THREE.CanvasTexture(cv);
     }
     // The neighbouring galaxies, seen from this one: everyone else's (and Eze's, from theirs). A public one is a
-    // spiral of light you can fly into; a private one a blurred nebula, open only with its visa on this device.
+    // spiral of light you can fly into; a private one a blurred nebula until its owner lets you in.
     function neighbours(): SiteLink[] {
       const out: SiteLink[] = registry.filter(g => g.slug !== GAL).map(g => {
-        const visa = visaOf(g.slug), open = g.public || !!visa;
-        return { label: g.name, url: `/?g=${g.slug}${!g.public && visa ? `&v=${encodeURIComponent(visa)}` : ''}`, galaxy: { slug: g.slug, public: g.public, open } };
+        const open = g.public || doors[g.slug]?.status === 'open';
+        return { label: g.name, url: `/?g=${g.slug}`, galaxy: { slug: g.slug, public: g.public, open } };
       });
       if(GAL) out.unshift({ label: 'Eze', url: '/', galaxy: { slug: '', public: true, open: true, home: true } });
       return out;
@@ -3153,17 +3166,17 @@ import Layout from '../layouts/Layout.astro';
         $('world-title').textContent = `${l.label}'s galaxy`;
         $('world-desc').textContent = g.home ? 'The first universe of this sky, Eze’s past turned into space. Fly back in.'
           : g.open ? `Someone else’s past, under the same sky: ${l.label}’s photos and words, each in the barrio of its month. Fly in.`
-          : `Its light reaches you blurred. Its doors open with a visa from ${l.label}.`;
+          : `Its light reaches you blurred. Knock, and ${l.label} can let you in.`;
         $('world-tags').replaceChildren();
         visitEl.hidden = !g.open;
-        visaForm.hidden = g.open;
-        visaForm.dataset.slug = g.slug;
-        $('visa-msg').textContent = ''; $('visa-msg').className = 'visa-msg';
+        knockForm.hidden = g.open;
+        knockForm.dataset.slug = g.slug;
+        if(!g.open) paintKnock(knockForm, g.slug, l.label);
         visitEl.href = l.url; visitEl.target = '_self';
         visitEl.textContent = g.home ? 'back to Eze’s galaxy' : `enter ${l.label}’s galaxy`;
         return;
       }
-      visitEl.hidden = false; visitEl.target = '_blank'; visaForm.hidden = true;
+      visitEl.hidden = false; visitEl.target = '_blank'; knockForm.hidden = true;
       $('world-kicker').textContent = `elsewhere · ${host(l.url)}`;
       $('world-title').textContent = l.label || host(l.url);
       $('world-desc').textContent = l.description || '';
@@ -3224,32 +3237,38 @@ import Layout from '../layouts/Layout.astro';
       const w = worlds.find(x => x.link.url === visitEl.getAttribute('href') && x.link.galaxy);
       if(w){ e.preventDefault(); enterGalaxy(w); }
     });
-    // A visa is the link someone shares (…?g=lucho&v=TOKEN) or just its code. It's checked by asking for that
-    // galaxy's data where the token says it is; if it's there, the doors open and this device remembers it.
-    const visaForm = $('visa-form') as HTMLFormElement;
-    function visaFrom(text: string){
-      const t = text.trim();
-      try { const v = new URL(t, location.origin).searchParams.get('v'); if(v) return v; } catch {}
-      return /^[\w-]{6,}$/.test(t) ? t : '';
+    // Knocking: the visitor says who they are (or is already known, logged in as a galaxy's owner on this device)
+    // and waits; the owner lets them in from their admin. While a knock is pending the doors are asked again every
+    // little while, so the nebula opens by itself, with a chime, the moment they say yes.
+    const knockForm = $('knock') as HTMLFormElement, lockedKnock = $('locked-knock') as HTMLFormElement;
+    let whoAmI = '';
+    if(ownerPass) fetch('/api/frases/whoami', { headers: { 'X-Auth': ownerPass } }).then(r => r.ok ? r.json() : null).then(w => { whoAmI = w ? (w.owner ? 'Eze' : w.name) : ''; }).catch(() => {});
+    function paintKnock(form: HTMLFormElement, slug: string, owner: string){
+      const door = doors[slug]?.status || 'closed', input = form.querySelector('input')!, msg = form.querySelector('.knock-msg')!;
+      const known = whoAmI || store.get('cv-name');
+      if(!input.value && known) input.value = known;
+      msg.className = 'knock-msg';
+      const waiting = door === 'pending';
+      form.querySelector('span')!.hidden = waiting;
+      form.querySelector('label')!.hidden = waiting;
+      msg.textContent = waiting ? `You knocked. Waiting for ${owner} to open.` : door === 'declined' ? `${owner} didn’t open this time.` : '';
     }
-    async function tryVisa(slug: string, text: string, msg: HTMLElement){
-      const v = visaFrom(text);
-      msg.className = 'visa-msg';
-      if(!v){ msg.textContent = 'that doesn’t look like a visa'; msg.classList.add('bad'); return false; }
-      msg.textContent = 'checking…';
-      const ok = await fetch(`/galaxies/${slug}-${encodeURIComponent(v)}/frases.json`, { cache: 'no-store' }).then(r => r.ok).catch(() => false);
-      if(!ok){ msg.textContent = 'this visa doesn’t open this galaxy'; msg.classList.add('bad'); return false; }
-      try { localStorage.setItem('visa:' + slug, v); } catch {}
-      msg.textContent = 'the doors are open';
+    async function knockAt(form: HTMLFormElement, slug: string, owner: string){
+      const input = form.querySelector('input')!, msg = form.querySelector('.knock-msg')!;
+      const name = input.value.trim();
+      if(!name && !whoAmI){ msg.className = 'knock-msg bad'; msg.textContent = 'your name, please'; input.focus(); return; }
+      store.set('cv-name', name);
+      const r = await fetch('/api/frases/knock', { method: 'POST', headers: doorHeaders(), body: JSON.stringify({ galaxy: slug, name, device: DEVICE }) }).then(r => r.json().then(j => ({ ok: r.ok, j }))).catch(() => null);
+      if(!r?.ok){ msg.className = 'knock-msg bad'; msg.textContent = r?.j?.error || 'connection error'; return; }
+      doors[slug] = r.j;
+      playNote(NOTES[1]); setTimeout(() => playNote(NOTES[1]), 260); // knock, knock
+      if(r.j.status === 'open') return opened(slug);
+      paintKnock(form, slug, owner);
+    }
+    // the moment a door opens: the nebula turns into its spiral right where it was, or the closed screen gives way
+    function opened(slug: string){
       [0, 2, 4].forEach((n, i) => setTimeout(() => playNote(NOTES[n]*2), i*120));
-      return true;
-    }
-    visaForm.addEventListener('submit', async e => {
-      e.preventDefault();
-      const slug = visaForm.dataset.slug || '';
-      if(!await tryVisa(slug, ($('visa-input') as HTMLInputElement).value, $('visa-msg'))) return;
-      ($('visa-input') as HTMLInputElement).value = '';
-      // the nebula becomes a spiral, right where it was; the panel now offers the way in
+      if(slug === GAL){ setTimeout(() => location.reload(), 700); return; }
       const at = worlds.findIndex(w => w.link.galaxy?.slug === slug), keepAt = worldAt === at, dock = pilot?.dock;
       worldAt = -1; // rebuilt in place: no flying back to the overview
       buildWorlds();
@@ -3257,13 +3276,24 @@ import Layout from '../layouts/Layout.astro';
       if(keepAt && k >= 0){ worldAt = k; btnBack.hidden = false; showWorldMeta(k); }
       if(pilot && dock === at) pilot.dock = k;
       worldShown = -1;
-    });
-    $('locked-visa').addEventListener('submit', async e => {
-      e.preventDefault();
-      if(await tryVisa(GAL, ($('locked-input') as HTMLInputElement).value, $('locked-msg'))) setTimeout(() => location.reload(), 500);
-    });
+    }
+    knockForm.addEventListener('submit', e => { e.preventDefault(); const slug = knockForm.dataset.slug || ''; knockAt(knockForm, slug, registry.find(g => g.slug === slug)?.name || ''); });
+    lockedKnock.addEventListener('submit', e => { e.preventDefault(); knockAt(lockedKnock, GAL, galaxyName); });
+    setInterval(async () => {
+      const waiting = Object.keys(doors).filter(k => doors[k].status === 'pending');
+      if(!waiting.length || document.hidden) return;
+      await askDoors(waiting);
+      waiting.filter(k => doors[k].status !== 'pending').forEach(k => {
+        if(doors[k].status === 'open') opened(k);
+        else { if(k === GAL) paintKnock(lockedKnock, GAL, galaxyName); else if(knockForm.dataset.slug === k) worldShown = -1; }
+      });
+    }, 12000);
     function showLocked(){
-      $('locked-title').textContent = registry.find(g => g.slug === GAL) ? `${galaxyName}'s galaxy` : 'No galaxy here';
+      const known = !!registry.find(g => g.slug === GAL);
+      $('locked-title').textContent = known ? `${galaxyName}'s galaxy` : 'No galaxy here';
+      $('locked-text').textContent = known ? `Its doors are closed. Knock, and ${galaxyName} can let you in.` : 'Nothing has been born at this address.';
+      lockedKnock.hidden = !known;
+      if(known) setTimeout(() => paintKnock(lockedKnock, GAL, galaxyName), 300); // once we know who's here
       $('locked').hidden = false;
     }
     galaxyReady.then(() => {

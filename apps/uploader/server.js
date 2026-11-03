@@ -588,14 +588,14 @@ async function checkWho(req, res, next) {
   if (pass && pass === UPLOAD_PASSWORD) { req.who = { owner: true, root: undefined }; return next(); }
   const g = await galaxies.byPassword(pass).catch(() => null);
   if (!g) { recordFailure(ip); return res.status(401).json({ error: 'unauthorized' }); }
-  req.who = { owner: false, slug: g.slug, name: g.name, dir: g.dir, root: g.root, public: g.public, token: g.token };
+  req.who = { owner: false, slug: g.slug, name: g.name, dir: g.dir, root: g.root, public: g.public };
   next();
 }
 const rootFor = (req) => req.who.root; // undefined = Eze's, the functions' default
 
 app.get('/api/frases/whoami', checkWho, (req, res) => {
   const w = req.who;
-  res.json(w.owner ? { owner: true } : { owner: false, slug: w.slug, name: w.name, dir: w.dir, public: w.public, token: w.token });
+  res.json(w.owner ? { owner: true } : { owner: false, slug: w.slug, name: w.name, dir: w.dir, public: w.public });
 });
 
 const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 1 } });
@@ -651,15 +651,44 @@ app.patch('/api/frases/galaxies/:slug', express.json(), checkAuth, galaxyRoute(a
 app.post('/api/frases/galaxies/:slug/password', checkAuth, galaxyRoute(async (req) => galaxies.resetPassword(req.params.slug)));
 app.delete('/api/frases/galaxies/:slug', checkAuth, galaxyRoute(async (req) => { await galaxies.remove(req.params.slug); return { ok: true }; }));
 
-// Words left with the balloon in someone else's galaxy (Eze's own still go to his Telegram through n8n).
-// Public, so it has its own gentle rate limit.
-const wordsSent = new Map();
-app.post('/api/frases/words', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {
+// ── the door of a private galaxy ──
+// Public routes. The visiting device sends its own random id; if its owner is logged into an admin on it, the
+// site also sends that password, which says which galaxy (if any) is knocking, so two owners connect both ways.
+const visitor = async (req) => galaxies.ownerOf(req.header('X-Auth'), UPLOAD_PASSWORD);
+const limited = (max) => { const seen = new Map(); return (req) => {
   const ip = req.ip || 'unknown', now = Date.now();
-  const recent = (wordsSent.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
-  if (recent.length >= 6) throw Object.assign(new Error('too many, try later'), { status: 429 });
-  await galaxies.leaveWords(String(req.body?.galaxy || ''), String(req.body?.token || ''), req.body?.text);
-  recent.push(now); wordsSent.set(ip, recent);
+  const recent = (seen.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
+  if (recent.length >= max) throw Object.assign(new Error('too many, try later'), { status: 429 });
+  recent.push(now); seen.set(ip, recent);
+}; };
+const doorLimit = limited(240), knockLimit = limited(8), wordsLimit = limited(6);
+app.post('/api/frases/doors', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {
+  doorLimit(req);
+  const who = await visitor(req);
+  const slugs = Array.isArray(req.body?.galaxies) ? req.body.galaxies.map(String) : [];
+  return { who: who?.slug || null, doors: await galaxies.doors(slugs, String(req.body?.device || ''), who?.slug) };
+}));
+app.post('/api/frases/knock', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {
+  knockLimit(req);
+  const who = await visitor(req);
+  return galaxies.knock(String(req.body?.galaxy || ''), { name: req.body?.name, device: req.body?.device }, who?.slug, who?.name);
+}));
+// the owner's side: who's knocking, who's in
+app.get('/api/frases/requests', checkWho, galaxyRoute(async (req) => (req.who.owner ? { requests: [], guests: [] } : galaxies.requests(req.who.slug))));
+app.post('/api/frases/requests/:id', express.json(), checkWho, galaxyRoute(async (req) => {
+  if (req.who.owner) throw Object.assign(new Error('your galaxy is open to all'), { status: 400 });
+  return galaxies.decide(req.who.slug, req.params.id, req.body?.action === 'decline' ? 'decline' : 'approve');
+}));
+app.delete('/api/frases/guests/:id', checkWho, galaxyRoute(async (req) => {
+  if (req.who.owner) throw Object.assign(new Error('your galaxy is open to all'), { status: 400 });
+  return galaxies.turnAway(req.who.slug, req.params.id);
+}));
+
+// Words left with the balloon in someone else's galaxy (Eze's own still go to his Telegram through n8n).
+app.post('/api/frases/words', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {
+  wordsLimit(req);
+  const who = await visitor(req);
+  await galaxies.leaveWords(String(req.body?.galaxy || ''), String(req.body?.device || ''), who?.slug, req.body?.text);
   return { ok: true };
 }));
 app.get('/api/frases/messages', checkWho, galaxyRoute(async (req) => {
