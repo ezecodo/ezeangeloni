@@ -2296,7 +2296,9 @@ import Layout from '../layouts/Layout.astro';
       const target = sy < 0 ? TOP : sy > 0 ? (p.speed > .5 ? 0 : REVERSE) : 0;
       p.speed += (target - p.speed)*(1-Math.exp(-dt*(p.selecting || moored ? 4 : sy ? 1.1 : .7))); // choosing or moored: it stops so the view holds
       // no air physics: hold the burner and it goes up, let go and gravity takes it down gently; paused, it hangs still
-      const climb = p.selecting || moored || (withHim && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW ? .55 : 1) : SINK;
+      // under the Sun, Xibalbá pulls: let go of the burner there and the balloon goes down six times faster
+      const pull = xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y + 60 ? 6 : 1;
+      const climb = p.selecting || moored || (withHim && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW ? .55 : 1) : SINK*pull;
       p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting || moored ? 6 : 1.8)));
       p.pos.y += p.vy*dt;
       const floor = inXibalba(p.pos) || (xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260) ? xibBottom() : -PILOT_Y; // under the Sun the road goes down to Xibalbá
@@ -2395,6 +2397,7 @@ import Layout from '../layouts/Layout.astro';
         const xibLevel = xib && inXibalba(p.pos) ? Math.max(0, Math.min(8, Math.floor((xib.top - p.pos.y)/LEVEL_H + .5))) : -1;
         $('gas-msg').textContent = withHim ? `${xib!.j.name || 'papá'} · en su viaje · tramo ${xibAt ? xibAt.i + 1 : 9} de 9`
           : xibLevel >= 0 ? `Xibalbá · ${xibLevel + 1} · ${LEVELS[xibLevel]}`
+          : xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 ? `under the Sun · let go of the burner to go down to ${xib.j.name || 'him'}`
           : mw?.galaxy ? `${mw.label}'s galaxy · ${!mw.galaxy.open ? 'closed: knock at its door with the mouse' : gas < CROSS_COST ? 'you need 2 gallons to cross' : 'fly into its heart to cross over'}`
           : moored ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
