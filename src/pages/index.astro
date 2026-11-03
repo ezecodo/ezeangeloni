@@ -2806,6 +2806,7 @@ import Layout from '../layouts/Layout.astro';
         if(st.kind === 'home') return;
         const cell = document.createElement('button');
         cell.className = 'cell';
+        cell.dataset.i = String(i);
         if(st.src){
           const img = document.createElement('img');
           img.loading = 'lazy'; img.alt = st.text; img.src = thumbOf(st.src);
@@ -3080,9 +3081,9 @@ import Layout from '../layouts/Layout.astro';
       });
     }).then(() => askDoors(registry.filter(g => !g.public && g.slug !== GAL).map(g => g.slug)));
     Promise.all([
-      galaxyReady.then(() => locked ? { frases: [] } : fetch(BASE + '/frases.json', { cache: GAL ? 'no-store' : 'default' })
+      galaxyReady.then(() => locked ? { frases: [] } : fetch(BASE + '/frases.json', { cache: 'no-cache' })
         .then(r => { if(!r.ok) throw new Error(); return r.json(); }).catch(() => { if(GAL) locked = true; return { frases: [] }; })),
-      GAL ? Promise.resolve({ sets: [] }) : fetch('/sets.json').then(r => r.json()).catch(() => ({ sets: [] })),
+      GAL ? Promise.resolve({ sets: [] }) : fetch('/sets.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ sets: [] })),
       fontsReady,
     ]).then(([frasesData, setsData]) => {
       if(locked) showLocked();
@@ -3866,7 +3867,8 @@ import Layout from '../layouts/Layout.astro';
       if(!r?.ok){ alert('could not remove it'); return; }
       const p = pieces[focused];
       backOut();
-      if(p){ p.mesh.visible = false; if(p.star) p.star.visible = false; if(p.halo) p.halo.visible = false; } // gone; the map closes over it on the next visit
+      if(p){ p.mesh.visible = false; p.mesh.layers.set(31); if(p.star) p.star.visible = false; if(p.halo) p.halo.visible = false; } // layer 31: not drawn, not hit by a click // gone; the map closes over it on the next visit
+      document.querySelector(`#index-grid .cell[data-i="${p?.i}"]`)?.remove(); // and from the index
     });
     function showLocked(){
       const known = !!registry.find(g => g.slug === GAL);
