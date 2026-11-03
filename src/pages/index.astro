@@ -1816,7 +1816,7 @@ import Layout from '../layouts/Layout.astro';
     // and pieces open up as you approach them. Built for a digital 8-way stick and 4 buttons (Competition Pro).
     const pad = { x:0, y:0, px:0, py:0, held:[false,false,false,false], prev:[false,false,false,false] };
     interface Homing { t0: number; from: THREE.Vector3; ctrl: THREE.Vector3; to: THREE.Vector3; dur: number; landed: number; }
-    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null } | null = null;
+    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null; lookYaw: number; lookPitch: number } | null = null;
     let padRepeat = 0;
     let PILOT_R = 150;
     const PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
@@ -1923,7 +1923,7 @@ import Layout from '../layouts/Layout.astro';
       balloon.group.scale.setScalar(BALLOON_SCALE);
       balloon.mode = 'pilot';
       balloon.peek = 0;
-      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1, dock:-1, dockFree:false, undock:-1, nearGalaxy:-1, auto:null };
+      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1, dock:-1, dockFree:false, undock:-1, nearGalaxy:-1, auto:null, lookYaw:0, lookPitch:0 };
       if(windMotes) windMotes.visible = true;
       controls.enabled = false;
       hovered = -1;
@@ -2270,7 +2270,12 @@ import Layout from '../layouts/Layout.astro';
       // Arriving at a world (Eze's other work) the journey pauses: the balloon moors there, hovering still, no gas
       // spent, no wind, while its story reads beside it. A fresh push of the stick or the burner sails on.
       const wants = !!(pad.x || pad.y || pad.held[0]);
-      if(p.auto && (wants || !worlds[p.auto.k]?.link.galaxy?.open)) p.auto = null; // a hand on the stick takes the balloon back
+      // sailing on its own, the stick looks around (the balloon keeps its course); the burner takes the helm back
+      if(p.auto && (pad.held[0] || !worlds[p.auto.k]?.link.galaxy?.open)) p.auto = null;
+      if(p.auto && (pad.x || pad.y)){
+        p.lookYaw = Math.max(-Math.PI, Math.min(Math.PI, p.lookYaw - pad.x*dt*1.7));
+        p.lookPitch = Math.max(-.5, Math.min(1.1, p.lookPitch - pad.y*dt*1.1));
+      } else { p.lookYaw *= Math.exp(-dt*.8); p.lookPitch *= Math.exp(-dt*.8); } // let go: back behind the balloon, slowly
       const near = p.home || p.selecting || p.auto ? -1 : worlds.findIndex(w => w.home && !w.link.galaxy && w.mesh.position.distanceTo(p.pos) < w.size*1.7);
       // galaxies aren't moored at: you see whose it is as you approach, and fly into its heart to cross over
       p.nearGalaxy = p.home || p.selecting ? -1 : worlds.findIndex(w => w.home && w.link.galaxy && w.mesh.position.distanceTo(p.pos) < w.size*1.7);
@@ -2392,8 +2397,12 @@ import Layout from '../layouts/Layout.astro';
         camera.position.lerp(eye, 1-Math.exp(-dt*1.6));
         look.lerp(narrow ? mid.clone().add(new THREE.Vector3(0, -8, 0)) : mid.clone().addScaledVector(right, 12), 1-Math.exp(-dt*1.6));
       } else {
-        camera.position.lerp(p.pos.clone().addScaledVector(f, -22).add(new THREE.Vector3(0, 6 + p.vy*.3, 0)), c);
-        look.lerp(p.pos.clone().addScaledVector(f, 12).add(new THREE.Vector3(0, 2.5, 0)), c);
+        // behind the balloon, swung round it while you look about on a voyage
+        const back = f.clone().multiplyScalar(-22).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.lookYaw);
+        back.multiplyScalar(Math.cos(p.lookPitch*.8)).setY(6 + p.vy*.3 + Math.sin(p.lookPitch*.8)*22);
+        camera.position.lerp(p.pos.clone().add(back), c);
+        const looking = Math.min(1, Math.abs(p.lookYaw) + Math.abs(p.lookPitch)); // looking about: at the balloon, the sky behind it
+        look.lerp(p.pos.clone().addScaledVector(f, 12*(1 - looking)).add(new THREE.Vector3(0, 2.5, 0)), c);
       }
       camera.lookAt(look);
       updateWind(p.selecting || moored ? 0 : dt, p.pos); // the wind holds its breath too
@@ -2409,7 +2418,7 @@ import Layout from '../layouts/Layout.astro';
         const xibAt = xib && inXibalba(p.pos) ? journeyAt() : null;
         const xibLevel = xib && inXibalba(p.pos) ? Math.max(0, Math.min(8, Math.floor((xib.top - p.pos.y)/LEVEL_H + .5))) : -1;
         const ag = p.auto ? worlds[p.auto.k]?.link : null;
-        $('gas-msg').textContent = ag ? (p.auto!.sun ? `sailing to ${ag.label}'s galaxy · by the Sun first, for gas` : `sailing to ${ag.label}'s galaxy`) + ' · touch the stick to take over'
+        $('gas-msg').textContent = ag ? (p.auto!.sun ? `sailing to ${ag.label}'s galaxy · by the Sun first, for gas` : `sailing to ${ag.label}'s galaxy`) + (kb ? ' · W A S D look around · space takes the helm' : ' · stick looks around · ● left burner takes the helm')
           : withHim ? `${xib!.j.name || 'papá'} · en su viaje · tramo ${xibAt ? xibAt.i + 1 : 9} de 9`
           : xibLevel >= 0 ? `Xibalbá · ${xibLevel + 1} · ${LEVELS[xibLevel]}`
           : xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y - 90 ? `under the Sun · let go of the burner to go down to ${xib.j.name || 'him'}`
