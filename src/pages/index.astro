@@ -2172,11 +2172,13 @@ import Layout from '../layouts/Layout.astro';
     }
     // A nebula at each gate: at the edge facing each neighbouring galaxy, beside where a traveller from there
     // arrives, so whoever comes in short of gas has somewhere to fill up in sight.
+    // how far out from the heart a traveller arrives: near a young galaxy's name, past a big one's last barrio
+    const arrivalOut = () => galaxyR > 90 ? galaxyR + 35 : 58;
     let gatesBuilt = false;
     function addGateNebulae(){
       if(gatesBuilt || !renderer) return;
       gatesBuilt = true;
-      const out = Math.max(58, galaxyR*.9);
+      const out = arrivalOut();
       worlds.filter(w => w.link.galaxy && w.home).forEach((w, k) => {
         const dir = w.home!.clone().setY(0).normalize(), side = new THREE.Vector3(-dir.z, 0, dir.x);
         const at = dir.clone().multiplyScalar(Math.max(40, out - 34)).addScaledVector(side, 52).setY(10 + Math.max(0, out - 58)*.12);
@@ -3756,7 +3758,7 @@ import Layout from '../layouts/Layout.astro';
       if(!pilot) return false;
       // out from the heart on the side you came from: close to a young galaxy's name, but outside a big one's barrios,
       // its heart ahead and far, a little higher, so you arrive into the whole of it rather than its thick
-      const out = Math.max(58, galaxyR*.9);
+      const out = arrivalOut();
       pilot.pos.copy(inward).multiplyScalar(-out).setY(2 + Math.max(0, out - 58)*.12);
       pilot.heading = Math.atan2(inward.x, inward.z);
       pilot.speed = 0;
@@ -3769,8 +3771,8 @@ import Layout from '../layouts/Layout.astro';
       const title = $('arrival');
       title.querySelector('p')!.textContent = GAL ? 'you have arrived at' : 'back where it all began';
       title.querySelector('h2')!.textContent = `${galaxyName}’s galaxy`;
-      setTimeout(() => title.classList.add('show'), 500);
-      setTimeout(() => title.classList.remove('show'), 5200);
+      setTimeout(() => title.classList.add('show'), 900);
+      setTimeout(() => title.classList.remove('show'), 7000);
       // out of the light you crossed in
       const warp = $('warp');
       warp.style.transition = 'none'; warp.style.opacity = '1';
