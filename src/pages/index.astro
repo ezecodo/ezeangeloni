@@ -3714,7 +3714,10 @@ import Layout from '../layouts/Layout.astro';
       const gate = worlds[k].home!.clone(), inward = gate.clone().multiplyScalar(-1).setY(0).normalize();
       enterPilot();
       if(!pilot) return false;
-      pilot.pos.copy(inward).multiplyScalar(-58).setY(2); // 58 out from the heart, on the side you came from
+      // out from the heart on the side you came from: close to a young galaxy's name, but outside a big one's barrios,
+      // its heart ahead and far, a little higher, so you arrive into the whole of it rather than its thick
+      const out = Math.max(58, galaxyR*.9);
+      pilot.pos.copy(inward).multiplyScalar(-out).setY(2 + Math.max(0, out - 58)*.12);
       pilot.heading = Math.atan2(inward.x, inward.z);
       pilot.speed = 0;
       gas = Math.max(0, Math.min(1, a.gas)); // what's left after crossing
