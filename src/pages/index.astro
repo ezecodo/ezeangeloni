@@ -2448,7 +2448,7 @@ import Layout from '../layouts/Layout.astro';
       showMeta(0);
       if(pilot) flight = null; // back behind the balloon: the chase camera takes it from here
       else {
-        const to = overviewPos.lengthSq() ? overviewPos.clone() : new THREE.Vector3(0, overviewR*.34, overviewR);
+        const to = overviewPos.lengthSq() ? overviewPos.clone() : overviewHome();
         flyTo(to, CENTER.clone(), 1700, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } });
       }
       const url = new URL(location.href);
@@ -2558,7 +2558,7 @@ import Layout from '../layouts/Layout.astro';
       renderer.setSize(W, H, false);
       camera.aspect = W/H;
       camera.updateProjectionMatrix();
-      overviewR = Math.max(112, galaxyR*1.22)*Math.max(1, Math.pow(1.2/camera.aspect, .8));
+      overviewR = Math.max(112, galaxyR*1.22, nearestAway()*.3)*Math.max(1, Math.pow(1.2/camera.aspect, .8)); // a small galaxy stands back enough to show its neighbours
       if(controls) controls.maxDistance = overviewR*1.5;
       composer?.setPixelRatio(DPR);
       composer?.setSize(W, H);
@@ -3028,7 +3028,7 @@ import Layout from '../layouts/Layout.astro';
         controls.enablePan = false; controls.minDistance = 16;
         controls.autoRotateSpeed = .28; controls.enabled = false;
       }
-      const home = new THREE.Vector3(0, overviewR*.34, overviewR);
+      const home = overviewHome();
       const urlSet = new URLSearchParams(location.search).get('set');
       const tag = decodeURIComponent(location.hash.slice(1));
       const i = urlSet
@@ -3303,6 +3303,18 @@ import Layout from '../layouts/Layout.astro';
           mark.style.transform = `translate(${Math.max(8, Math.min(W - 8, px + flip))}px, ${py - 8}px)`;
         }
       }
+    }
+    // The overview stands on the far side from the nearest neighbour (a galaxy or the Sun), so looking at this
+    // galaxy's heart you see that neighbour beyond it, small, across the dark.
+    function nearestThing(){
+      const near = worlds.filter(w => w.link.galaxy && w.home).map(w => w.home!);
+      if(sun) near.push(sun.position);
+      return near.length ? near.reduce((a, b) => a.length() < b.length() ? a : b) : null;
+    }
+    function nearestAway(){ const n = nearestThing(); return n ? Math.hypot(n.x, n.z) : 0; }
+    function overviewHome(){
+      const n = nearestThing(), dir = n ? n.clone().setY(0).normalize() : new THREE.Vector3(0, 0, -1);
+      return dir.multiplyScalar(-overviewR).setY(overviewR*.34);
     }
     // ── The Sun, and where each galaxy lies ──
     // The Sun sits at the centre of everything, a fixed point to find your way by from any galaxy. Each galaxy lies
@@ -3631,7 +3643,7 @@ import Layout from '../layouts/Layout.astro';
       worldAt = -1;
       btnBack.hidden = true;
       showMeta(0);
-      const to = overviewPos.lengthSq() ? overviewPos.clone() : new THREE.Vector3(0, overviewR*.34, overviewR);
+      const to = overviewPos.lengthSq() ? overviewPos.clone() : overviewHome();
       flyTo(to, CENTER.clone(), 1500, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } });
     }
     // each turns on a small orbit of its own, on the universe's clock (still while you're at it, or paused)
