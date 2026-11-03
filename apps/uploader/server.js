@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import { saveLinks, storeLinkImage } from './links.js';
 import { addPhoto, addText, fromTelegram, ensureImagesDir, monthLabel } from './frases.js';
 
 // === Config ===
@@ -598,6 +599,24 @@ app.post('/api/frases/text', express.json({ limit: '64kb' }), checkAuth, async (
     res.json({ ok: true, entry, barrio: monthLabel(entry.fecha) });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Floating links (admin's links tab). Under /api/frases so the existing nginx route serves them.
+app.put('/api/frases/links', express.json({ limit: '64kb' }), checkAuth, async (req, res) => {
+  try {
+    res.json({ ok: true, links: await saveLinks(req.body?.links) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+const linkImageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4 * 1024 * 1024, files: 1 } });
+app.post('/api/frases/links/image', checkAuth, linkImageUpload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'image required' });
+  try {
+    res.json({ ok: true, image: await storeLinkImage(req.file.buffer) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 

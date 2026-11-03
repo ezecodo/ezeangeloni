@@ -8,7 +8,7 @@ export default defineConfig({
 	vite: {
 		server: {
 			// content lives only on the VPS; `astro dev` reads the real thing
-			proxy: { '/frases.json': live, '/sets.json': live, '/images': live, '/sets/': live },
+			proxy: { '/frases.json': live, '/sets.json': live, '/images': live, '/sets/': live, '/links.json': live, '/links/': live },
 		},
 	},
 });

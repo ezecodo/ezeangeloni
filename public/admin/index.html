@@ -25,7 +25,7 @@
   .subtitle { text-align:center; font-size:.65rem; letter-spacing:.25em; text-transform:uppercase; color:var(--muted); margin-bottom:1.5rem; }
 
   label { display:block; font-size:.6rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin: .8rem 0 .3rem; }
-  input[type=text], input[type=password], input[type=date], input[type=number], input[type=file], textarea, select {
+  input[type=text], input[type=url], input[type=password], input[type=date], input[type=number], input[type=file], textarea, select {
     width:100%; background:rgba(240,237,232,0.04); border:1px solid var(--line); border-radius:8px;
     color:var(--text); font-family:'DM Mono', monospace; font-size:.82rem; padding:.6rem .8rem;
     outline:none; transition: border-color .2s;
@@ -219,6 +219,20 @@
   .bulk { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-top:1rem; font-size:.62rem; color:var(--muted); letter-spacing:.1em; }
   .bulk input[type=date] { width:auto; padding:.35rem .5rem; font-size:.7rem; }
 
+  /* links: what floats over the Cronovisor */
+  @font-face { font-family:'MalvinasSans'; src:url('/fonts/MalvinasSans-Regular.otf?v=20') format('opentype'); }
+  .link-row { border:1px solid var(--line); border-radius:12px; padding:.8rem; margin-top:.7rem; }
+  .link-preview { min-height:56px; display:flex; align-items:center; justify-content:center; background:rgba(8,8,16,0.6); border-radius:8px; margin-bottom:.6rem; color:var(--text); text-decoration:none; overflow:hidden; }
+  .link-preview.malvinas { font-family:'MalvinasSans', sans-serif; font-size:1.5rem; }
+  .link-preview.serif { font-family:'Cormorant Garamond', serif; font-style:italic; font-weight:300; font-size:1.6rem; }
+  .link-preview.mono { font-size:.72rem; letter-spacing:.16em; text-transform:uppercase; }
+  .link-preview img { height:46px; width:auto; display:block; }
+  .link-fields { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+  .link-fields input, .link-fields select { padding:.45rem .6rem; font-size:.75rem; }
+  .link-actions { display:flex; gap:.35rem; margin-top:.5rem; align-items:center; }
+  .link-actions .grow { flex:1; }
+  @media (max-width: 640px) { .link-fields { grid-template-columns:1fr; } .tabs { overflow-x:auto; } .tabs button { flex:1 0 auto; padding:.6rem .5rem; letter-spacing:.12em; } }
+
   /* words: write a frase, like the bot */
   #wordText { font-family:'Cormorant Garamond', serif; font-style:italic; font-weight:300; font-size:1.5rem; line-height:1.35; min-height:150px; padding:1rem; }
   .words-meta { display:flex; gap:.7rem; align-items:end; }
@@ -256,6 +270,7 @@
       <button data-tab="manage">manage</button>
       <button data-tab="photos">photos</button>
       <button data-tab="words">words</button>
+      <button data-tab="links">links</button>
     </nav>
 
     <section class="tab active" id="tab-upload">
@@ -350,6 +365,17 @@
       <button class="primary" id="wordSave" disabled>save</button>
       <p id="wordStatus" class="status"></p>
       <div class="recent"><h3>last words</h3><ul id="wordRecent"></ul></div>
+    </section>
+
+    <section class="tab" id="tab-links">
+      <p class="hint">links to your other work, always floating over the universe · text or an image (a logo)</p>
+      <div id="linkRows"></div>
+      <div class="link-actions" style="margin-top:.9rem">
+        <button class="ghost" id="linkAdd" type="button">+ add link</button>
+        <span class="grow"></span>
+      </div>
+      <button class="primary" id="linkSave">save</button>
+      <p id="linkStatus" class="status"></p>
     </section>
 
     <section class="tab" id="tab-photos">
@@ -2078,6 +2104,103 @@
     }
   });
   document.querySelector('.tabs button[data-tab=words]').addEventListener('click', loadRecent);
+
+  // ===== LINKS =====
+  // What floats over the Cronovisor. Same defaults as the site until links.json exists.
+  const DEFAULT_LINKS = [
+    { label: 'Fábrica de trapos', url: 'https://trapos.xyz', font: 'malvinas' },
+    { label: 'ila', url: 'https://www.ila-web.de', image: '/img/ila.png' },
+  ];
+  let links = [];
+  function linkRow(l, i) {
+    const row = document.createElement('div');
+    row.className = 'link-row';
+    const style = l.image ? 'image' : (l.font || 'serif');
+    row.innerHTML = `
+      <a class="link-preview ${style}" target="_blank" rel="noopener"></a>
+      <div class="link-fields">
+        <input type="text" data-k="label" placeholder="text (also the image's description)" maxlength="80">
+        <input type="url" data-k="url" placeholder="https://…">
+        <select data-k="style">
+          <option value="malvinas">text · Malvinas</option>
+          <option value="serif">text · serif italic</option>
+          <option value="mono">text · mono</option>
+          <option value="image">image / logo</option>
+        </select>
+        <input type="file" data-k="file" accept="image/png,image/jpeg,image/webp" ${style === 'image' ? '' : 'hidden'}>
+      </div>
+      <div class="link-actions">
+        <button class="ghost" type="button" data-a="up" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="ghost" type="button" data-a="down" ${i === links.length - 1 ? 'disabled' : ''}>↓</button>
+        <span class="grow"></span>
+        <button class="ghost danger" type="button" data-a="del">remove</button>
+      </div>`;
+    const prev = row.querySelector('.link-preview');
+    const paint = () => {
+      prev.href = l.url || '#';
+      prev.className = 'link-preview ' + (l.image ? 'image' : (l.font || 'serif'));
+      prev.replaceChildren();
+      if (l.image) { const im = new Image(); im.src = l.image; im.alt = l.label || ''; prev.append(im); }
+      else prev.textContent = l.label || '…';
+    };
+    const q = (k) => row.querySelector(`[data-k=${k}]`);
+    q('label').value = l.label || '';
+    q('url').value = l.url || '';
+    q('style').value = style;
+    q('label').addEventListener('input', (e) => { l.label = e.target.value; paint(); });
+    q('url').addEventListener('input', (e) => { l.url = e.target.value.trim(); paint(); });
+    q('style').addEventListener('change', (e) => {
+      const v = e.target.value;
+      if (v === 'image') { q('file').hidden = false; if (!l.image) q('file').click(); }
+      else { delete l.image; l.font = v; q('file').hidden = true; }
+      paint();
+    });
+    q('file').addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      $('linkStatus').className = 'status'; $('linkStatus').textContent = 'uploading image...';
+      const form = new FormData(); form.append('image', f);
+      try {
+        const r = await api('/api/frases/links/image', { method: 'POST', body: form });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || `error ${r.status}`);
+        l.image = j.image; delete l.font;
+        $('linkStatus').textContent = 'image ready · remember to save';
+        paint();
+      } catch (err) { $('linkStatus').className = 'status error'; $('linkStatus').textContent = err.message; }
+    });
+    row.querySelector('[data-a=up]').addEventListener('click', () => { links.splice(i - 1, 0, links.splice(i, 1)[0]); renderLinks(); });
+    row.querySelector('[data-a=down]').addEventListener('click', () => { links.splice(i + 1, 0, links.splice(i, 1)[0]); renderLinks(); });
+    row.querySelector('[data-a=del]').addEventListener('click', () => { links.splice(i, 1); renderLinks(); });
+    paint();
+    return row;
+  }
+  function renderLinks() {
+    $('linkRows').replaceChildren(...links.map(linkRow));
+    $('linkAdd').disabled = links.length >= 12;
+  }
+  async function loadLinks() {
+    try {
+      const r = await fetch('/links.json', { cache: 'no-store' });
+      const d = r.ok ? await r.json() : null;
+      links = Array.isArray(d?.links) ? d.links : DEFAULT_LINKS.map(l => ({ ...l }));
+    } catch { links = DEFAULT_LINKS.map(l => ({ ...l })); }
+    renderLinks();
+  }
+  $('linkAdd').addEventListener('click', () => { links.push({ label: '', url: 'https://', font: 'serif' }); renderLinks(); });
+  $('linkSave').addEventListener('click', async () => {
+    $('linkSave').disabled = true;
+    $('linkStatus').className = 'status'; $('linkStatus').textContent = 'saving...';
+    try {
+      const r = await api('/api/frases/links', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `error ${r.status}`);
+      links = j.links; renderLinks();
+      $('linkStatus').innerHTML = 'saved · <a href="/" style="color:var(--cyan)">see them floating</a>';
+    } catch (e) { $('linkStatus').className = 'status error'; $('linkStatus').textContent = e.message; }
+    $('linkSave').disabled = false;
+  });
+  document.querySelector('.tabs button[data-tab=links]').addEventListener('click', loadLinks);
 
   // /admin/#photos or #words opens that tab (the home screen app starts on photos).
   const startTab = location.hash.slice(1);

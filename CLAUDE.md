@@ -37,6 +37,7 @@ Rsync runs with `--delete`, so anything on the VPS that's NOT in `dist/` is wipe
 - `images/` — photos referenced from `frases.json`
 - `sets.json` — DJ sets metadata, edited live on server
 - `sets/` — MP3 files for DJ sets
+- `links.json`, `links/` — the floating links and their logos (admin's links tab)
 
 The `public/frases.json` and `public/sets.json` in the repo are dev/template only. The "real" versions on the VPS are separate.
 
@@ -232,11 +233,13 @@ Region times are stored in **original-time** (so changing master trim doesn't br
 }
 ```
 
-## Fábrica de trapos → moved out (now `trapos.xyz`)
+## Floating links (Fábrica de trapos, ila, …)
 
-This used to live here as `/tu-trapo`. As of 2026-07-22 it's its own standalone project — separate repo (`ezecodo/trapos`), separate deploy, own domain `trapos.xyz`. Full history/notes are in that project's own `CLAUDE.md` (`~/Desktop/dev/trapos/CLAUDE.md`).
+Links to Eze's other work drift over the Cronovisor (`#floaters`, `buildFloaters`/`driveFloaters` at the end of `index.astro`): always visible, bouncing off the screen edges (clear of the nav and the readout), each other and, when a piece is open, the piece itself (`rectOf`, same box as the selector), so they never cover it; if there's no room beside it (a phone) a floater steps back to invisible until there is. Hidden only aboard the balloon (the cockpit). Text in one of three styles (`malvinas`, `serif`, `mono`) or an image (a logo).
 
-All that's left of it here: the floating "Fábrica de trapos" link on the landing (`#trapo-fab` in `index.astro`, drifts around the screen, bounces off edges) links out to `https://trapos.xyz`. It still uses the same `MalvinasSans-Regular.otf` (kept in `public/fonts/` here too, just for that button's own text rendering) — don't delete that font file thinking it's unused leftover cruft.
+Edited from the admin's **links** tab (add, edit, reorder, remove, upload a logo) → `PUT /api/frases/links` writes `links.json`, `POST /api/frases/links/image` stores logos in `links/` (both on the VPS only, excluded from rsync; under `/api/frases` so the existing nginx route serves them). Until `links.json` exists, `DEFAULT_LINKS` shows (same list in the site and the admin): Fábrica de trapos (`https://trapos.xyz`, its own MalvinasSans font, kept in `public/fonts/`, don't delete it) and the ila logo (`public/img/ila.png`, from `~/Desktop/ila-nextjs/public/ila-logo.png`, linking to `https://www.ila-web.de`).
+
+Fábrica de trapos used to live here as `/tu-trapo`; since 2026-07-22 it's its own project (`ezecodo/trapos`, `trapos.xyz`, notes in `~/Desktop/dev/trapos/CLAUDE.md`).
 
 ## Future
 - Telegram bot integration (n8n workflow) calling `POST /api/sets` from the existing bot, so sets can be uploaded via Telegram like frases.

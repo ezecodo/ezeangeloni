@@ -54,8 +54,13 @@ import Layout from '../layouts/Layout.astro';
       #act[hidden] { display: none; }
       .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-      #trapo-fab { position: fixed; top: 0; left: 0; z-index: 12; font-family: 'MalvinasSans', sans-serif; font-size: 1.6rem; letter-spacing: .01em; color: var(--ink); text-decoration: none; white-space: nowrap; text-shadow: 0 0 14px rgba(8,8,16,.55); transition: opacity .4s; }
-      body.focus #trapo-fab { opacity: 0; pointer-events: none; }
+      /* Links to Eze's other work, edited from the admin (links.json): always drifting, bouncing off the edges, each other and an open piece. */
+      .floater { position: fixed; top: 0; left: 0; z-index: 12; color: var(--ink); text-decoration: none; white-space: nowrap; text-shadow: 0 0 14px rgba(8,8,16,.55); transition: opacity .4s; will-change: transform; }
+      .floater.malvinas { font-family: 'MalvinasSans', sans-serif; font-size: 1.6rem; letter-spacing: .01em; }
+      .floater.serif { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: 1.7rem; }
+      .floater.mono { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; }
+      .floater img { display: block; height: 46px; width: auto; border-radius: 2px; box-shadow: 0 0 18px rgba(8,8,16,.6); }
+      .floater:hover { opacity: .8; }
 
       /* overlays: hard-edged black sheets instead of the old floating glass cards */
       .sheet { position: fixed; inset: 0; z-index: 100; background: var(--bg); overflow-y: auto; opacity: 0; pointer-events: none; transition: opacity .25s steps(4); padding: 4.5rem 1.4rem 3rem; }
@@ -88,7 +93,7 @@ import Layout from '../layouts/Layout.astro';
       #msg-thanks { display: none; }
       #msg-thanks p { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(2.6rem,8vw,6rem); margin-bottom: .6rem; }
       #msg-thanks small { font-size: .72rem; color: var(--muted); letter-spacing: .1em; }
-      body.aboard #hud, body.aboard #trapo-fab { opacity: 0; pointer-events: none; }
+      body.aboard #hud, body.aboard .floater { opacity: 0; pointer-events: none; }
       body.aboard #hud * { pointer-events: none; }
       #pilot-hud { position: fixed; left: 50%; top: 3.4rem; transform: translateX(-50%); z-index: 12; font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .5s; text-shadow: 0 0 10px rgba(8,8,16,.9); }
       body.pilot #pilot-hud { opacity: .72; }
@@ -113,7 +118,7 @@ import Layout from '../layouts/Layout.astro';
       .cand i:nth-child(3), #selector i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 2px 2px; }
       .cand i:nth-child(4), #selector i:nth-child(4) { right: 0; bottom: 0; border-width: 0 2px 2px 0; }
       @keyframes breathe { 50% { opacity: .55; } }
-      body.pilot #balloon-tag, body.pilot #trapo-fab { opacity: 0; pointer-events: none; }
+      body.pilot #balloon-tag { opacity: 0; pointer-events: none; }
 
       #index-grid { columns: 5 200px; column-gap: 10px; }
       .cell { display: block; width: 100%; margin-bottom: 10px; break-inside: avoid; text-align: left; position: relative; transition: opacity .15s; }
@@ -164,7 +169,9 @@ import Layout from '../layouts/Layout.astro';
         body.focus #top { justify-content: flex-end; }
         #meta { left: 1rem; right: 1rem; gap: .7rem; }
         #hud { font-size: .6rem; letter-spacing: .1em; }
-        #trapo-fab { font-size: 1.2rem; }
+        .floater.malvinas { font-size: 1.2rem; }
+        .floater.serif { font-size: 1.3rem; }
+        .floater img { height: 36px; }
         .sheet { padding: 3.6rem 1rem 2rem; }
         .close { right: 1rem; top: .9rem; }
         #set-seek-thumb { opacity: 1; width: 13px; height: 13px; }
@@ -203,7 +210,7 @@ import Layout from '../layouts/Layout.astro';
     </div>
   </div>
   <p id="now" class="sr" aria-live="polite"></p>
-  <a id="trapo-fab" href="https://trapos.xyz" target="_blank" rel="noopener">Fábrica de trapos</a>
+  <nav id="floaters" aria-label="elsewhere"></nav>
 
   <div id="index-sheet" class="sheet">
     <button class="close" id="index-close">close ✕</button>
@@ -1748,12 +1755,16 @@ import Layout from '../layouts/Layout.astro';
     // the viewfinder: four cyan corners around the chosen piece, sliding from one to the next;
     // faint corners mark every other piece you can choose
     const selector = $('selector'), candBox = $('cands');
-    function frameOf(q: Piece, el: HTMLElement, pad: number){
+    // A piece's box on screen (centre and size), with `pad` added.
+    function rectOf(q: Piece, pad: number){
       const v = q.mesh.position.clone().project(camera);
       const unit = window.innerHeight/(2*camera.position.distanceTo(q.mesh.position)*Math.tan(camera.fov*Math.PI/360));
       const vis = q.starMix > .6 ? 0 : 1; // a piece still showing as a star gets a small frame
       const w = Math.max(26, (q.w*q.grow*unit)*vis) + pad, h = Math.max(26, (q.h*q.grow*unit)*vis) + pad;
-      const x = (v.x+1)/2*window.innerWidth, y = (1-v.y)/2*window.innerHeight;
+      return { x: (v.x+1)/2*window.innerWidth, y: (1-v.y)/2*window.innerHeight, w, h };
+    }
+    function frameOf(q: Piece, el: HTMLElement, pad: number){
+      const { x, y, w, h } = rectOf(q, pad);
       el.style.width = `${w}px`;
       el.style.height = `${h}px`;
       el.style.transform = `translate(${x-w/2}px, ${y-h/2}px)`;
@@ -2550,23 +2561,81 @@ import Layout from '../layouts/Layout.astro';
       requestAnimationFrame(frame);
     });
 
-    const trapoFab = $('trapo-fab') as HTMLAnchorElement;
-    let tfX = rnd(0, Math.max(0, window.innerWidth - trapoFab.offsetWidth));
-    const TF_TOP = 50, TF_BOTTOM = 130; // keeps clear of the nav and the readout
-    let tfY = rnd(TF_TOP, Math.max(TF_TOP, window.innerHeight - trapoFab.offsetHeight - TF_BOTTOM));
-    let tfVx = rnd(0.15, 0.35) * (Math.random() < 0.5 ? -1 : 1);
-    let tfVy = rnd(0.15, 0.35) * (Math.random() < 0.5 ? -1 : 1);
-    function driveTrapoFab(){
-      const w = trapoFab.offsetWidth, h = trapoFab.offsetHeight;
-      tfX += tfVx; tfY += tfVy;
-      if (tfX < 0) { tfX = 0; tfVx *= -1; }
-      if (tfX + w > window.innerWidth) { tfX = window.innerWidth - w; tfVx *= -1; }
-      if (tfY < TF_TOP) { tfY = TF_TOP; tfVy *= -1; }
-      if (tfY + h > window.innerHeight - TF_BOTTOM) { tfY = window.innerHeight - TF_BOTTOM - h; tfVy *= -1; }
-      trapoFab.style.transform = `translate(${tfX}px, ${tfY}px)`;
-      requestAnimationFrame(driveTrapoFab);
+    // ── Elsewhere: links to Eze's other work ─────────────────────
+    // Edited from the admin (links tab → links.json on the VPS); these defaults show until that file exists.
+    // They always drift, bouncing off the screen edges and each other; when a piece is open they bounce off it too,
+    // so they stay visible without ever covering it.
+    interface SiteLink { label: string; url: string; image?: string; font?: 'malvinas' | 'serif' | 'mono'; }
+    const DEFAULT_LINKS: SiteLink[] = [
+      { label: 'Fábrica de trapos', url: 'https://trapos.xyz', font: 'malvinas' },
+      { label: 'ila', url: 'https://www.ila-web.de', image: '/img/ila.png' },
+    ];
+    interface Floater { el: HTMLAnchorElement; x: number; y: number; vx: number; vy: number; w: number; h: number; }
+    const floaterBox = $('floaters');
+    let floaters: Floater[] = [];
+    const FL_TOP = 50, FL_BOTTOM = 130; // clear of the nav and the readout
+    function buildFloaters(list: SiteLink[]){
+      floaterBox.replaceChildren();
+      floaters = list.filter(l => l && /^https?:\/\//.test(l.url) && (l.label || l.image)).slice(0, 12).map(l => {
+        const el = document.createElement('a');
+        el.className = 'floater ' + (l.image ? 'pic' : (l.font || 'serif'));
+        el.href = l.url; el.target = '_blank'; el.rel = 'noopener';
+        if(l.image){
+          const img = new Image();
+          img.src = l.image; img.alt = l.label || '';
+          img.addEventListener('load', () => { const f = floaters.find(q => q.el === el); if(f){ f.w = el.offsetWidth; f.h = el.offsetHeight; } });
+          el.append(img);
+        } else el.textContent = l.label;
+        floaterBox.append(el);
+        const speed = reduced ? 0 : rnd(10, 22), ang = rnd(0, Math.PI*2);
+        return { el, x: 0, y: 0, vx: Math.cos(ang)*speed, vy: Math.sin(ang)*speed, w: 0, h: 0 };
+      });
+      for(const f of floaters){
+        f.w = f.el.offsetWidth; f.h = f.el.offsetHeight;
+        f.x = rnd(0, Math.max(0, window.innerWidth - f.w));
+        f.y = rnd(FL_TOP, Math.max(FL_TOP, window.innerHeight - FL_BOTTOM - f.h));
+      }
     }
-    if(!reduced) requestAnimationFrame(driveTrapoFab);
-    else trapoFab.style.transform = `translate(${tfX}px, ${tfY}px)`;
+    // Pushes a floater out of a box along the shallowest side and turns it back.
+    function bounceOff(f: Floater, bx: number, by: number, bw: number, bh: number){
+      const left = f.x + f.w - bx, right = bx + bw - f.x, up = f.y + f.h - by, down = by + bh - f.y;
+      if(left <= 0 || right <= 0 || up <= 0 || down <= 0) return false;
+      const m = Math.min(left, right, up, down);
+      if(m === left){ f.x -= left; f.vx = -Math.abs(f.vx); }
+      else if(m === right){ f.x += right; f.vx = Math.abs(f.vx); }
+      else if(m === up){ f.y -= up; f.vy = -Math.abs(f.vy); }
+      else { f.y += down; f.vy = Math.abs(f.vy); }
+      return true;
+    }
+    let flLast = performance.now();
+    function driveFloaters(now: number){
+      const dt = Math.min(.1, (now - flLast)/1000);
+      flLast = now;
+      const W = window.innerWidth, H = window.innerHeight;
+      const piece = focused >= 0 && camera && pieces[focused] ? rectOf(pieces[focused], 28) : null;
+      floaters.forEach((f, i) => {
+        f.x += f.vx*dt; f.y += f.vy*dt;
+        for(const g of floaters.slice(i + 1)) if(bounceOff(f, g.x, g.y, g.w, g.h)){ g.vx = -f.vx; g.vy = -f.vy; }
+        if(piece) bounceOff(f, piece.x - piece.w/2, piece.y - piece.h/2, piece.w, piece.h);
+        if(f.x < 0){ f.x = 0; f.vx = Math.abs(f.vx); }
+        if(f.x + f.w > W){ f.x = Math.max(0, W - f.w); f.vx = -Math.abs(f.vx); }
+        if(f.y < FL_TOP){ f.y = FL_TOP; f.vy = Math.abs(f.vy); }
+        if(f.y + f.h > H - FL_BOTTOM){ f.y = Math.max(FL_TOP, H - FL_BOTTOM - f.h); f.vy = -Math.abs(f.vy); }
+        // no room left beside the piece (a phone, a wide photo): step back rather than cover it
+        const covering = !!piece && f.x < piece.x + piece.w/2 && f.x + f.w > piece.x - piece.w/2 && f.y < piece.y + piece.h/2 && f.y + f.h > piece.y - piece.h/2;
+        f.el.style.opacity = covering ? '0' : '';
+        f.el.style.pointerEvents = covering ? 'none' : '';
+        f.el.style.transform = `translate(${f.x}px, ${f.y}px)`;
+      });
+      requestAnimationFrame(driveFloaters);
+    }
+    buildFloaters(DEFAULT_LINKS);
+    requestAnimationFrame(driveFloaters);
+    // text measured before its font arrived is too narrow to bounce right
+    document.fonts?.ready.then(() => floaters.forEach(f => { f.w = f.el.offsetWidth; f.h = f.el.offsetHeight; }));
+    fetch('/links.json', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if(Array.isArray(d?.links)) buildFloaters(d.links); })
+      .catch(() => {});
   </script>
 </Layout>
