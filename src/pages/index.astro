@@ -1816,7 +1816,7 @@ import Layout from '../layouts/Layout.astro';
     // and pieces open up as you approach them. Built for a digital 8-way stick and 4 buttons (Competition Pro).
     const pad = { x:0, y:0, px:0, py:0, held:[false,false,false,false], prev:[false,false,false,false] };
     interface Homing { t0: number; from: THREE.Vector3; ctrl: THREE.Vector3; to: THREE.Vector3; dur: number; landed: number; }
-    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number } | null = null;
+    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null } | null = null;
     let padRepeat = 0;
     let PILOT_R = 150;
     const PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
@@ -1923,7 +1923,7 @@ import Layout from '../layouts/Layout.astro';
       balloon.group.scale.setScalar(BALLOON_SCALE);
       balloon.mode = 'pilot';
       balloon.peek = 0;
-      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1, dock:-1, dockFree:false, undock:-1, nearGalaxy:-1 };
+      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1, dock:-1, dockFree:false, undock:-1, nearGalaxy:-1, auto:null };
       if(windMotes) windMotes.visible = true;
       controls.enabled = false;
       hovered = -1;
@@ -2270,7 +2270,8 @@ import Layout from '../layouts/Layout.astro';
       // Arriving at a world (Eze's other work) the journey pauses: the balloon moors there, hovering still, no gas
       // spent, no wind, while its story reads beside it. A fresh push of the stick or the burner sails on.
       const wants = !!(pad.x || pad.y || pad.held[0]);
-      const near = p.home || p.selecting ? -1 : worlds.findIndex(w => w.home && !w.link.galaxy && w.mesh.position.distanceTo(p.pos) < w.size*1.7);
+      if(p.auto && (wants || !worlds[p.auto.k]?.link.galaxy?.open)) p.auto = null; // a hand on the stick takes the balloon back
+      const near = p.home || p.selecting || p.auto ? -1 : worlds.findIndex(w => w.home && !w.link.galaxy && w.mesh.position.distanceTo(p.pos) < w.size*1.7);
       // galaxies aren't moored at: you see whose it is as you approach, and fly into its heart to cross over
       p.nearGalaxy = p.home || p.selecting ? -1 : worlds.findIndex(w => w.home && w.link.galaxy && w.mesh.position.distanceTo(p.pos) < w.size*1.7);
       if(p.undock >= 0 && near !== p.undock) p.undock = -1; // out of its reach: it can moor there again
@@ -2282,7 +2283,17 @@ import Layout from '../layouts/Layout.astro';
       const moored = p.dock >= 0;
       const withHim = nearHim(p.pos); // beside him the balloon hovers, as long as you don't push on
       const free = !p.selecting && !p.home && !moored; // while choosing a piece the stick belongs to the selection
-      const sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
+      let sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
+      // the voyage on its own: steer for the galaxy's heart (by the Sun first if the tank won't last), climb or sink to it
+      if(p.auto && free){
+        const goal = p.auto.sun && sun ? sun.position : worlds[p.auto.k].mesh.position;
+        const want = Math.atan2(goal.x - p.pos.x, goal.z - p.pos.z), diff = Math.atan2(Math.sin(want - p.heading), Math.cos(want - p.heading));
+        sx = -Math.max(-1, Math.min(1, diff*2));
+        const there = p.auto.sun && sun && p.pos.distanceTo(sun.position) < 150;
+        sy = there || Math.abs(diff) > 1.1 ? 0 : -1; // turn first, then go; at the Sun, wait
+        held = goal.y > p.pos.y + 6;
+        if(there && gas > .98) p.auto.sun = false; // full: on to the galaxy
+      }
       // the tank: the burner and the pilot flame spend it; low, the flame coughs
       const voidK = inVoid(p.pos);
       if(free) gas = Math.max(0, gas - dt*(GAS_IDLE*(voidK ? VOID_IDLE : 1) + (held ? GAS_BURN*(voidK ? VOID_BURN : 1) : 0)));
@@ -2397,7 +2408,9 @@ import Layout from '../layouts/Layout.astro';
         const mw = moored ? worlds[p.dock].link : p.nearGalaxy >= 0 ? worlds[p.nearGalaxy].link : null, kb = document.body.classList.contains('kb');
         const xibAt = xib && inXibalba(p.pos) ? journeyAt() : null;
         const xibLevel = xib && inXibalba(p.pos) ? Math.max(0, Math.min(8, Math.floor((xib.top - p.pos.y)/LEVEL_H + .5))) : -1;
-        $('gas-msg').textContent = withHim ? `${xib!.j.name || 'papá'} · en su viaje · tramo ${xibAt ? xibAt.i + 1 : 9} de 9`
+        const ag = p.auto ? worlds[p.auto.k]?.link : null;
+        $('gas-msg').textContent = ag ? (p.auto!.sun ? `sailing to ${ag.label}'s galaxy · by the Sun first, for gas` : `sailing to ${ag.label}'s galaxy`) + ' · touch the stick to take over'
+          : withHim ? `${xib!.j.name || 'papá'} · en su viaje · tramo ${xibAt ? xibAt.i + 1 : 9} de 9`
           : xibLevel >= 0 ? `Xibalbá · ${xibLevel + 1} · ${LEVELS[xibLevel]}`
           : xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y - 90 ? `under the Sun · let go of the burner to go down to ${xib.j.name || 'him'}`
           : mw?.galaxy ? `${mw.label}'s galaxy · ${!mw.galaxy.open ? 'closed: knock at its door with the mouse' : gas < CROSS_COST ? 'you need 2 gallons to cross' : 'fly into its heart to cross over'}`
@@ -2491,7 +2504,12 @@ import Layout from '../layouts/Layout.astro';
       pointerFresh = true;
     });
     screen.addEventListener('pointerdown', e => {
-      if(pilot && focused < 0){ exitPilot(); return; } // the mouse takes the universe back
+      if(pilot && focused < 0){ // the mouse takes the universe back, unless it points at a galaxy to sail to
+        setNdc(e);
+        const w = pickWorld();
+        if(w >= 0 && worlds[w].link.galaxy?.open){ voyage(w); return; }
+        exitPilot(); return;
+      }
       press = { x:e.clientX, y:e.clientY, t:performance.now() };
       touched();
     });
@@ -2503,7 +2521,7 @@ import Layout from '../layouts/Layout.astro';
       if(focused >= 0 && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)){ stepFocus(dx < 0 ? 1 : -1); return; }
       if(Math.hypot(dx, dy) > 7 || !quick) return;
       setNdc(e);
-      if(focused < 0 && worldAt < 0){ const w = pickWorld(); if(w >= 0){ visitWorld(w); return; } } // a world (or a far galaxy) before the balloon
+      if(focused < 0 && worldAt < 0){ const w = pickWorld(); if(w >= 0){ goToWorld(worlds[w]); return; } } // a world (or a far galaxy) before the balloon
       if(focused < 0 && balloon && balloon.mode === 'cruise' && Math.hypot(e.clientX-balloon.sx, e.clientY-balloon.sy) < 56){ board(); return; }
       if(focused >= 0 && balloon && balloon.peek > .5 && Math.hypot(e.clientX-balloon.sx, e.clientY-balloon.sy) < 64){ backOut(); return; }
       setNdc(e);
@@ -3577,14 +3595,29 @@ import Layout from '../layouts/Layout.astro';
       });
       return best;
     }
-    // from a mark: leave the balloon if you're in it, and fly there
+    // From a click: a galaxy you may enter is sailed to, in the balloon, as if you were flying it; anything else
+    // (a planet, a closed galaxy with its door) is flown to by the camera and its panel opens.
     function goToWorld(w: World){
       const k = worlds.indexOf(w);
       if(k < 0 || boarded) return;
       if(focused >= 0) backOutNow();
+      if(w.link.galaxy?.open && voyage(k)) return;
       if(pilot) exitPilot();
       flight = null;
       visitWorld(k);
+    }
+    function voyage(k: number){
+      if(!balloon || !controls) return false;
+      if(worldAt >= 0){ worldAt = -1; btnBack.hidden = true; }
+      flight = null;
+      if(!pilot) enterPilot();
+      if(!pilot) return false;
+      const goal = worlds[k].mesh.position, secs = pilot.pos.distanceTo(goal)/(TOP*.85);
+      const need = secs*GAS_IDLE*VOID_IDLE + CROSS_COST + .06;
+      pilot.auto = { k, sun: !!sun && gas < need };
+      pilot.dock = -1; pilot.undock = -1;
+      playNote(NOTES[2]); setTimeout(() => playNote(NOTES[4]), 180);
+      return true;
     }
     function showWorldMeta(k: number){
       const l = worlds[k].link;
