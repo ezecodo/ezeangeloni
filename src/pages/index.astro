@@ -3664,21 +3664,21 @@ import Layout from '../layouts/Layout.astro';
       worldInfo.classList.toggle('show', show);
     }
     // Crossing into another galaxy: everything goes to light, then the other universe loads.
-    // Coming in from another galaxy in the balloon: start piloting just inside the edge where that galaxy lies,
-    // facing this one's heart, the way you'd fly in.
+    // Coming in from another galaxy in the balloon: you arrive facing this one's heart and its name, on the axis
+    // from the galaxy you came from, close enough to read it, the balloon still; fly on from there.
     function arriveFlying(a: { from: string; gas: number }){
       const k = worlds.findIndex(w => w.link.galaxy && (a.from ? w.link.galaxy.slug === a.from : w.link.galaxy.home));
       if(k < 0 || !worlds[k].home || !balloon || !controls) return false;
       const gate = worlds[k].home!.clone(), inward = gate.clone().multiplyScalar(-1).setY(0).normalize();
       enterPilot();
       if(!pilot) return false;
-      pilot.pos.copy(gate).addScaledVector(inward, worlds[k].size*1.9);
+      pilot.pos.copy(inward).multiplyScalar(-58).setY(2); // 58 out from the heart, on the side you came from
       pilot.heading = Math.atan2(inward.x, inward.z);
-      pilot.speed = TOP*.6;
+      pilot.speed = 0;
       gas = Math.max(0, Math.min(1, a.gas)); // what's left after crossing
       balloon.group.position.copy(pilot.pos);
       camera.position.copy(pilot.pos).addScaledVector(inward, -22).add(new THREE.Vector3(0, 6, 0));
-      look.copy(pilot.pos).addScaledVector(inward, 12);
+      look.copy(CENTER);
       camera.lookAt(look);
       // out of the light you crossed in
       const warp = $('warp');
