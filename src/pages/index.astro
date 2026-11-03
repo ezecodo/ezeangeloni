@@ -2291,7 +2291,20 @@ import Layout from '../layouts/Layout.astro';
       let sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
       // the voyage on its own: steer for the galaxy's heart (by the Sun first if the tank won't last), climb or sink to it
       if(p.auto && free){
-        const goal = p.auto.sun && sun ? sun.position : worlds[p.auto.k].mesh.position;
+        let goal = p.auto.sun && sun ? sun.position : worlds[p.auto.k].mesh.position;
+        // the Sun often lies right between two galaxies (opposite directions in the calendar): go round it, close
+        // enough to take some of its warmth into the tank, not into its heat
+        if(!p.auto.sun && sun){
+          const S = sun.position, d = goal.clone().sub(p.pos), L = d.length(), u = d.clone().divideScalar(L || 1), t = S.clone().sub(p.pos).dot(u);
+          if(t > 0 && t < L){
+            const closest = p.pos.clone().addScaledVector(u, t);
+            if(closest.distanceTo(S) < 150){
+              const side = closest.clone().sub(S).setY(0);
+              if(side.lengthSq() < 1) side.set(-u.z, 0, u.x);
+              goal = S.clone().addScaledVector(side.normalize(), 190).setY(S.y + 20);
+            }
+          }
+        }
         const want = Math.atan2(goal.x - p.pos.x, goal.z - p.pos.z), diff = Math.atan2(Math.sin(want - p.heading), Math.cos(want - p.heading));
         sx = -Math.max(-1, Math.min(1, diff*2));
         const there = p.auto.sun && sun && p.pos.distanceTo(sun.position) < 150;
