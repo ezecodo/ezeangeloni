@@ -5,6 +5,7 @@
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 
 const PUBLIC_ROOT = process.env.PUBLIC_ROOT || '/var/www/ezeangeloni.xyz/html';
 const FRASES_JSON = process.env.FRASES_JSON || path.join(PUBLIC_ROOT, 'frases.json');
@@ -12,6 +13,8 @@ const IMAGES_DIR = process.env.IMAGES_DIR || path.join(PUBLIC_ROOT, 'images');
 const TZ = process.env.TZ_LOCAL || 'Europe/Madrid';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '';
 const TELEGRAM_CHAT = process.env.TELEGRAM_CHAT || '';
+
+const THUMBS_DIR = path.join(IMAGES_DIR, 't');
 
 const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
@@ -119,11 +122,41 @@ async function storeImage(buf) {
   return { imagen: `/images/${name}`, type };
 }
 
+// A 384px JPEG beside every photo (images/t/<name>.jpg): the Cronovisor streams these by proximity
+// instead of downloading every full photo to shrink it in the browser.
+function ffmpeg(args) {
+  return new Promise((resolve, reject) => {
+    const p = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let err = '';
+    p.stderr.on('data', (d) => { err += d; });
+    p.on('error', reject);
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(err.slice(-300) || `ffmpeg ${code}`))));
+  });
+}
+export async function makeThumb(name) {
+  const out = path.join(THUMBS_DIR, name.replace(/\.\w+$/, '.jpg'));
+  if (existsSync(out)) return false;
+  await fs.mkdir(THUMBS_DIR, { recursive: true });
+  await ffmpeg(['-v', 'error', '-y', '-i', path.join(IMAGES_DIR, name), '-frames:v', '1',
+    '-vf', "scale='min(384,iw)':'min(384,ih)':force_original_aspect_ratio=decrease", '-q:v', '4', out]);
+  return true;
+}
+// On start: thumbnails for any photo that has none yet (the ones from before this existed, or the bot's).
+export async function backfillThumbs() {
+  const names = (await fs.readdir(IMAGES_DIR)).filter((n) => /\.(jpe?g|png|webp)$/i.test(n));
+  let made = 0;
+  for (const n of names) {
+    try { if (await makeThumb(n)) made++; } catch (e) { console.error('[thumbs]', n, e.message); }
+  }
+  if (made) console.log(`[thumbs] made ${made}`);
+}
+
 // `subida` marks the upload day: a piece dated before it went into the past, which the site uses
 // to keep the old #NNN links pointing where they did.
 export function addPhoto(buf, { fecha, caption }) {
   return withLock(async () => {
     const { imagen, type } = await storeImage(buf);
+    await makeThumb(imagen.split('/').pop()).catch((e) => console.error('[thumbs]', e.message));
     const date = validDate(fecha) ? fecha : (type === 'image/jpeg' && exifDate(buf)) || today();
     const entry = { imagen, caption: String(caption || '').trim().slice(0, 300), fecha: date, subida: today() };
     const data = await load();

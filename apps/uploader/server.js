@@ -5,7 +5,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { saveLinks, storeLinkImage } from './links.js';
-import { addPhoto, addText, fromTelegram, ensureImagesDir, monthLabel } from './frases.js';
+import { addPhoto, addText, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
 
 // === Config ===
 const PORT = parseInt(process.env.PORT || '3010', 10);
@@ -321,6 +321,7 @@ await ensureDir(SETS_DIR);
 await ensureDir(ARTWORKS_DIR);
 await ensureDir(ORIGINALS_DIR);
 await ensureImagesDir();
+backfillThumbs().catch((e) => console.error('[thumbs]', e.message)); // in the background
 
 // === express setup ===
 const app = express();

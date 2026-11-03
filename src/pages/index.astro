@@ -530,7 +530,7 @@ import Layout from '../layouts/Layout.astro';
     interface Piece {
       star?: THREE.Mesh; starMat?: THREE.ShaderMaterial; stage?: string; beat: number; bright: number; starMix: number;
       st: Station; i: number; mesh: THREE.Mesh; mat: THREE.ShaderMaterial;
-      w: number; h: number; lo?: THREE.Texture; hi?: THREE.Texture; hiBusy?: boolean;
+      w: number; h: number; lo?: THREE.Texture; hi?: THREE.Texture; hiBusy?: boolean; loBusy?: boolean;
       opacity: number; reveal: number; grow: number; halo?: THREE.Mesh;
     }
     const screen = $('screen') as HTMLCanvasElement;
@@ -662,12 +662,19 @@ import Layout from '../layouts/Layout.astro';
     }
     // Months are clusters on a spiral: same month stays together, older months sit further out.
     let gasSpots: THREE.Vector3[] = [];
+    // Months on a spiral that keeps its spacing however long the archive gets: about 30 apart along the curve
+    // and between turns (an Archimedean spiral walked at constant speed), newest at the centre.
+    function spiral(k: number){
+      const t = Math.sqrt(12.5*Math.max(0, k));
+      return { a: t + .6, r: 34 + 4.8*t };
+    }
+    let galaxyR = 92; // how far the oldest barrio lies; the overview, the pilot's reach and the worlds follow it
     function layout(){
       const months = [...new Set(stations.slice(1).map(s => s.date.slice(0,7)))].sort().reverse();
       const spots = new Map<string, THREE.Vector3>();
       months.forEach((m, k) => {
         const f = months.length > 1 ? k/(months.length-1) : 0;
-        const a = k*1.24 + .6, r = 34 + f*58;
+        const { a, r } = spiral(k);
         spots.set(m, new THREE.Vector3(Math.cos(a)*r, (k % 2 ? 1 : -1)*(8 + f*18), Math.sin(a)*r));
       });
       const count = new Map<string, number>();
@@ -692,9 +699,11 @@ import Layout from '../layouts/Layout.astro';
       }
       // Gas for the balloon: a nebula at each turn of the year, where one time gives way to an older one,
       // and the biggest beyond the oldest month. To keep flying you travel into the past.
+      galaxyR = spiral(Math.max(0, months.length-1)).r;
+      PILOT_R = Math.max(150, galaxyR + 45);
       const along = (k: number, out: number) => {
-        const f = months.length > 1 ? Math.min(1, k/(months.length-1)) : 0, a = k*1.24 + .6, r = Math.min(132, 34 + f*58 + out);
-        return new THREE.Vector3(Math.cos(a)*r, 0, Math.sin(a)*r);
+        const { a, r } = spiral(k);
+        return new THREE.Vector3(Math.cos(a)*(r + out), 0, Math.sin(a)*(r + out));
       };
       const ks: number[] = [];
       for(let k = 0; k < months.length-1; k++) if(months[k].slice(0,4) !== months[k+1].slice(0,4)) ks.push(k + .5);
@@ -807,27 +816,55 @@ import Layout from '../layouts/Layout.astro';
       });
     }
     // Thumbnails stream in from the centre outwards, a few at a time.
-    function queuePhotos(){
-      const queue = pieces.filter(p => p.st.src);
-      const next = () => {
-        const p = queue.shift();
-        if(!p) return;
-        const img = new Image();
-        img.onerror = next;
-        img.onload = () => {
-          const S = 384, k = Math.min(1, S/Math.max(img.naturalWidth, img.naturalHeight));
-          const cv = document.createElement('canvas');
-          cv.width = Math.round(img.naturalWidth*k); cv.height = Math.round(img.naturalHeight*k);
-          cv.getContext('2d')!.drawImage(img, 0, 0, cv.width, cv.height);
-          setSize(p, img.naturalWidth/img.naturalHeight);
-          p.lo = new THREE.CanvasTexture(cv);
-          p.lo.anisotropy = 4;
-          if(!p.hi) setMap(p, p.lo);
-          next();
-        };
-        img.src = p.st.src!;
+    // Thumbnails (384px, made by the server in images/t/) stream in by proximity: only the photos near the camera,
+    // or the balloon, get one, nearest first, a few at a time; far ones give theirs back. Hovered, focused and their
+    // neighbours always have one. A photo without a thumbnail (a set's artwork, or before the server made it) falls
+    // back to the full image.
+    const THUMB_NEAR = 100, THUMB_FAR = 160, THUMB_MAX = 120;
+    let thumbBusy = 0, thumbAt = 0;
+    const thumbOf = (src: string) => /^\/images\/[^/]+\.\w+$/.test(src) ? src.replace(/^\/images\/([^/]+)\.\w+$/, '/images/t/$1.jpg') : src;
+    function queuePhotos(){ thumbAt = 0; }
+    function loadThumb(p: Piece){
+      if(p.lo || p.loBusy || !p.st.src) return;
+      p.loBusy = true; thumbBusy++;
+      const img = new Image(), done = () => { p.loBusy = false; thumbBusy--; };
+      img.onerror = () => { if(img.src.includes('/images/t/') && p.st.src){ img.src = p.st.src; } else done(); };
+      img.onload = () => {
+        done();
+        const S = 384, k = Math.min(1, S/Math.max(img.naturalWidth, img.naturalHeight));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.naturalWidth*k); cv.height = Math.round(img.naturalHeight*k);
+        cv.getContext('2d')!.drawImage(img, 0, 0, cv.width, cv.height);
+        setSize(p, img.naturalWidth/img.naturalHeight);
+        p.lo = new THREE.CanvasTexture(cv);
+        p.lo.anisotropy = 4;
+        if(!p.hi) setMap(p, p.lo);
       };
-      for(let k = 0; k < 5; k++) next();
+      img.src = thumbOf(p.st.src);
+    }
+    function dropThumb(p: Piece){
+      if(!p.lo || !p.st.src) return;
+      p.lo.dispose();
+      p.lo = undefined;
+      if(!p.hi){ p.mat.uniforms.uMap.value = blank; p.mat.uniforms.uHas.value = 0; }
+    }
+    function manageThumbs(now: number){
+      if(now < thumbAt || !pieces.length) return;
+      thumbAt = now + 350;
+      const eyes = [camera.position];
+      if(pilot) eyes.push(pilot.pos);
+      const keep = new Set([hovered, focused, focused-1, focused+1, shown]);
+      const photos = pieces.filter(p => p.st.src).map(p => ({ p, d: Math.min(...eyes.map(e => e.distanceTo(p.mesh.position))) - (keep.has(p.i) ? 1e4 : 0) }));
+      photos.sort((a, b) => a.d - b.d);
+      photos.forEach(({ p, d }, rank) => {
+        if(((d < THUMB_NEAR && rank < THUMB_MAX) || d < 0) && thumbBusy < 4) loadThumb(p);
+      });
+      // give back only when over budget, farthest first, so orbiting around doesn't load the same ones again and again
+      let loaded = photos.filter(q => q.p.lo).length;
+      for(let k = photos.length-1; k >= 0 && loaded > THUMB_MAX; k--){
+        const { p, d } = photos[k];
+        if(p.lo && d > THUMB_FAR){ dropThumb(p); loaded--; }
+      }
     }
     function loadHi(p: Piece){
       if(p.hi || p.hiBusy || p.st.kind === 'home') return;
@@ -854,6 +891,7 @@ import Layout from '../layouts/Layout.astro';
       p.hi.dispose();
       p.hi = undefined;
       if(p.lo) setMap(p, p.lo);
+      else { p.mat.uniforms.uMap.value = blank; p.mat.uniforms.uHas.value = 0; }
     }
     function roundSprite(){
       const cv = document.createElement('canvas');
@@ -1661,7 +1699,8 @@ import Layout from '../layouts/Layout.astro';
     interface Homing { t0: number; from: THREE.Vector3; ctrl: THREE.Vector3; to: THREE.Vector3; dur: number; landed: number; }
     let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number } | null = null;
     let padRepeat = 0;
-    const PILOT_R = 150, PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
+    let PILOT_R = 150;
+    const PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
     // The keyboard drives the same virtual pad, so everything below works the same without a joystick:
     // WASD always (that's how you take off); arrows, space, E/Enter, Q/Backspace only once you're flying,
     // so before that they keep browsing the archive as always. T (leave a word) and Esc have their own keys.
@@ -2100,7 +2139,7 @@ import Layout from '../layouts/Layout.astro';
       pilot.speed = 0;
       playNote(NOTES[0]/2);
     }
-    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, visit: (k: number) => visitWorld(k) };
+    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get pieces(){ return pieces; }, visit: (k: number) => visitWorld(k) };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
       const p = pilot;
@@ -2361,7 +2400,7 @@ import Layout from '../layouts/Layout.astro';
       renderer.setSize(W, H, false);
       camera.aspect = W/H;
       camera.updateProjectionMatrix();
-      overviewR = 112*Math.max(1, Math.pow(1.2/camera.aspect, .8));
+      overviewR = Math.max(112, galaxyR*1.22)*Math.max(1, Math.pow(1.2/camera.aspect, .8));
       if(controls) controls.maxDistance = overviewR*1.5;
       composer?.setPixelRatio(DPR);
       composer?.setSize(W, H);
@@ -2421,6 +2460,7 @@ import Layout from '../layouts/Layout.astro';
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
       updateGas(dt, frozen ? 0 : dt, now);
       updateWorlds(frozen ? 0 : dt);
+      manageThumbs(now);
       if(pointerFresh && balloon && focused < 0 && !flight && !boarded){
         const near = balloon.mode === 'cruise' && Math.hypot((ndc.x+1)/2*window.innerWidth-balloon.sx, (1-ndc.y)/2*window.innerHeight-balloon.sy) < 56;
         if(near !== hoverBalloon){
@@ -2534,7 +2574,8 @@ import Layout from '../layouts/Layout.astro';
         cell.className = 'cell';
         if(st.src){
           const img = document.createElement('img');
-          img.loading = 'lazy'; img.alt = st.text; img.src = st.src;
+          img.loading = 'lazy'; img.alt = st.text; img.src = thumbOf(st.src);
+          img.onerror = () => { if(img.src.includes('/images/t/')) img.src = st.src!; };
           cell.appendChild(img);
         } else {
           const tx = document.createElement('span');
@@ -2799,8 +2840,8 @@ import Layout from '../layouts/Layout.astro';
         openIndex();
         return;
       }
-      resize();
       buildSpace();
+      resize(); // after the layout: the overview stands back as far as the galaxy reaches
       showMeta(0);
       if(controls){
         controls.enableDamping = true; controls.dampingFactor = .06;
@@ -2941,7 +2982,7 @@ import Layout from '../layouts/Layout.astro';
         const rng = makeRng(w.seed);
         let best: THREE.Vector3 | null = null, bestGap = -1;
         for(let t = 0; t < 80; t++){
-          const a = rng()*Math.PI*2, r = 46 + rng()*70, y = (rng()-.5)*44;
+          const a = rng()*Math.PI*2, r = 46 + rng()*Math.max(70, galaxyR - 22), y = (rng()-.5)*44;
           const p = new THREE.Vector3(Math.cos(a)*r, y, Math.sin(a)*r);
           const gap = Math.min(
             ...pieces.slice(1).map(q => q.mesh.position.distanceTo(p) - 14),
