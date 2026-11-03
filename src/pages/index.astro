@@ -63,6 +63,7 @@ import Layout from '../layouts/Layout.astro';
       /* the galaxies marked as on a star chart: a thin ellipse and a catalogue name; off screen, at the edge, pointing */
       #sky-marks { position: fixed; inset: 0; z-index: 11; pointer-events: none; transition: opacity .4s; }
       body.focus #sky-marks, body.aboard #sky-marks, body.selecting #sky-marks { opacity: 0; }
+      .sky-mark.open, .sky-mark.closed { pointer-events: auto; } /* a galaxy's name takes you there */
       .sky-mark { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: .55rem; font-size: .58rem; letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 0 8px rgba(8,8,16,.95); will-change: transform; }
       .sky-mark i { flex: none; width: 46px; height: 20px; border: 1px solid currentColor; border-radius: 50%; transform: rotate(-16deg); opacity: .75; }
       .sky-mark b { display: none; flex: none; font-weight: 400; font-size: .9rem; }
@@ -2500,6 +2501,8 @@ import Layout from '../layouts/Layout.astro';
       if(e.target !== screen || boarded) return;
       if(focused >= 0 && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)){ stepFocus(dx < 0 ? 1 : -1); return; }
       if(Math.hypot(dx, dy) > 7 || !quick) return;
+      setNdc(e);
+      if(focused < 0 && worldAt < 0){ const w = pickWorld(); if(w >= 0){ visitWorld(w); return; } } // a world (or a far galaxy) before the balloon
       if(focused < 0 && balloon && balloon.mode === 'cruise' && Math.hypot(e.clientX-balloon.sx, e.clientY-balloon.sy) < 56){ board(); return; }
       if(focused >= 0 && balloon && balloon.peek > .5 && Math.hypot(e.clientX-balloon.sx, e.clientY-balloon.sy) < 64){ backOut(); return; }
       setNdc(e);
@@ -3257,6 +3260,7 @@ import Layout from '../layouts/Layout.astro';
       el.className = 'sky-mark ' + (g.open ? 'open' : 'closed');
       el.innerHTML = '<i></i><b>➤</b><span></span>';
       el.querySelector('span')!.textContent = `${w.link.label} · CV ${catalogue(g)}`;
+      el.addEventListener('click', e => { e.stopPropagation(); goToWorld(w); });
       $('sky-marks').append(el);
       w.mark = el;
     }
@@ -3547,7 +3551,27 @@ import Layout from '../layouts/Layout.astro';
       if(!worlds.length) return -1;
       ray.setFromCamera(ndc, camera);
       const hit = ray.intersectObjects(worlds.filter(w => w.mesh.visible).map(w => w.mesh), false)[0];
-      return hit ? hit.object.userData.world as number : -1;
+      if(hit) return hit.object.userData.world as number;
+      // a galaxy far away is a few pixels wide: a click near its heart counts
+      const cx = (ndc.x+1)/2*window.innerWidth, cy = (1-ndc.y)/2*window.innerHeight;
+      let best = -1, bestD = 34;
+      worlds.forEach((w, k) => {
+        if(!w.link.galaxy || !w.home) return;
+        const v = w.mesh.position.clone().project(camera);
+        if(v.z > 1) return;
+        const d = Math.hypot((v.x+1)/2*window.innerWidth - cx, (1-v.y)/2*window.innerHeight - cy);
+        if(d < bestD){ best = k; bestD = d; }
+      });
+      return best;
+    }
+    // from a mark: leave the balloon if you're in it, and fly there
+    function goToWorld(w: World){
+      const k = worlds.indexOf(w);
+      if(k < 0 || boarded) return;
+      if(focused >= 0) backOutNow();
+      if(pilot) exitPilot();
+      flight = null;
+      visitWorld(k);
     }
     function showWorldMeta(k: number){
       const l = worlds[k].link;
