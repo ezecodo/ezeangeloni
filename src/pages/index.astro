@@ -2876,8 +2876,27 @@ import Layout from '../layouts/Layout.astro';
       c.globalAlpha = .55; c.fillStyle = lit; c.fill(); c.globalAlpha = 1;
       c.strokeStyle = tint; c.globalAlpha = .55; c.lineWidth = 3; c.stroke(); c.globalAlpha = 1;
       if(img && img.naturalWidth){
-        const k = Math.min(R*1.15/img.naturalWidth, R*1.15/img.naturalHeight);
+        // a logo on a solid ground (ila's red square): the whole planet takes that colour and the logo is cut
+        // into the disc, so it reads as one full circle; shaded a touch so it's still a body
+        const probe = document.createElement('canvas');
+        probe.width = probe.height = 1;
+        const pc = probe.getContext('2d')!;
+        pc.drawImage(img, 1, 1, 1, 1, 0, 0, 1, 1);
+        const [r, g2, b, a] = pc.getImageData(0, 0, 1, 1).data;
+        c.save();
+        c.beginPath(); c.arc(cx, cy, R, 0, Math.PI*2); c.clip();
+        if(a > 200) c.fillStyle = `rgb(${r},${g2},${b})`, c.fillRect(cx - R, cy - R, R*2, R*2);
+        const k = a > 200 ? Math.max(R*1.5/img.naturalWidth, R*1.5/img.naturalHeight) : Math.min(R*1.15/img.naturalWidth, R*1.15/img.naturalHeight);
         c.drawImage(img, cx - img.naturalWidth*k/2, cy - img.naturalHeight*k/2, img.naturalWidth*k, img.naturalHeight*k);
+        if(a > 200){
+          const hi = c.createRadialGradient(cx - R*.45, cy - R*.5, 0, cx - R*.45, cy - R*.5, R*1.1);
+          hi.addColorStop(0, 'rgba(255,255,255,.16)'); hi.addColorStop(1, 'rgba(255,255,255,0)');
+          c.fillStyle = hi; c.fillRect(cx - R, cy - R, R*2, R*2);
+          const rim = c.createRadialGradient(cx, cy, R*.62, cx, cy, R);
+          rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(1, 'rgba(0,0,0,.38)');
+          c.fillStyle = rim; c.fillRect(cx - R, cy - R, R*2, R*2);
+        }
+        c.restore();
       } else {
         const words = (l.font === 'mono' ? l.label.toUpperCase() : l.label).split(' ');
         const lines = words.length > 1 ? [words.slice(0, Math.ceil(words.length/2)).join(' '), words.slice(Math.ceil(words.length/2)).join(' ')] : words;
