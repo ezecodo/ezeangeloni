@@ -368,7 +368,7 @@
     </section>
 
     <section class="tab" id="tab-links">
-      <p class="hint">links to your other work, small planets orbiting your logo · text or an image (a logo)</p>
+      <p class="hint">your other work, as planets in the galaxy · a name or a logo, what it is, its stack</p>
       <div id="linkRows"></div>
       <div class="link-actions" style="margin-top:.9rem">
         <button class="ghost" id="linkAdd" type="button">+ add link</button>
@@ -2108,8 +2108,12 @@
   // ===== LINKS =====
   // What floats over the Cronovisor. Same defaults as the site until links.json exists.
   const DEFAULT_LINKS = [
-    { label: 'Fábrica de trapos', url: 'https://trapos.xyz', font: 'malvinas' },
-    { label: 'ila', url: 'https://www.ila-web.de', image: '/img/ila.png' },
+    { label: 'Fábrica de trapos', url: 'https://trapos.xyz', font: 'malvinas',
+      description: 'Una herramienta para escribir con la letra que nació de una sábana de hotel: en la semifinal de Argentina contra Inglaterra alguien la pintó a mano y los jugadores la mostraron a cámara. Juanma la convirtió en tipografía; yo construí la fábrica alrededor y extendí la fuente, con sus acentos dibujados a mano. Escribís, elegís tamaño, color y formato, y la descargás para la bandera, la remera o la pared. Todo pasa en tu navegador.',
+      tags: ['Astro', 'Canvas', 'tipografía', 'self-hosted'] },
+    { label: 'ila', url: 'https://www.ila-web.de', image: '/img/ila.png',
+      description: 'La nueva casa digital de ila, la revista sobre América Latina que se publica en Alemania desde 1975. Migré más de 2.000 artículos desde Drupal 7 a una base propia y construí el sitio bilingüe, en alemán y español: el archivo de todas las ediciones, búsqueda por región y tema, un mapa de artículos, suscripciones y un panel editorial con traducción automática.',
+      tags: ['Next.js', 'Prisma', 'MySQL', 'DeepL', 'DE · ES'] },
   ];
   let links = [];
   function linkRow(l, i) {
@@ -2129,6 +2133,8 @@
         </select>
         <input type="file" data-k="file" accept="image/png,image/jpeg,image/webp" ${style === 'image' ? '' : 'hidden'}>
       </div>
+      <textarea data-k="description" maxlength="900" placeholder="what it is: shown beside the planet" style="margin-top:.5rem;min-height:90px;font-family:'Cormorant Garamond',serif;font-size:1rem"></textarea>
+      <input type="text" data-k="tags" placeholder="stack, comma separated: Next.js, Prisma, …" style="margin-top:.5rem;padding:.45rem .6rem;font-size:.72rem">
       <div class="link-actions">
         <button class="ghost" type="button" data-a="up" ${i === 0 ? 'disabled' : ''}>↑</button>
         <button class="ghost" type="button" data-a="down" ${i === links.length - 1 ? 'disabled' : ''}>↓</button>
@@ -2147,6 +2153,10 @@
     q('label').value = l.label || '';
     q('url').value = l.url || '';
     q('style').value = style;
+    q('description').value = l.description || '';
+    q('tags').value = (l.tags || []).join(', ');
+    q('description').addEventListener('input', (e) => { l.description = e.target.value; });
+    q('tags').addEventListener('input', (e) => { l.tags = e.target.value.split(',').map(t => t.trim()).filter(Boolean); });
     q('label').addEventListener('input', (e) => { l.label = e.target.value; paint(); });
     q('url').addEventListener('input', (e) => { l.url = e.target.value.trim(); paint(); });
     q('style').addEventListener('change', (e) => {

@@ -1,5 +1,5 @@
-// Links to Eze's other work that float over the Cronovisor (links.json), edited from the admin's links tab.
-// Text (in one of three type styles) or an uploaded image (a logo). Lives only on the VPS, like frases.json.
+// Eze's other work, shown as planets in the Cronovisor's galaxy (links.json), edited from the admin's links tab.
+// Text (in one of three type styles) or an uploaded image (a logo), plus a description and its stack. Lives only on the VPS, like frases.json.
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -26,6 +26,11 @@ export function cleanLinks(list) {
     const out = { label, url };
     if (image) out.image = image;
     else out.font = FONTS.includes(l.font) ? l.font : 'serif';
+    const description = String(l?.description || '').trim().slice(0, 900);
+    if (description) out.description = description;
+    const tags = (Array.isArray(l?.tags) ? l.tags : String(l?.tags || '').split(','))
+      .map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 10);
+    if (tags.length) out.tags = tags;
     return out;
   });
 }

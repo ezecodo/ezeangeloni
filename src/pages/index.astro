@@ -54,10 +54,23 @@ import Layout from '../layouts/Layout.astro';
       #act[hidden] { display: none; }
       .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-      /* the way out of a world orbiting the logo (a link to Eze's other work) */
-      #world-visit { position: fixed; top: 0; left: 0; z-index: 12; font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; text-decoration: none; white-space: nowrap; padding: .55rem .8rem; border: 1px solid rgba(110,249,245,.45); background: rgba(8,8,16,.55); opacity: 0; pointer-events: none; transition: opacity .35s; }
-      #world-visit.show { opacity: 1; pointer-events: auto; }
+      /* a world (a piece of Eze's other work): what it is, beside the planet, and the only way out to it */
+      #world-info { position: fixed; right: 2.4rem; top: 50%; transform: translateY(-46%); z-index: 12; width: min(400px, 38vw); opacity: 0; pointer-events: none; transition: opacity .45s, transform .45s; text-shadow: 0 0 18px rgba(8,8,16,.9); }
+      #world-info.show { opacity: 1; pointer-events: auto; transform: translateY(-50%); }
+      #world-kicker { font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+      #world-title { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(2rem, 3.6vw, 3.2rem); line-height: 1; margin: .5rem 0 1rem; }
+      #world-desc { font-family: var(--serif); font-weight: 300; font-size: 1.12rem; line-height: 1.45; color: var(--text); }
+      #world-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1.1rem 0 1.4rem; }
+      #world-tags span { font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; padding: .3rem .5rem; border: 1px solid rgba(240,237,232,.22); }
+      #world-visit { display: inline-block; font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; text-decoration: none; padding: .6rem .9rem; border: 1px solid rgba(110,249,245,.45); background: rgba(8,8,16,.55); }
       #world-visit:hover { background: rgba(110,249,245,.12); }
+      @media (max-width: 640px) {
+        #world-info { right: 1rem; left: 1rem; width: auto; top: auto; bottom: 4.4rem; transform: translateY(12px); }
+        #world-info.show { transform: none; }
+        #world-title { font-size: 1.9rem; margin: .3rem 0 .6rem; }
+        #world-desc { font-size: .98rem; max-height: 30vh; overflow: auto; }
+        #world-tags { margin: .7rem 0 .9rem; }
+      }
 
       /* overlays: hard-edged black sheets instead of the old floating glass cards */
       .sheet { position: fixed; inset: 0; z-index: 100; background: var(--bg); overflow-y: auto; opacity: 0; pointer-events: none; transition: opacity .25s steps(4); padding: 4.5rem 1.4rem 3rem; }
@@ -90,7 +103,7 @@ import Layout from '../layouts/Layout.astro';
       #msg-thanks { display: none; }
       #msg-thanks p { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(2.6rem,8vw,6rem); margin-bottom: .6rem; }
       #msg-thanks small { font-size: .72rem; color: var(--muted); letter-spacing: .1em; }
-      body.aboard #hud, body.aboard #world-visit { opacity: 0; pointer-events: none; }
+      body.aboard #hud, body.aboard #world-info { opacity: 0; pointer-events: none; }
       body.aboard #hud * { pointer-events: none; }
       #pilot-hud { position: fixed; left: 50%; top: 3.4rem; transform: translateX(-50%); z-index: 12; font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .5s; text-shadow: 0 0 10px rgba(8,8,16,.9); }
       body.pilot #pilot-hud { opacity: .72; }
@@ -206,7 +219,13 @@ import Layout from '../layouts/Layout.astro';
     </div>
   </div>
   <p id="now" class="sr" aria-live="polite"></p>
-  <a id="world-visit" target="_blank" rel="noopener"></a>
+  <aside id="world-info" aria-live="polite">
+    <p id="world-kicker"></p>
+    <h2 id="world-title"></h2>
+    <p id="world-desc"></p>
+    <p id="world-tags"></p>
+    <a id="world-visit" target="_blank" rel="noopener"></a>
+  </aside>
 
   <div id="index-sheet" class="sheet">
     <button class="close" id="index-close">close ✕</button>
@@ -732,6 +751,7 @@ import Layout from '../layouts/Layout.astro';
       buildNebulae();
       buildWind();
       buildBalloon();
+      placeWorlds();
       cards();
       queuePhotos();
     }
@@ -2785,24 +2805,28 @@ import Layout from '../layouts/Layout.astro';
       requestAnimationFrame(frame);
     });
 
-    // ── Elsewhere: worlds orbiting the logo ───────────────────────
-    // Links to Eze's other work (Fábrica de trapos, ila, …) are small ringed planets circling the logo, slowly,
-    // between it and the newest barrio: his other worlds turn around him. Edited from the admin (links tab →
-    // links.json on the VPS); these defaults show until that file exists. Hovering names one; clicking flies there
-    // and only then offers "visit … ↗", so nobody is thrown out of the universe by accident. Piloting, coming close
-    // offers the same. Text links are set in their own type style, image links show their logo.
-    interface SiteLink { label: string; url: string; image?: string; font?: 'malvinas' | 'serif' | 'mono'; }
+    // ── Elsewhere: worlds scattered through the galaxy ─────────────
+    // Eze's other work (Fábrica de trapos, ila, …) as small ringed planets, each in its own place in the galaxy,
+    // out among the barrios and away from the logo, turning slowly on a little orbit of their own. The place is
+    // seeded by the link, so it stays put between visits and anyone can find it again. Edited from the admin (links
+    // tab → links.json on the VPS: text or logo, a description, the stack); these defaults show until that file exists.
+    // Hovering names one; clicking flies there and opens what it is beside the planet (`#world-info`), with the only
+    // button that leaves for the site. Piloting, coming close to one opens the same, as pieces reveal themselves.
+    interface SiteLink { label: string; url: string; image?: string; font?: 'malvinas' | 'serif' | 'mono'; description?: string; tags?: string[]; }
     const DEFAULT_LINKS: SiteLink[] = [
-      { label: 'Fábrica de trapos', url: 'https://trapos.xyz', font: 'malvinas' },
-      { label: 'ila', url: 'https://www.ila-web.de', image: '/img/ila.png' },
+      { label: 'Fábrica de trapos', url: 'https://trapos.xyz', font: 'malvinas',
+        description: 'Una herramienta para escribir con la letra que nació de una sábana de hotel: en la semifinal de Argentina contra Inglaterra alguien la pintó a mano y los jugadores la mostraron a cámara. Juanma la convirtió en tipografía; yo construí la fábrica alrededor y extendí la fuente, con sus acentos dibujados a mano. Escribís, elegís tamaño, color y formato, y la descargás para la bandera, la remera o la pared. Todo pasa en tu navegador.',
+        tags: ['Astro', 'Canvas', 'tipografía', 'self-hosted'] },
+      { label: 'ila', url: 'https://www.ila-web.de', image: '/img/ila.png',
+        description: 'La nueva casa digital de ila, la revista sobre América Latina que se publica en Alemania desde 1975. Migré más de 2.000 artículos desde Drupal 7 a una base propia y construí el sitio bilingüe, en alemán y español: el archivo de todas las ediciones, búsqueda por región y tema, un mapa de artículos, suscripciones y un panel editorial con traducción automática.',
+        tags: ['Next.js', 'Prisma', 'MySQL', 'DeepL', 'DE · ES'] },
     ];
-    interface World { link: SiteLink; mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; phase: number; r: number; tilt: number; }
+    interface World { link: SiteLink; mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; home: THREE.Vector3 | null; phase: number; seed: number; }
     let worlds: World[] = [];
-    let worldAt = -1, hoverWorld = -1;
-    const visitEl = $('world-visit') as HTMLAnchorElement;
-    const ORBIT_R = 24, ORBIT_SPEED = Math.PI*2/240; // one turn every four minutes
+    let worldAt = -1, hoverWorld = -1, worldShown = -1;
+    const worldInfo = $('world-info'), visitEl = $('world-visit') as HTMLAnchorElement;
     const host = (url: string) => { try { return new URL(url).host.replace(/^www\./, ''); } catch { return url; } };
-    // the planet: a disc in the link's colour with its logo or name, crossed by a tilted ring
+    // the planet: a disc lit in the link's colour with its logo or name, crossed by a tilted ring
     function worldCard(l: SiteLink, tint: string, img?: HTMLImageElement){
       const S = 512, cv = document.createElement('canvas');
       cv.width = cv.height = S;
@@ -2821,7 +2845,6 @@ import Layout from '../layouts/Layout.astro';
       g.addColorStop(0, '#2a2438'); g.addColorStop(.75, '#120f1c'); g.addColorStop(1, '#0a0812');
       c.fillStyle = g;
       c.beginPath(); c.arc(cx, cy, R, 0, Math.PI*2); c.fill();
-      // lit from one side in its own colour, so it reads as a body among the stars
       const lit = c.createRadialGradient(cx - R*.45, cy - R*.5, 0, cx - R*.2, cy - R*.2, R*1.25);
       lit.addColorStop(0, tint); lit.addColorStop(1, 'rgba(0,0,0,0)');
       c.globalAlpha = .55; c.fillStyle = lit; c.fill(); c.globalAlpha = 1;
@@ -2830,11 +2853,10 @@ import Layout from '../layouts/Layout.astro';
         const k = Math.min(R*1.15/img.naturalWidth, R*1.15/img.naturalHeight);
         c.drawImage(img, cx - img.naturalWidth*k/2, cy - img.naturalHeight*k/2, img.naturalWidth*k, img.naturalHeight*k);
       } else {
-        const font = l.font === 'malvinas' ? "'MalvinasSans', sans-serif" : l.font === 'mono' ? "'DM Mono', monospace" : "italic 300 0px 'Cormorant Garamond', serif";
         const words = (l.font === 'mono' ? l.label.toUpperCase() : l.label).split(' ');
         const lines = words.length > 1 ? [words.slice(0, Math.ceil(words.length/2)).join(' '), words.slice(Math.ceil(words.length/2)).join(' ')] : words;
         let size = 90;
-        const set = () => { c.font = l.font === 'serif' || !l.font ? `italic 300 ${size}px 'Cormorant Garamond', serif` : `${size}px ${font}`; };
+        const set = () => { c.font = l.font === 'malvinas' ? `${size}px 'MalvinasSans', sans-serif` : l.font === 'mono' ? `${size}px 'DM Mono', monospace` : `italic 300 ${size}px 'Cormorant Garamond', serif`; };
         set();
         while(size > 18 && Math.max(...lines.map(t => c.measureText(t).width)) > R*1.6){ size -= 4; set(); }
         c.fillStyle = '#f0ede8'; c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -2854,24 +2876,47 @@ import Layout from '../layouts/Layout.astro';
         const mesh = new THREE.Mesh(plane, mat);
         mesh.scale.set(13, 13, 1);
         mesh.userData.world = k;
+        mesh.visible = false; // until it has a place
         scene.add(mesh);
         billboards.push(mesh);
         const paint = (img?: HTMLImageElement) => { mat.map?.dispose(); mat.map = worldCard(link, tint, img); mat.needsUpdate = true; };
-        if(link.image){ const img = new Image(); img.onload = () => paint(img); img.src = link.image; paint(); }
+        if(link.image){ const img = new Image(); img.onload = () => paint(img); img.src = link.image; }
         else document.fonts.ready.then(() => paint());
         paint();
-        return { link, mesh, mat, phase: k/ok.length*Math.PI*2, r: ORBIT_R + (k % 3)*1.6, tilt: .32 + (k % 2)*.12 };
+        return { link, mesh, mat, home: null, phase: 0, seed: Number.parseInt(hash36(link.url), 36) };
       });
-      updateWorlds(0);
+      placeWorlds();
     }
-    function worldPos(w: World){
-      const a = w.phase;
-      return new THREE.Vector3(Math.cos(a)*w.r, Math.sin(a)*w.r*Math.sin(w.tilt), Math.sin(a)*w.r*Math.cos(w.tilt));
+    // A place for each world, seeded by its address: out in the galaxy, clear of the logo, the pieces,
+    // the nebulae and each other.
+    function placeWorlds(){
+      if(!pieces.length) return; // the galaxy isn't laid out yet: buildSpace calls back
+      const taken: THREE.Vector3[] = [];
+      for(const w of worlds){
+        const rng = makeRng(w.seed);
+        let best: THREE.Vector3 | null = null, bestGap = -1;
+        for(let t = 0; t < 80; t++){
+          const a = rng()*Math.PI*2, r = 46 + rng()*70, y = (rng()-.5)*44;
+          const p = new THREE.Vector3(Math.cos(a)*r, y, Math.sin(a)*r);
+          const gap = Math.min(
+            ...pieces.slice(1).map(q => q.mesh.position.distanceTo(p) - 14),
+            ...gasSpots.map(g => g.distanceTo(p) - 30),
+            ...taken.map(o => o.distanceTo(p) - 36),
+          );
+          if(gap > bestGap){ best = p; bestGap = gap; }
+          if(gap > 0) break;
+        }
+        w.home = best!;
+        w.phase = rng()*Math.PI*2;
+        taken.push(best!);
+        w.mesh.visible = true;
+      }
+      updateWorlds(0);
     }
     function pickWorld(){
       if(!worlds.length) return -1;
       ray.setFromCamera(ndc, camera);
-      const hit = ray.intersectObjects(worlds.map(w => w.mesh), false)[0];
+      const hit = ray.intersectObjects(worlds.filter(w => w.mesh.visible).map(w => w.mesh), false)[0];
       return hit ? hit.object.userData.world as number : -1;
     }
     function showWorldMeta(k: number){
@@ -2879,19 +2924,34 @@ import Layout from '../layouts/Layout.astro';
       metaId.textContent = `elsewhere · ${host(l.url)}`;
       metaCap.textContent = l.label || host(l.url);
     }
+    function fillWorldInfo(k: number){
+      if(worldShown === k) return;
+      worldShown = k;
+      const l = worlds[k].link;
+      $('world-kicker').textContent = `elsewhere · ${host(l.url)}`;
+      $('world-title').textContent = l.label || host(l.url);
+      $('world-desc').textContent = l.description || '';
+      $('world-tags').replaceChildren(...(l.tags || []).map(t => { const e = document.createElement('span'); e.textContent = t; return e; }));
+      visitEl.href = l.url;
+      visitEl.textContent = `visit ${host(l.url)} ↗`;
+    }
     function visitWorld(k: number){
       const w = worlds[k];
-      if(!w || flight) return;
+      if(!w || !w.home || flight) return;
       touched();
       if(worldAt < 0 && controls){ controls.enabled = false; overviewPos.copy(camera.position); }
       worldAt = k;
       const at = w.mesh.position.clone();
-      // seen from outside its orbit, looking in: the planet in front, the logo it turns around behind it
-      const dir = at.clone().setY(0).normalize().add(new THREE.Vector3(0, .28, 0)).normalize();
+      // from the side of the galaxy's centre, the planet a little to the left: its story reads to the right
+      const dir = at.clone().setY(0).normalize().negate().add(new THREE.Vector3(0, .25, 0)).normalize();
+      const from = at.clone().addScaledVector(dir, 26);
+      const fwd = at.clone().sub(from).normalize(), right = fwd.clone().cross(new THREE.Vector3(0, 1, 0)).normalize();
+      const narrow = window.innerWidth < 640;
+      const look = narrow ? at.clone().add(new THREE.Vector3(0, -6, 0)) : at.clone().addScaledVector(right, 7);
       btnBack.hidden = false;
       showWorldMeta(k);
       playNote(NOTES[5]);
-      flyTo(at.clone().addScaledVector(dir, 24), at, 1500);
+      flyTo(from, look, 1600);
     }
     function leaveWorld(){
       if(worldAt < 0) return;
@@ -2901,26 +2961,20 @@ import Layout from '../layouts/Layout.astro';
       const to = overviewPos.lengthSq() ? overviewPos.clone() : new THREE.Vector3(0, overviewR*.34, overviewR);
       flyTo(to, CENTER.clone(), 1500, () => { if(controls){ controls.target.copy(CENTER); controls.enabled = true; } });
     }
-    // they turn with the universe's clock (and hold still while you're at one, or the universe is paused)
+    // each turns on a small orbit of its own, on the universe's clock (still while you're at it, or paused)
     function updateWorlds(dt: number){
-      let offer = -1;
+      let open = -1;
       worlds.forEach((w, k) => {
-        if(k !== worldAt) w.phase += dt*ORBIT_SPEED*(1 - (k % 2)*.25);
-        w.mesh.position.copy(worldPos(w));
+        if(!w.home) return;
+        if(k !== worldAt) w.phase += dt*Math.PI*2/90;
+        w.mesh.position.set(w.home.x + Math.cos(w.phase)*2.4, w.home.y + Math.sin(w.phase*2)*.8, w.home.z + Math.sin(w.phase)*2.4);
         w.mesh.scale.setScalar(k === hoverWorld || k === worldAt ? 14 : 13);
-        if(pilot && focused < 0 && !pilot.home && w.mesh.position.distanceTo(pilot.pos) < 14) offer = k;
+        if(pilot && focused < 0 && !pilot.home && w.mesh.position.distanceTo(pilot.pos) < 22) open = k;
       });
-      if(worldAt >= 0 && !flight) offer = worldAt;
-      const show = offer >= 0 && !boarded;
-      visitEl.classList.toggle('show', show);
-      if(!show) return;
-      const w = worlds[offer], label = `visit ${host(w.link.url)} ↗`;
-      if(visitEl.href !== w.link.url) visitEl.href = w.link.url;
-      if(visitEl.textContent !== label) visitEl.textContent = label;
-      const v = w.mesh.position.clone().project(camera), r = rectOf({ mesh: w.mesh, w: 9, h: 9, grow: 1, starMix: 0 } as Piece, 0);
-      const x = Math.max(90, Math.min(window.innerWidth-90, (v.x+1)/2*window.innerWidth));
-      const y = Math.min(window.innerHeight-120, (1-v.y)/2*window.innerHeight + r.h/2 + 10);
-      visitEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, 0)`;
+      if(worldAt >= 0 && !flight) open = worldAt;
+      const show = open >= 0 && !boarded;
+      if(show) fillWorldInfo(open);
+      worldInfo.classList.toggle('show', show);
     }
     buildWorlds(DEFAULT_LINKS);
     fetch('/links.json', { cache: 'no-store' })
