@@ -39,11 +39,24 @@ async function save(data) {
   const tmp = GALAXIES_JSON + '.tmp';
   await fs.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
   await fs.rename(tmp, GALAXIES_JSON);
-  // what the site is allowed to know
-  const pub = { galaxies: data.galaxies.map((g) => (g.public ? { slug: g.slug, name: g.name, public: true, dir: dirName(g) } : { slug: g.slug, name: g.name, public: false })) };
+  // what the site is allowed to know: never a birth date, only the kin it gives
+  const pub = {
+    main: { kin: kinOf(data.main?.born) },
+    galaxies: data.galaxies.map((g) => ({ slug: g.slug, name: g.name, public: !!g.public, kin: kinOf(g.born), ...(g.public ? { dir: dirName(g) } : {}) })),
+  };
   await fs.writeFile(PUBLIC_JSON + '.tmp', JSON.stringify(pub, null, 2) + '\n');
   await fs.rename(PUBLIC_JSON + '.tmp', PUBLIC_JSON);
 }
+
+// The Tzolk'in kin of a birth date (GMT correlation: 21 Dec 2012 was 4 Ajaw, kin 160). The site places each galaxy
+// around the Sun by it: the direction of its day sign (East, North, West, South), the distance of its tone (1–13).
+export function kinOf(born) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(born || '')) return null;
+  const days = Math.round((Date.UTC(...born.split('-').map((n, i) => (i === 1 ? n - 1 : +n))) - Date.UTC(2012, 11, 21)) / 86400000);
+  const kin = ((((159 + days) % 260) + 260) % 260) + 1;
+  return { kin, tone: ((kin - 1) % 13) + 1, sign: ((kin - 1) % 20) + 1 };
+}
+const validBorn = (b) => /^\d{4}-\d{2}-\d{2}$/.test(b || '') && b >= '1900-01-01' && b <= new Date().toISOString().slice(0, 10);
 
 function hash(password, salt = crypto.randomBytes(16).toString('hex')) {
   return `${salt}:${crypto.scryptSync(password, salt, 32).toString('hex')}`;
@@ -61,11 +74,11 @@ function newPassword() {
   return `${pick()}-${pick()}-${pick()}-${pick()}-${crypto.randomInt(10, 100)}`;
 }
 const slugify = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
-const view = (g) => ({ slug: g.slug, name: g.name, public: !!g.public, created: g.created });
+const view = (g) => ({ slug: g.slug, name: g.name, public: !!g.public, created: g.created, born: g.born || '' });
 
-export async function list() { return (await load()).galaxies.map(view); }
+export async function list() { const d = await load(); return { main: { born: d.main?.born || '' }, galaxies: d.galaxies.map(view) }; }
 
-export async function create(name) {
+export async function create(name, born) {
   name = String(name || '').trim().slice(0, 40);
   const slug = slugify(name);
   if (!slug) throw bad('a name, please');
@@ -73,7 +86,7 @@ export async function create(name) {
   const data = await load();
   if (data.galaxies.some((g) => g.slug === slug)) throw bad('there is already a galaxy with that name');
   const password = newPassword();
-  const g = { slug, name, token: crypto.randomBytes(9).toString('base64url'), public: false, pass: hash(password), created: new Date().toISOString().slice(0, 10) };
+  const g = { slug, name, token: crypto.randomBytes(9).toString('base64url'), public: false, pass: hash(password), created: new Date().toISOString().slice(0, 10), born: validBorn(born) ? born : '' };
   const root = rootOf(g);
   await fs.mkdir(path.join(root, 'images'), { recursive: true });
   await fs.writeFile(path.join(root, 'frases.json'), JSON.stringify({ frases: [] }, null, 2) + '\n');
@@ -82,13 +95,18 @@ export async function create(name) {
   return { ...view(g), password };
 }
 
-export async function update(slug, { public: isPublic }) {
-  const data = await load();
-  const g = data.galaxies.find((x) => x.slug === slug);
-  if (!g) throw bad('no such galaxy', 404);
-  if (typeof isPublic === 'boolean') g.public = isPublic;
-  await save(data);
-  return view(g);
+export function update(slug, { public: isPublic, born }) {
+  return locked(async () => {
+    const data = await load();
+    if (born !== undefined && born !== '' && !validBorn(born)) throw bad('that date doesn’t look right');
+    if (slug === MAIN) { data.main = { ...(data.main || {}), born: born || '' }; await save(data); return { slug: MAIN, born: data.main.born }; }
+    const g = data.galaxies.find((x) => x.slug === slug);
+    if (!g) throw bad('no such galaxy', 404);
+    if (typeof isPublic === 'boolean') g.public = isPublic;
+    if (born !== undefined) g.born = born || '';
+    await save(data);
+    return view(g);
+  });
 }
 
 export async function resetPassword(slug) {

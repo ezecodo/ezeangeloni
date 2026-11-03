@@ -380,9 +380,11 @@
       <p class="hint">other people's universes beside yours · invite-only · each gets its own admin password</p>
       <div class="words-meta" style="margin-top:.6rem">
         <div><label for="galName">new galaxy · whose?</label><input type="text" id="galName" maxlength="40" placeholder="Lucho"></div>
+        <div style="flex:.7"><label for="galBorn">born (places it by its kin)</label><input type="date" id="galBorn"></div>
         <button class="ghost" id="galCreate" type="button" style="margin-bottom:.1rem">create</button>
       </div>
       <div id="galSecret" class="share-url" style="display:none"></div>
+      <div id="galMe" class="link-row"></div>
       <div id="galList"></div>
       <p id="galStatus" class="status"></p>
     </section>
@@ -2268,10 +2270,27 @@
     el.style.display = 'block';
     el.innerHTML = `<small>${what} · shown only now, pass it on</small>${escapeHtml(g.name)}'s admin password: <b>${escapeHtml(g.password)}</b><br>admin: ${escapeHtml(location.origin)}/admin/<br>galaxy: ${escapeHtml(galaxyLink(g))}`;
   }
+  // Birth dates stay private on the server; the site only ever gets the kin, which places each galaxy around the Sun.
+  function bornField(slug, born, label) {
+    const wrap = document.createElement('div');
+    wrap.className = 'words-meta';
+    wrap.innerHTML = `<div><label>${escapeHtml(label)}</label><input type="date" value="${attr(born)}" max="${new Date().toISOString().slice(0, 10)}"></div><span class="count"></span>`;
+    const input = wrap.querySelector('input'), note = wrap.querySelector('.count');
+    input.addEventListener('change', async () => {
+      note.textContent = 'saving…';
+      const r = await api(`/api/frases/galaxies/${slug}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ born: input.value }) });
+      const j = await r.json().catch(() => ({}));
+      note.textContent = r.ok ? 'saved · its place in the sky moves' : (j.error || 'error');
+    });
+    return wrap;
+  }
   async function loadGalaxies() {
     try {
       const r = await api('/api/frases/galaxies');
-      const { galaxies } = await r.json();
+      const { galaxies, main } = await r.json();
+      const meRow = $('galMe');
+      meRow.innerHTML = `<div class="set-row-head"><div class="set-info"><h3>Eze's galaxy · you</h3><div class="meta">CV 1 · where it all began</div></div></div>`;
+      meRow.append(bornField('eze', main?.born || '', 'your birth date'));
       $('galList').replaceChildren(...galaxies.map(galaxyRow));
       if (!galaxies.length) $('galList').innerHTML = '<p class="empty">no galaxies yet</p>';
     } catch { $('galStatus').textContent = 'connection error'; }
@@ -2288,6 +2307,7 @@
         <span class="grow"></span>
         <button class="ghost danger" type="button" data-a="del">remove</button>
       </div>`;
+    row.querySelector('.set-row-head').after(bornField(g.slug, g.born, `${g.name}'s birth date`));
     const act = (a) => row.querySelector(`[data-a=${a}]`);
     act('copy').addEventListener('click', async () => { await navigator.clipboard.writeText(galaxyLink(g)).catch(() => {}); $('galStatus').textContent = `copied: ${galaxyLink(g)}`; });
     act('pub').addEventListener('click', async () => {
@@ -2311,11 +2331,11 @@
     if (!name) return;
     $('galStatus').className = 'status'; $('galStatus').textContent = 'creating...';
     try {
-      const r = await api('/api/frases/galaxies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      const r = await api('/api/frases/galaxies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, born: $('galBorn').value }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || `error ${r.status}`);
       showSecret(j, `${j.name}'s galaxy is born (private)`);
-      $('galName').value = ''; $('galStatus').textContent = '';
+      $('galName').value = ''; $('galBorn').value = ''; $('galStatus').textContent = '';
       loadGalaxies();
     } catch (e) { $('galStatus').className = 'status error'; $('galStatus').textContent = e.message; }
   });

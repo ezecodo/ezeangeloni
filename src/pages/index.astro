@@ -70,6 +70,8 @@ import Layout from '../layouts/Layout.astro';
       .sky-mark.edge b { display: inline-block; }
       .sky-mark.open { color: #ffd166; }
       .sky-mark.closed { color: #6ef9f5; opacity: .7; }
+      .sky-mark.sun { color: #ffb347; }
+      .sky-mark.sun i { border-radius: 50%; width: 22px; height: 22px; transform: none; }
       .sky-mark[hidden] { display: none; }
       /* crossing into another galaxy: everything goes to light */
       #warp { position: fixed; inset: 0; z-index: 40; pointer-events: none; background: #f0ede8; opacity: 0; transition: opacity .9s ease-in; }
@@ -488,7 +490,9 @@ import Layout from '../layouts/Layout.astro';
     // (or /g/<slug> where nginx sends it here). Their data lives in /galaxies/<slug>-<token>/, same files as Eze's
     // at the root. A private one's folder is only told at its door (/api/frases/doors): to this device once its
     // owner let it in, or to anyone logged into the admin as the owner of a galaxy that was let in.
-    interface GalaxyEntry { slug: string; name: string; public: boolean; dir?: string; }
+    interface Kin { kin: number; tone: number; sign: number; }
+    interface GalaxyEntry { slug: string; name: string; public: boolean; dir?: string; kin?: Kin | null; }
+    let mainKin: Kin | null = null;
     interface Door { status: 'open' | 'pending' | 'declined' | 'closed'; dir?: string; }
     const qs = new URLSearchParams(location.search);
     const GAL = (location.pathname.match(/^\/g\/([a-z0-9-]+)/)?.[1] || qs.get('g') || '').toLowerCase();
@@ -624,7 +628,7 @@ import Layout from '../layouts/Layout.astro';
     const DPR = Math.min(window.devicePixelRatio || 1, 1.25);
     THREE.ColorManagement.enabled = false;
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, .1, 900);
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, .1, 6000); // far: the other galaxies and the Sun
     const controls = renderer ? new OrbitControls(camera, screen) : null;
     const plane = new THREE.PlaneGeometry(1, 1);
     const CENTER = new THREE.Vector3();
@@ -2275,6 +2279,12 @@ import Layout from '../layouts/Layout.astro';
         p.pos.addScaledVector(f, p.speed*dt).addScaledVector(p.drift, dt);
         const r = Math.hypot(p.pos.x, p.pos.z);
         if(r > PILOT_R){ p.pos.x *= PILOT_R/r; p.pos.z *= PILOT_R/r; } // the edge of the archive holds it back
+        // near the Sun the tank fills by itself; too near, its heat holds you off
+        if(sun){
+          const ds = p.pos.distanceTo(sun.position);
+          if(ds < 170) gas = Math.min(1, gas + dt*.1);
+          if(ds < 70){ p.pos.copy(sun.position).add(p.pos.clone().sub(sun.position).normalize().multiplyScalar(70)); p.speed = Math.min(p.speed, 0); }
+        }
         // into a galaxy's heart: open, you cross over (still flying); closed, it holds you off at its edge
         if(p.nearGalaxy >= 0){
           const w = worlds[p.nearGalaxy], c = w.mesh.position, heart = w.size*.42, d = p.pos.distanceTo(c);
@@ -2355,6 +2365,7 @@ import Layout from '../layouts/Layout.astro';
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
           : gas < GAS_LOW ? 'low gas · nebulae lie in the past'
+          : sun && p.pos.distanceTo(sun.position) < 170 ? 'the Sun · it fills your tank'
           : inVoid(p.pos) ? 'between galaxies · gas burns fast out here' : '';
       }
       return Math.min(.12, wind.length()/80) + (burning ? .12 : 0) + Math.abs(p.speed)/TOP*.1; // wind, burner and speed, in sound and lens
@@ -2938,6 +2949,7 @@ import Layout from '../layouts/Layout.astro';
 
     const galaxyReady = fetch('/galaxies.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null).then(d => {
       registry = Array.isArray(d?.galaxies) ? d.galaxies : [];
+      mainKin = d?.main?.kin || null;
       if(!GAL) return;
       const g = registry.find(x => x.slug === GAL);
       if(!g){ locked = true; return; }
@@ -3163,7 +3175,7 @@ import Layout from '../layouts/Layout.astro';
       if(!renderer) return;
       if(worldAt >= 0) leaveWorld();
       worlds.forEach(w => { scene.remove(w.mesh); w.mat.map?.dispose(); w.mat.dispose(); const k = billboards.indexOf(w.mesh); if(k >= 0) billboards.splice(k, 1); if(w.beacon){ scene.remove(w.beacon); w.beacon.material.dispose(); } });
-      $('sky-marks').replaceChildren();
+      $('sky-marks').replaceChildren(...(sunMark ? [sunMark] : []));
       const ok = [...linkList.filter(l => l && /^https?:\/\//.test(l.url) && (l.label || l.image)).slice(0, 12), ...neighbours()];
       worlds = ok.map((link, k) => {
         const tint = COLORS[(k*3 + 2) % COLORS.length], size = link.galaxy ? 40 : 13;
@@ -3221,23 +3233,65 @@ import Layout from '../layouts/Layout.astro';
         // its mark: at the galaxy when it's in view, at the screen's edge pointing to it when it isn't
         const here = k === worldAt || (pilot && (pilot.nearGalaxy === k));
         w.mark.hidden = !w.home || !!here;
-        if(w.mark.hidden) return;
-        const v = w.mesh.position.clone().project(camera);
+        if(!w.mark.hidden) placeMark(w.mark, w.mesh.position, W, H);
+      });
+      if(sun && sunMark){
+        sun.children[0].scale.setScalar(300*(1 + .05*Math.sin(now*.0008)));
+        sunMark.hidden = !!pilot && pilot.pos.distanceTo(sun.position) < 220;
+        if(!sunMark.hidden) placeMark(sunMark, sun.position, W, H);
+      }
+    }
+    function placeMark(mark: HTMLElement, pos: THREE.Vector3, W: number, H: number){
+      {
+        const v = pos.clone().project(camera);
         let x = v.x, y = v.y;
         const behind = v.z > 1;
         if(behind){ x = -x; y = -y; }
         const inView = !behind && Math.abs(x) < .94 && Math.abs(y) < .88;
-        w.mark.classList.toggle('edge', !inView);
+        mark.classList.toggle('edge', !inView);
         if(inView){
-          w.mark.style.transform = `translate(${(x+1)/2*W - 23}px, ${(1-y)/2*H - 10}px)`;
+          mark.style.transform = `translate(${(x+1)/2*W - 23}px, ${(1-y)/2*H - 10}px)`;
         } else {
           const m = Math.max(Math.abs(x)/.9, Math.abs(y)/.8, 1e-3), ex = x/m, ey = y/m;
           const px = (ex+1)/2*W, py = (1-ey)/2*H, ang = Math.atan2(-ey, ex);
-          (w.mark.querySelector('b') as HTMLElement).style.transform = `rotate(${ang}rad)`;
-          const flip = ex > 0 ? -w.mark.offsetWidth + 10 : -10; // keep the label on screen
-          w.mark.style.transform = `translate(${Math.max(8, Math.min(W - 8, px + flip))}px, ${py - 8}px)`;
+          (mark.querySelector('b') as HTMLElement).style.transform = `rotate(${ang}rad)`;
+          const flip = ex > 0 ? -mark.offsetWidth + 10 : -10; // keep the label on screen
+          mark.style.transform = `translate(${Math.max(8, Math.min(W - 8, px + flip))}px, ${py - 8}px)`;
         }
-      });
+      }
+    }
+    // ── The Sun, and where each galaxy lies ──
+    // The Sun sits at the centre of everything, a fixed point to find your way by from any galaxy. Each galaxy lies
+    // around it by its owner's Tzolk'in kin (worked out on the server from a birth date that never leaves it): the
+    // day sign gives the direction (its four directions, East, North, West, South, with five signs fanned across
+    // each) and the tone, 1 to 13, how far out. Eze's sign is Imix, the first: East, where the day begins.
+    function kinFor(slug: string): Kin {
+      const k = slug ? registry.find(g => g.slug === slug)?.kin : mainKin;
+      if(k) return k;
+      const kin = Number.parseInt(hash36(slug || 'eze'), 36) % 260 + 1; // no birth date yet: a stable place anyway
+      return { kin, tone: (kin-1) % 13 + 1, sign: (kin-1) % 20 + 1 };
+    }
+    function universeAt(k: Kin){
+      const dir = (k.sign-1) % 4, fan = Math.floor((k.sign-1)/4) - 2; // 0 East, 1 North, 2 West, 3 South; -2…2 across it
+      const a = dir*Math.PI/2 + fan*Math.PI/12, r = 300 + k.tone*35;
+      return new THREE.Vector3(Math.cos(a)*r, (k.tone-7)*6, -Math.sin(a)*r);
+    }
+    const sunAt = () => universeAt(kinFor(GAL)).negate();
+    let sun: THREE.Group | null = null, sunMark: HTMLElement | null = null;
+    function buildSun(){
+      if(!renderer || sun) return;
+      sun = new THREE.Group();
+      const sprite = (color: number, size: number, opacity: number, fixed = false) => {
+        const m = new THREE.SpriteMaterial({ map: SOFT, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, ...(fixed ? { sizeAttenuation: false, depthTest: false } : {}) });
+        const sp = new THREE.Sprite(m); sp.scale.setScalar(size); if(fixed) sp.renderOrder = 5; return sp;
+      };
+      sun.add(sprite(0xff8a2a, 300, .4), sprite(0xffd28a, 120, .8), sprite(0xfff6e4, 55, 1), sprite(0xffe4a8, .05, .9, true));
+      sun.position.copy(sunAt());
+      scene.add(sun);
+      sunMark = document.createElement('div');
+      sunMark.className = 'sky-mark sun';
+      sunMark.innerHTML = '<i></i><b>➤</b><span>☉ the Sun</span>';
+      $('sky-marks').append(sunMark);
     }
     const galaxySize = (sh: Shape) => 40*Math.max(.85, Math.min(1.7, sh.R/110));
     // the data of every galaxy we're allowed to see, to draw its shape (once per page)
@@ -3275,6 +3329,14 @@ import Layout from '../layouts/Layout.astro';
       let reach = 0;
       for(const w of worlds){
         const rng = makeRng(w.seed), far = !!w.link.galaxy;
+        if(far){
+          // a galaxy sits where its owner's kin puts it around the Sun, seen from where this one's owner's kin is
+          const g = w.link.galaxy!, at = universeAt(kinFor(g.home ? '' : g.slug)).sub(universeAt(kinFor(GAL)));
+          if(taken.some(o => o.distanceTo(at) < 70)) at.add(new THREE.Vector3(Math.cos(w.seed)*90, 0, Math.sin(w.seed)*90)); // twins in the calendar
+          w.home = at; w.phase = rng()*Math.PI*2; taken.push(at); w.mesh.visible = true;
+          reach = Math.max(reach, Math.hypot(at.x, at.z));
+          continue;
+        }
         let best: THREE.Vector3 | null = null, bestGap = -1;
         for(let t = 0; t < 80; t++){
           // planets out among the barrios; neighbouring galaxies beyond the oldest one, across the dark
@@ -3294,7 +3356,7 @@ import Layout from '../layouts/Layout.astro';
         w.mesh.visible = true;
         reach = Math.max(reach, Math.hypot(best!.x, best!.z));
       }
-      PILOT_R = Math.max(PILOT_R, reach + 30); // the balloon can reach every neighbour
+      PILOT_R = Math.max(PILOT_R, reach + 30, sunAt().length() + 80); // the balloon can reach every neighbour, and the Sun
       updateWorlds(0);
     }
     function pickWorld(){
@@ -3480,6 +3542,7 @@ import Layout from '../layouts/Layout.astro';
     }
     galaxyReady.then(() => {
       linkList = GAL ? [] : DEFAULT_LINKS;
+      buildSun();
       buildWorlds();
       if(locked) return;
       fetch(BASE + '/links.json', { cache: 'no-store' })

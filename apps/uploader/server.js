@@ -645,8 +645,8 @@ app.post('/api/frases/links/image', checkWho, linkImageUpload.single('image'), a
 const galaxyRoute = (fn) => async (req, res) => {
   try { res.json(await fn(req)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
-app.get('/api/frases/galaxies', checkAuth, galaxyRoute(async () => ({ galaxies: await galaxies.list() })));
-app.post('/api/frases/galaxies', express.json(), checkAuth, galaxyRoute(async (req) => galaxies.create(req.body?.name)));
+app.get('/api/frases/galaxies', checkAuth, galaxyRoute(async () => galaxies.list()));
+app.post('/api/frases/galaxies', express.json(), checkAuth, galaxyRoute(async (req) => galaxies.create(req.body?.name, req.body?.born)));
 app.patch('/api/frases/galaxies/:slug', express.json(), checkAuth, galaxyRoute(async (req) => galaxies.update(req.params.slug, req.body || {})));
 app.post('/api/frases/galaxies/:slug/password', checkAuth, galaxyRoute(async (req) => galaxies.resetPassword(req.params.slug)));
 app.delete('/api/frases/galaxies/:slug', checkAuth, galaxyRoute(async (req) => { await galaxies.remove(req.params.slug); return { ok: true }; }));
