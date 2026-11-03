@@ -1,0 +1,13 @@
+{
+  "name": "eze · admin",
+  "short_name": "eze admin",
+  "start_url": "/admin/#photos",
+  "scope": "/admin/",
+  "display": "standalone",
+  "background_color": "#080810",
+  "theme_color": "#080810",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "192x241", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

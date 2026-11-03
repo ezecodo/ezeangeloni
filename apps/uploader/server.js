@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import { addPhoto, fromTelegram, ensureImagesDir, monthLabel } from './frases.js';
 
 // === Config ===
 const PORT = parseInt(process.env.PORT || '3010', 10);
@@ -318,6 +319,7 @@ async function safeUnlink(p) { try { await fs.unlink(p); } catch {} }
 await ensureDir(SETS_DIR);
 await ensureDir(ARTWORKS_DIR);
 await ensureDir(ORIGINALS_DIR);
+await ensureImagesDir();
 
 // === express setup ===
 const app = express();
@@ -570,6 +572,32 @@ app.delete('/api/sets/:slug', express.json(), checkAuth, async (req, res) => {
   data.sets.splice(idx, 1);
   await saveSets(data);
   res.json({ ok: true });
+});
+
+// === frases / photos (the archive the Cronovisor draws) ===
+
+const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 1 } });
+
+// One photo per request (the admin sends a batch one by one, so each gets its own progress and retry).
+app.post('/api/frases/photo', checkAuth, photoUpload.single('photo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'photo required' });
+  try {
+    const entry = await addPhoto(req.file.buffer, { fecha: req.body.fecha, caption: req.body.caption });
+    res.json({ ok: true, entry, barrio: monthLabel(entry.fecha) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Called by n8n (over SSH, on loopback) with the raw Telegram message. Answers with the bot's reply.
+app.post('/api/frases/telegram', express.json({ limit: '1mb' }), checkAuth, async (req, res) => {
+  try {
+    const { status, reply } = await fromTelegram(req.body);
+    res.status(status).type('text/plain').send(reply);
+  } catch (e) {
+    console.error('[telegram]', e.message);
+    res.status(500).type('text/plain').send('⚠️ No pude guardarla: ' + e.message);
+  }
 });
 
 app.use((err, _req, res, _next) => {

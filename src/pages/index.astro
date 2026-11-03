@@ -398,7 +398,9 @@ import Layout from '../layouts/Layout.astro';
     interface SetMeta { slug: string; title: string; date: string; audio: string; artwork?: string; tracklist?: TrackPoint[]; duration?: number; bpm?: number; musicalKey?: string; }
     interface Station {
       kind: 'home' | 'photo' | 'text' | 'set';
-      n: number;            // archive number, oldest = 1
+      n: number;            // archive number, oldest = 1 (shifts when something is dated into the past)
+      id: string;           // stable share link: photo file name, t+hash of a frase, s-slug of a set
+      legacy?: number;      // the old #NNN link, counted without pieces uploaded later into the past
       date: string;
       text: string;         // frase, caption or set title
       src?: string;
@@ -406,19 +408,30 @@ import Layout from '../layouts/Layout.astro';
       tint: string;
       flood: boolean;       // full-colour plate instead of type on the void
     }
-    let stations: Station[] = [{ kind:'home', n:0, date:'', text:'', tint:'#c77dff', flood:false }];
+    let stations: Station[] = [{ kind:'home', n:0, id:'', date:'', text:'', tint:'#c77dff', flood:false }];
     let total = 0;
 
-    function buildStations(frases: {texto?: string, imagen?: string, caption?: string, fecha?: string}[], sets: SetMeta[]){
+    type Frase = {texto?: string, imagen?: string, caption?: string, fecha?: string, subida?: string};
+    function hash36(s: string){
+      let h = 0x811c9dc5;
+      for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+      return (h >>> 0).toString(36);
+    }
+    function buildStations(frases: Frase[], sets: SetMeta[]){
       const merged = [
         ...frases.filter(f => f.imagen || f.texto).map(f => ({ date: f.fecha || '', f, s: null as SetMeta | null })),
         ...sets.map(s => ({ date: s.date || '', f: null, s })),
       ].sort((a,b) => a.date.localeCompare(b.date));
+      // Links used to be the archive number. Pieces dated into the past (uploaded later, `subida`) shift it,
+      // so old #NNN links are resolved by counting without them.
+      let legacy = 0;
       const out: Station[] = merged.map((m, i) => {
         const n = i + 1, tint = COLORS[n % COLORS.length];
-        if(m.s) return { kind:'set', n, date:m.date, text:m.s.title, src:m.s.artwork, set:m.s, tint:'#ff6eb4', flood:!m.s.artwork };
-        if(m.f!.imagen) return { kind:'photo', n, date:m.date, text:m.f!.caption || '', src:m.f!.imagen, tint, flood:false };
-        return { kind:'text', n, date:m.date, text:m.f!.texto!, tint, flood: n % 3 === 0 };
+        const back = !!(m.f?.subida && m.f.subida > m.date);
+        const old = back ? undefined : ++legacy;
+        if(m.s) return { kind:'set', n, id:'s-'+m.s.slug, legacy:old, date:m.date, text:m.s.title, src:m.s.artwork, set:m.s, tint:'#ff6eb4', flood:!m.s.artwork };
+        if(m.f!.imagen) return { kind:'photo', n, id:m.f!.imagen.split('/').pop()!.replace(/\.\w+$/, ''), legacy:old, date:m.date, text:m.f!.caption || '', src:m.f!.imagen, tint, flood:false };
+        return { kind:'text', n, id:'t'+hash36(m.date+m.f!.texto), legacy:old, date:m.date, text:m.f!.texto!, tint, flood: n % 3 === 0 };
       });
       total = out.length;
       stations = [stations[0], ...out.reverse()]; // newest at the centre: distance is time
@@ -946,7 +959,7 @@ import Layout from '../layouts/Layout.astro';
       });
       const url = new URL(location.href);
       if(!sheets.set.classList.contains('open')) url.searchParams.delete('set');
-      url.hash = String(p.st.n).padStart(3,'0');
+      url.hash = p.st.id;
       history.replaceState(null, '', url.toString());
     }
     // ── Balloon ───────────────────────────────────────────
@@ -2515,10 +2528,12 @@ import Layout from '../layouts/Layout.astro';
       }
       const home = new THREE.Vector3(0, overviewR*.34, overviewR);
       const urlSet = new URLSearchParams(location.search).get('set');
-      const byHash = parseInt(location.hash.slice(1), 10);
+      const tag = decodeURIComponent(location.hash.slice(1));
       const i = urlSet
         ? stations.findIndex(s => s.set?.slug === urlSet)
-        : stations.findIndex(s => s.n === byHash && s.kind !== 'home');
+        : /^\d{1,4}$/.test(tag)
+          ? stations.findIndex(s => s.legacy === parseInt(tag, 10))
+          : tag ? stations.findIndex(s => s.id === tag && s.kind !== 'home') : -1;
       if(i > 0){
         camera.position.copy(home);
         overviewPos.copy(home);

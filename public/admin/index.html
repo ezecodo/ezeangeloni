@@ -6,6 +6,12 @@
 <meta name="robots" content="noindex, nofollow">
 <title>sets · admin</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/admin/manifest.webmanifest">
+<meta name="theme-color" content="#080810">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="eze admin">
+<link rel="apple-touch-icon" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=DM+Mono:ital@0;1&display=swap" rel="stylesheet">
 <style>
@@ -188,6 +194,31 @@
   ::part(region) { z-index: 2; }
   ::part(region-content) { background: rgba(8,8,16,0.7); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: 'DM Mono', monospace; }
 
+  /* photos: a batch grouped by month, the barrios they'll land in */
+  .drop { margin-top:.4rem; border:1px dashed rgba(240,237,232,0.25); border-radius:12px; padding:1.6rem 1rem; text-align:center; cursor:pointer; transition: border-color .2s, background .2s; }
+  .drop:hover, .drop.over { border-color:var(--cyan); background:rgba(110,249,245,0.04); }
+  .drop strong { display:block; font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:1.3rem; letter-spacing:.02em; margin-bottom:.3rem; }
+  .barrio { margin-top:1.4rem; }
+  .barrio h3 { font-family:'Cormorant Garamond', serif; font-weight:300; font-style:italic; font-size:1.15rem; display:flex; align-items:baseline; gap:.6rem; border-bottom:1px solid var(--line); padding-bottom:.35rem; }
+  .barrio h3 small { font-family:'DM Mono', monospace; font-style:normal; font-size:.58rem; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+  .shots { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:.7rem; margin-top:.7rem; }
+  .shot { position:relative; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:rgba(240,237,232,0.025); }
+  .shot img { display:block; width:100%; aspect-ratio:1; object-fit:cover; background:#11111f; }
+  .shot .fields { padding:.45rem; display:flex; flex-direction:column; gap:.35rem; }
+  .shot input { padding:.35rem .45rem; font-size:.68rem; border-radius:6px; }
+  .shot .src { position:absolute; top:.4rem; left:.4rem; font-size:.5rem; letter-spacing:.15em; text-transform:uppercase; padding:.15rem .4rem; border-radius:4px; background:rgba(8,8,16,0.75); color:var(--muted); }
+  .shot .src.exif { color:var(--green); }
+  .shot .src.guess { color:var(--gold); }
+  .shot .x { position:absolute; top:.3rem; right:.3rem; width:24px; height:24px; border-radius:50%; border:none; background:rgba(8,8,16,0.75); color:var(--text); cursor:pointer; font-size:.8rem; }
+  .shot.done { border-color:rgba(184,247,91,0.45); }
+  .shot.done .fields, .shot.done .x { opacity:.4; pointer-events:none; }
+  .shot.fail { border-color:rgba(255,63,63,0.6); }
+  .shot .state { position:absolute; inset:0 0 auto 0; aspect-ratio:1; display:none; align-items:center; justify-content:center; font-size:1.6rem; background:rgba(8,8,16,0.45); }
+  .shot.busy .state, .shot.done .state, .shot.fail .state { display:flex; }
+  .shot .err { font-size:.55rem; color:var(--red); }
+  .bulk { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-top:1rem; font-size:.62rem; color:var(--muted); letter-spacing:.1em; }
+  .bulk input[type=date] { width:auto; padding:.35rem .5rem; font-size:.7rem; }
+
   @media (max-width: 640px) {
     .strip { grid-template-columns: repeat(2, 1fr); }
     main { padding: 1.5rem 1.1rem; }
@@ -211,6 +242,7 @@
     <nav class="tabs">
       <button data-tab="upload" class="active">new set</button>
       <button data-tab="manage">manage</button>
+      <button data-tab="photos">photos</button>
     </nav>
 
     <section class="tab active" id="tab-upload">
@@ -289,6 +321,23 @@
 
     <section class="tab" id="tab-manage">
       <div id="setList"><p class="empty">loading...</p></div>
+    </section>
+
+    <section class="tab" id="tab-photos">
+      <label class="drop" id="photoDrop" for="photoFiles">
+        <strong>choose photos</strong>
+        <span class="hint">each one goes to the barrio of the month it was taken · the date comes from the photo</span>
+      </label>
+      <input id="photoFiles" type="file" accept="image/*" multiple hidden>
+      <div class="bulk" id="photoBulk" hidden>
+        <span id="photoCount"></span>
+        <span style="margin-left:auto">same date for all</span>
+        <input type="date" id="photoAllDate">
+      </div>
+      <div id="photoGroups"></div>
+      <button class="primary" id="photoUpload" hidden disabled>upload</button>
+      <p id="photoStatus" class="status"></p>
+      <p class="hint center" style="margin-top:1rem">green date = read from the photo · gold = guessed from the file, check it · photos are resized to 2400px</p>
     </section>
 
     <div class="center">
@@ -1798,6 +1847,162 @@
   function alertMsg(m) { const s = $('status'); s.textContent = m; s.className = 'status'; setTimeout(() => { s.textContent = ''; }, 2000); }
 
   tryAutoLogin();
+  // ===== PHOTOS =====
+  // Batch upload to frases.json. The site groups pieces by the month of their date, so the date is the whole point:
+  // read from EXIF (DateTimeOriginal), else from the file name (IMG_20190714…, PXL_…, WhatsApp IMG-20190714-WA…),
+  // else the file's modified time, marked gold to check. Each photo is resized here (orientation applied) and sent alone.
+  const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  const okDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && !isNaN(Date.parse(s)) && s >= '1900-01-01' && s <= todayStr();
+  function exifDate(buf) {
+    try {
+      const v = new DataView(buf);
+      if (v.getUint16(0) !== 0xFFD8) return null;
+      let o = 2;
+      while (o + 10 < v.byteLength) {
+        if (v.getUint8(o) !== 0xFF) return null;
+        const mark = v.getUint8(o + 1), len = v.getUint16(o + 2);
+        if (mark === 0xE1 && v.getUint32(o + 4) === 0x45786966) {
+          const t = o + 10, le = v.getUint16(t) === 0x4949;
+          const u16 = (p) => v.getUint16(p, le), u32 = (p) => v.getUint32(p, le);
+          const ifd = (off) => { const tags = {}, n = u16(t + off); for (let i = 0; i < n; i++) { const e = t + off + 2 + i * 12; tags[u16(e)] = e; } return tags; };
+          const str = (e) => { const c = u32(e + 4), p = c > 4 ? t + u32(e + 8) : e + 8; let s = ''; for (let i = 0; i < c - 1; i++) s += String.fromCharCode(v.getUint8(p + i)); return s; };
+          const ifd0 = ifd(u32(t + 4));
+          let raw = '';
+          if (ifd0[0x8769]) { const ex = ifd(u32(ifd0[0x8769] + 8)); raw = ex[0x9003] ? str(ex[0x9003]) : ex[0x9004] ? str(ex[0x9004]) : ''; }
+          if (!raw && ifd0[0x0132]) raw = str(ifd0[0x0132]);
+          const d = raw.match(/^(\d{4}):(\d{2}):(\d{2})/);
+          const out = d && `${d[1]}-${d[2]}-${d[3]}`;
+          return okDate(out) ? out : null;
+        }
+        if (mark === 0xDA) return null;
+        o += 2 + len;
+      }
+    } catch {}
+    return null;
+  }
+  function nameDate(name) {
+    const m = name.match(/(?:^|[^\d])((?:19|20)\d{2})[-_.]?(\d{2})[-_.]?(\d{2})(?:[^\d]|$)/);
+    const out = m && `${m[1]}-${m[2]}-${m[3]}`;
+    return okDate(out) ? out : null;
+  }
+  async function dateOf(file) {
+    const head = await file.slice(0, 256 * 1024).arrayBuffer();
+    const ex = exifDate(head);
+    if (ex) return { date: ex, src: 'exif' };
+    const nm = nameDate(file.name);
+    if (nm) return { date: nm, src: 'name' };
+    const d = new Date(file.lastModified || Date.now());
+    return { date: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`, src: 'guess' };
+  }
+  async function shrink(file, max = 2400) {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close?.();
+    return new Promise((ok, no) => c.toBlob(b => b ? ok(b) : no(new Error('could not encode')), 'image/jpeg', .88));
+  }
+
+  let shots = [];  // { file, url, date, src, caption, state, el }
+  const photoGroups = $('photoGroups');
+  function renderShots() {
+    const pending = shots.filter(s => s.state !== 'done');
+    $('photoBulk').hidden = !shots.length;
+    $('photoUpload').hidden = !shots.length;
+    $('photoUpload').disabled = !pending.length || shots.some(s => s.state === 'busy') || pending.some(s => !okDate(s.date));
+    const months = new Set(shots.map(s => s.date.slice(0, 7)));
+    $('photoCount').textContent = `${shots.length} photo${shots.length === 1 ? '' : 's'} · ${months.size} barrio${months.size === 1 ? '' : 's'}`;
+    const byMonth = new Map();
+    [...shots].sort((a, b) => a.date.localeCompare(b.date)).forEach(s => {
+      const m = s.date.slice(0, 7);
+      if (!byMonth.has(m)) byMonth.set(m, []);
+      byMonth.get(m).push(s);
+    });
+    photoGroups.replaceChildren(...[...byMonth].map(([m, list]) => {
+      const g = document.createElement('div');
+      g.className = 'barrio';
+      const [y, mo] = m.split('-');
+      g.innerHTML = `<h3>${MONTHS[+mo - 1] || '?'} ${escapeHtml(y)} <small>${list.length}</small></h3><div class="shots"></div>`;
+      g.querySelector('.shots').append(...list.map(s => s.el));
+      return g;
+    }));
+  }
+  function makeShot(s) {
+    const el = document.createElement('div');
+    el.className = 'shot';
+    el.innerHTML = `<img alt=""><span class="src"></span><button class="x" type="button" aria-label="remove">✕</button><span class="state"></span>
+      <div class="fields"><input type="date"><input type="text" placeholder="caption (optional)" maxlength="300"><span class="err"></span></div>`;
+    el.querySelector('img').src = s.url;
+    const [date, cap] = el.querySelectorAll('input');
+    date.max = todayStr();
+    date.value = s.date; cap.value = s.caption;
+    const src = el.querySelector('.src');
+    src.textContent = s.src === 'exif' ? 'taken' : s.src === 'name' ? 'file name' : 'guess';
+    src.className = 'src ' + s.src;
+    date.addEventListener('change', () => { s.date = date.value; s.src = 'manual'; src.textContent = 'set'; src.className = 'src'; renderShots(); });
+    cap.addEventListener('input', () => { s.caption = cap.value; });
+    el.querySelector('.x').addEventListener('click', () => { URL.revokeObjectURL(s.url); shots = shots.filter(q => q !== s); renderShots(); });
+    s.el = el;
+    s.dateInput = date;
+    return s;
+  }
+  async function addFiles(list) {
+    const files = [...list].filter(f => /^image\//.test(f.type) || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
+    $('photoStatus').textContent = files.length ? 'reading dates...' : '';
+    $('photoStatus').className = 'status';
+    for (const file of files) {
+      const { date, src } = await dateOf(file);
+      shots.push(makeShot({ file, url: URL.createObjectURL(file), date, src, caption: '', state: 'new' }));
+    }
+    $('photoStatus').textContent = '';
+    renderShots();
+  }
+  $('photoFiles').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
+  const drop = $('photoDrop');
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); });
+  $('photoAllDate').max = todayStr();
+  $('photoAllDate').addEventListener('change', (e) => {
+    if (!okDate(e.target.value)) return;
+    shots.filter(s => s.state !== 'done').forEach(s => { s.date = e.target.value; s.src = 'manual'; s.dateInput.value = s.date; const t = s.el.querySelector('.src'); t.textContent = 'set'; t.className = 'src'; });
+    renderShots();
+  });
+  $('photoUpload').addEventListener('click', async () => {
+    const todo = shots.filter(s => s.state !== 'done').sort((a, b) => a.date.localeCompare(b.date));
+    let ok = 0;
+    for (const [i, s] of todo.entries()) {
+      s.state = 'busy'; s.el.className = 'shot busy'; s.el.querySelector('.state').textContent = '…'; s.el.querySelector('.err').textContent = '';
+      $('photoUpload').disabled = true;
+      $('photoStatus').textContent = `uploading ${i + 1} / ${todo.length}`;
+      try {
+        let blob;
+        try { blob = await shrink(s.file); }
+        catch { throw new Error(/hei[cf]/i.test(s.file.name) ? 'HEIC: this browser can’t read it, export as JPG' : 'can’t read this image'); }
+        const form = new FormData();
+        form.append('fecha', s.date);
+        form.append('caption', s.caption);
+        form.append('photo', blob, 'photo.jpg');
+        const r = await api('/api/frases/photo', { method: 'POST', body: form });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || `error ${r.status}`);
+        s.state = 'done'; s.el.className = 'shot done'; s.el.querySelector('.state').textContent = '✓';
+        ok++;
+      } catch (e) {
+        s.state = 'fail'; s.el.className = 'shot fail'; s.el.querySelector('.state').textContent = '!';
+        s.el.querySelector('.err').textContent = e.message;
+      }
+    }
+    const failed = todo.length - ok;
+    $('photoStatus').className = failed ? 'status error' : 'status';
+    $('photoStatus').innerHTML = failed
+      ? `${ok} uploaded · ${failed} failed, fix and upload again`
+      : `${ok} in the universe · <a href="/" style="color:var(--cyan)">go see them</a>`;
+    renderShots();
+  });
+  if (location.hash === '#photos') document.querySelector('.tabs button[data-tab=photos]')?.click();
 </script>
 </body>
 </html>

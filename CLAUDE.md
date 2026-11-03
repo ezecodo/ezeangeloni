@@ -7,7 +7,7 @@ Astro 5 static site, single page (`src/pages/index.astro`). The whole UX is the 
 
 ## Cronovisor
 
-- **Stations**: `buildStations()` merges frases and sets by date. `n` is the archive number (oldest = 1) and is the share link (`#013`), so numbers only shift if something is inserted in the past. Station 0 is the logo, at the origin. New content needs no code: it appears from the JSON.
+- **Stations**: `buildStations()` merges frases and sets by date. `n` is the archive number (oldest = 1), shown in the meta line; it shifts when something is dated into the past. The share link is the stable `id`: a photo's file name (`#1773216235`), `t`+hash of date and text for a frase, `s-slug` for a set. Old `#013` links still resolve through `legacy`, the number counted without pieces whose `subida` (upload day) is after their `fecha`. Station 0 is the logo, at the origin. New content needs no code: it appears from the JSON.
 - **Distance is time**: `layout()` puts months as clusters on a spiral, newest near the centre, deterministic per `n` (seeded RNG) so the map is stable. A relaxation pass keeps plates apart.
 - **Stellar life** (`stellar()`): each piece's age is computed from its date on every visit, on a log scale, and maps to protostar, young star, main sequence, red giant, white dwarf. Span depends on mass: sets 200 days, photos 365, frases 520. A set past its span goes supernova once per visitor (`supernovas()`, localStorage) and stays as a nebula. Far away a piece is a star; zooming in, hovering or opening it reveals the original, which age never alters. `?days=365` previews the future.
 - **Pieces** are billboarded planes with a custom shader: halftone signals in their tint at mid distance, approaching or hovering resolves them to the original. Thumbnails (384px) stream in; `loadHi` swaps in full resolution for the focused piece and its neighbours.
@@ -87,6 +87,12 @@ The landing fetches `sets.json` at runtime, so no rebuild needed when adding set
 ## Why this exists
 
 The project's reason for being is **digital independence**. The user (Eze) is a DJ who wanted to publish his sets without depending on SoundCloud / Mixcloud — no ads injected over his music, no algorithm dictating reach, no third party owning his stats or audience. The whole site exists so that when a venue, label or festival receives a link to his set, they hear pure music in his own visual identity, on his own infrastructure. This positioning ("digital independence, my own system, not the same channel as every other DJ") matters when scoping new features: prefer self-hosted, prefer ownership, avoid dependencies that would dilute that story.
+
+## Photos and frases with their own date (barrios)
+
+The site makes barrios from the month of `fecha`, so backdating is all it takes. Two doors write `frases.json`, both through `apps/uploader/frases.js` (one writer at a time, atomic rename; new entries get `subida`):
+- **Admin → photos tab** (`/admin/#photos`, installable on the phone via `manifest.webmanifest`): pick a batch, each date read from EXIF (green), the file name (`IMG_20190714…`) or the file time (gold, check it), editable, grouped by month as the barrios they'll form. Resized in the browser to 2400px JPEG (orientation applied; HEIC only where the browser decodes it), sent one per request to `POST /api/frases/photo`.
+- **Telegram bot** (n8n workflow "My workflow 3"): photo and text messages are forwarded raw to `POST /api/frases/telegram` on loopback; the uploader checks the chat id (`TELEGRAM_CHAT`), downloads the photo (`TELEGRAM_TOKEN`) and replies with the barrio and link. A date at the start of the text dates it: `2019-07-14 Misil`, `14/07/2019 · Misil`, `2019-07 …`. A photo sent as a file (uncompressed) keeps its EXIF date. `/list` and `/delete` are still the old n8n SSH nodes (index-based, still valid since entries are appended).
 
 ## Set uploader (mini backend)
 
