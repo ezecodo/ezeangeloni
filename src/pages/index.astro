@@ -103,6 +103,12 @@ import Layout from '../layouts/Layout.astro';
       body.selecting:not(.focus) #pilot-hud .choosing { display: inline; }
       body.kb #pilot-hud .pad, body:not(.kb) #pilot-hud .kb { display: none; }
       #pilot-hud .wind { display: block; margin-top: .55rem; text-align: center; color: #6ef9f5; }
+      #pilot-hud .gas { display: block; margin-top: .45rem; text-align: center; }
+      #gas-msg { color: #ffd166; margin-right: 1.2em; }
+      #gas-msg:empty { display: none; }
+      #gas-bar { display: inline-block; vertical-align: middle; width: 84px; height: 3px; margin-left: .8em; background: rgba(240,237,232,.16); }
+      #gas-fill { display: block; height: 100%; width: 100%; background: #ffd166; transition: width .3s, background .4s; }
+      #pilot-hud.low #gas-fill { background: #ff3f3f; animation: blink 1s steps(2) infinite; }
       #wind-arrow { display: inline-block; margin-right: .7em; font-weight: 400; transition: transform .4s; }
       #selector { position: fixed; left: 0; top: 0; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .25s, transform .22s ease-out, width .22s ease-out, height .22s ease-out; }
       #selector.on { opacity: 1; animation: breathe 1.6s ease-in-out infinite; }
@@ -222,7 +228,7 @@ import Layout from '../layouts/Layout.astro';
   <div id="cands" aria-hidden="true"></div>
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span></span><span class="choosing"><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas"><span id="gas-msg"></span>gas<b id="gas-bar"><i id="gas-fill"></i></b></span></span><span class="choosing"><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
@@ -646,6 +652,7 @@ import Layout from '../layouts/Layout.astro';
       return mesh;
     }
     // Months are clusters on a spiral: same month stays together, older months sit further out.
+    let gasSpots: THREE.Vector3[] = [];
     function layout(){
       const months = [...new Set(stations.slice(1).map(s => s.date.slice(0,7)))].sort().reverse();
       const spots = new Map<string, THREE.Vector3>();
@@ -674,6 +681,21 @@ import Layout from '../layouts/Layout.astro';
           if(len < 19) out[a].multiplyScalar(19/len);
         }
       }
+      // Gas for the balloon: a nebula at each turn of the year, where one time gives way to an older one,
+      // and the biggest beyond the oldest month. To keep flying you travel into the past.
+      const along = (k: number, out: number) => {
+        const f = months.length > 1 ? Math.min(1, k/(months.length-1)) : 0, a = k*1.24 + .6, r = Math.min(132, 34 + f*58 + out);
+        return new THREE.Vector3(Math.cos(a)*r, 0, Math.sin(a)*r);
+      };
+      const ks: number[] = [];
+      for(let k = 0; k < months.length-1; k++) if(months[k].slice(0,4) !== months[k+1].slice(0,4)) ks.push(k + .5);
+      ks.push(months.length - 1 + .7);
+      for(let extra = 1; ks.length < 3; extra++) ks.push(months.length*extra/4); // few years yet: a couple more along the way
+      gasSpots = ks.map((k, j) => {
+        const g = along(k, j === ks.length-1 ? 24 : 16);
+        for(let t = 0; t < 30 && out.some(o => o.distanceTo(g) < 22); t++){ g.multiplyScalar(1.05); g.y += j % 2 ? 1.6 : -1.6; } // clear of the pieces
+        return g;
+      });
       months.forEach(m => {
         const p = spots.get(m)!;
         makeLabel(m.replace('-','·')).position.copy(p).add(new THREE.Vector3(0, 13 + Math.sqrt(count.get(m)!)*3.4, 0));
@@ -717,6 +739,7 @@ import Layout from '../layouts/Layout.astro';
       });
       buildThread();
       buildDust();
+      buildNebulae();
       buildWind();
       buildBalloon();
       cards();
@@ -1464,11 +1487,13 @@ import Layout from '../layouts/Layout.astro';
       // each burst lights the envelope from inside, warmest at full burn
       const full = s.lit === 11 && !s.over;
       const blast = Math.pow(Math.max(0, Math.sin(now*.0007)), 14);
-      const burning = s.mode === 'pilot' && !!pilot && !pilot.selecting && pad.held[0];
+      const burning = s.mode === 'pilot' && !!pilot && !pilot.selecting && burnerOn;
+      const low = s.mode === 'pilot' ? .45 + .55*Math.min(1, gas/GAS_LOW) : 1; // an emptying tank dims the envelope
       const roar = s.mode === 'pilot' ? Math.exp(-Math.max(0, now-burstAt)/600) : 0; // the burst on leaving a piece
-      const power = Math.max(roar*5.5, s.mode === 'launch' ? 1.2 + 4*Math.exp(-(now-s.t0)/900) : full || burning ? 2.6 : .5 + blast*2.2);
+      const power = Math.max(roar*5.5, s.mode === 'launch' ? 1.2 + 4*Math.exp(-(now-s.t0)/900) : full || burning ? 2.6 : (.5 + blast*2.2)*low);
       const heat = Math.min(1, (power-.5)/3);
-      s.skin.forEach(({ m, base }) => m.color.copy(base).multiplyScalar(1 + heat*.3).lerp(new THREE.Color(0xc9a070), heat*.12));
+      const tint = s.mode === 'pilot' ? gasTintK*.3 : 0; // gas from a nebula stays in the fabric a while
+      s.skin.forEach(({ m, base }) => m.color.copy(base).multiplyScalar((1 + heat*.3)*(heat > 0 ? 1 : low)).lerp(new THREE.Color(0xc9a070), heat*.12).lerp(gasTint, tint));
       const flame = .55*power*(1 + .16*Math.sin(now*.05) + .08*Math.sin(now*.083));
       s.engine.scale.set(flame, flame, 1);
       s.engine.quaternion.copy(s.group.quaternion).invert().multiply(camera.quaternion);
@@ -1500,7 +1525,7 @@ import Layout from '../layouts/Layout.astro';
       balloon.group.scale.setScalar(BALLOON_SCALE);
       resetForm();
       if(controls){ controls.enabled = false; overviewPos.copy(pilot ? pilot.overview : camera.position); }
-      if(pilot){ endSelection(); pilot = null; document.body.classList.remove('pilot'); }
+      if(pilot){ endSelection(); if(pilot.home) gas = 1; pilot = null; burnerOn = false; document.body.classList.remove('pilot'); }
       // from here on it's a physical object in the universe, parked where you caught it, upright in the world
       scene.attach(balloon.group);
       balloon.group.quaternion.copy(upright(balloon.tau*.2));
@@ -1607,7 +1632,8 @@ import Layout from '../layouts/Layout.astro';
     // With a joystick (Gamepad API) you fly the balloon through the universe: the camera rides behind it,
     // and pieces open up as you approach them. Built for a digital 8-way stick and 4 buttons (Competition Pro).
     const pad = { x:0, y:0, px:0, py:0, held:[false,false,false,false], prev:[false,false,false,false] };
-    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null } | null = null;
+    interface Homing { t0: number; from: THREE.Vector3; ctrl: THREE.Vector3; to: THREE.Vector3; dur: number; landed: number; }
+    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number } | null = null;
     let padRepeat = 0;
     const PILOT_R = 150, PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
     // The keyboard drives the same virtual pad, so everything below works the same without a joystick:
@@ -1700,6 +1726,7 @@ import Layout from '../layouts/Layout.astro';
         if(tap(2)) endSelection();
         return;
       }
+      if(pilot.home){ if(tap(2)) exitPilot(); return; } // the wind has the balloon now
       if(tap(1)) startSelection();
       if(tap(2)) exitPilot();
       if(tap(3)) board();
@@ -1711,7 +1738,7 @@ import Layout from '../layouts/Layout.astro';
       balloon.group.scale.setScalar(BALLOON_SCALE);
       balloon.mode = 'pilot';
       balloon.peek = 0;
-      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null };
+      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1 };
       if(windMotes) windMotes.visible = true;
       controls.enabled = false;
       hovered = -1;
@@ -1724,7 +1751,10 @@ import Layout from '../layouts/Layout.astro';
       endSelection();
       pilot.picked = null;
       const to = pilot.overview;
+      if(pilot.home) gas = 1; // landed on the way home: you're home
       pilot = null;
+      burnerOn = false;
+      $('pilot-hud').classList.remove('low');
       document.body.classList.remove('pilot');
       if(windMotes) windMotes.visible = false;
       balloon.mode = 'away'; // it drifts back into its own route a moment later
@@ -1911,10 +1941,139 @@ import Layout from '../layouts/Layout.astro';
       });
       attr.needsUpdate = true;
     }
+    // ── Gas ──────────────────────────────────────────────
+    // The burner runs on gas and the tank is full on every visit. Only the burner spends it (climbing costs, sinking
+    // and drifting are free) plus a pilot flame, so a trip lasts some 6–8 minutes. Low, the flame coughs, climbs weakly
+    // and the envelope dims. Empty, it never falls: the wind takes it home, to the logo, which fills the tank again.
+    // Gas is drawn from nebulae (`gasClouds`): one at each turn of the year and the biggest beyond the oldest month,
+    // so refuelling means travelling into the past; a set gone supernova is a station too. Inside one the balloon
+    // slows, the gas flows into the envelope in the nebula's colour and stays as a tint; each holds a reserve
+    // that comes back with time, so you move on to the next.
+    let gas = 1, burnerOn = false, inhaledAt = 0;
+    const GAS_BURN = 1/190, GAS_IDLE = 1/1200, GAS_LOW = .15, GAS_DRAW = .16, GAS_REGEN = 1/90;
+    const GAS_COLORS = ['#c77dff', '#6ef9f5', '#ff6eb4', '#38bdf8', '#b8f75b', '#ffd166'];
+    interface GasCloud { pos: THREE.Vector3; r: number; color: THREE.Color; reserve: number; group?: THREE.Group; mats?: THREE.Material[]; }
+    let gasClouds: GasCloud[] = [];
+    // a wide, gentle falloff for the nebula's body (the star sprite is too tight and burns in the bloom)
+    function softSprite(){
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 64;
+      const c = cv.getContext('2d')!;
+      const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+      for(let i = 0; i <= 8; i++){ const t = i/8; g.addColorStop(t, `rgba(255,255,255,${Math.exp(-t*t*5)*(1-t)})`); }
+      c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(cv);
+    }
+    const SOFT = softSprite();
+    let intake: THREE.Points | null = null;
+    const gasTint = new THREE.Color();
+    let gasTintK = 0;
+    function buildNebulae(){
+      gasClouds = gasSpots.map((pos, j) => {
+        const rng = makeRng(911 + j*37), last = j === gasSpots.length-1, r = last ? 19 : 14;
+        const color = new THREE.Color(GAS_COLORS[j % GAS_COLORS.length]), other = new THREE.Color(GAS_COLORS[(j+2) % GAS_COLORS.length]);
+        const lobes = [0, 1, 2].map(() => new THREE.Vector3((rng()-.5)*r*.9, (rng()-.5)*r*.4, (rng()-.5)*r*.9));
+        const cloud = (n: number, spread: number, light: number) => {
+          const pos = new Float32Array(n*3), col = new Float32Array(n*3), c = new THREE.Color();
+          for(let i = 0; i < n; i++){
+            const g = () => (rng() + rng() + rng() - 1.5)/1.5; // roughly gaussian
+            const l = lobes[Math.floor(rng()*3)];
+            pos.set([l.x + g()*r*spread, l.y + g()*r*spread*.55, l.z + g()*r*spread], i*3);
+            c.copy(color).lerp(other, rng()*.45).lerp(new THREE.Color(1, 1, 1), Math.pow(rng(), 6)*.6).multiplyScalar(light*(.5 + rng()*.5));
+            col.set([c.r, c.g, c.b], i*3);
+          }
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+          geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+          return geo;
+        };
+        const fine = new THREE.PointsMaterial({ size:.8, map:SPRITE, vertexColors:true, transparent:true, opacity:.7, depthWrite:false, blending:THREE.AdditiveBlending });
+        const puff = new THREE.PointsMaterial({ size:16, map:SOFT, vertexColors:true, transparent:true, opacity:.3, depthWrite:false, blending:THREE.AdditiveBlending });
+        const core = new THREE.SpriteMaterial({ map:SOFT, color:color.clone().multiplyScalar(.32), transparent:true, opacity:.5, depthWrite:false, blending:THREE.AdditiveBlending });
+        fine.userData.base = .7; puff.userData.base = .3; core.userData.base = .5;
+        const glow = new THREE.Sprite(core);
+        glow.scale.setScalar(r*3.2);
+        const group = new THREE.Group();
+        group.add(new THREE.Points(cloud(last ? 1500 : 1000, .75, .5), fine), new THREE.Points(cloud(90, .55, .35), puff), glow);
+        group.position.copy(pos);
+        scene.add(group);
+        return { pos, r: r*1.05, color, reserve: 1, group, mats: [fine, puff, core] };
+      });
+      // sets gone supernova stay as nebulae: they can be drawn from as well
+      for(const q of pieces) if(q.stage === 'supernova remnant') gasClouds.push({ pos: q.mesh.position, r: 9, color: new THREE.Color('#ff6eb4'), reserve: 1 });
+      // the gas flowing from a nebula into the envelope
+      const N = 70, geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3), 3));
+      intake = new THREE.Points(geo, new THREE.PointsMaterial({ size:.55, map:SPRITE, transparent:true, opacity:.9, depthWrite:false, blending:THREE.AdditiveBlending }));
+      intake.userData.seeds = Array.from({ length: N }, () => [Math.random(), new THREE.Vector3().randomDirection()] as [number, THREE.Vector3]);
+      intake.visible = false;
+      intake.frustumCulled = false;
+      scene.add(intake);
+    }
+    function updateGas(dt: number, simDt: number, now: number){
+      for(const c of gasClouds){
+        c.reserve = Math.min(1, c.reserve + simDt*GAS_REGEN);
+        if(!c.group) continue;
+        if(!reduced) c.group.rotation.y += simDt*.02;
+        c.mats!.forEach(m => m.opacity = m.userData.base*(.3 + .7*c.reserve));
+      }
+      const drawing = pilot && pilot.drawing >= 0 && focused < 0 ? gasClouds[pilot.drawing] : null;
+      if(drawing) gasTint.copy(drawing.color);
+      gasTintK = drawing ? Math.min(1, gasTintK + dt*.8) : gasTintK*Math.exp(-dt/9);
+      if(!intake || !balloon) return;
+      intake.visible = !!drawing && !reduced;
+      if(!intake.visible) return;
+      const mouth = balloon.group.localToWorld(new THREE.Vector3(0, 5.5, 0)); // into the envelope
+      const attr = intake.geometry.getAttribute('position') as THREE.BufferAttribute;
+      (intake.material as THREE.PointsMaterial).color.copy(drawing!.color).multiplyScalar(.8);
+      intake.userData.seeds.forEach(([ph, dir]: [number, THREE.Vector3], i: number) => {
+        const u = (ph + now*.00042) % 1, from = drawing!.pos.clone().addScaledVector(dir, drawing!.r*.8);
+        const q = u*u, pt = from.lerp(mouth, q);
+        pt.y += Math.sin(u*Math.PI)*3;
+        attr.setXYZ(i, pt.x, pt.y, pt.z);
+      });
+      attr.needsUpdate = true;
+    }
+    // A long soft breath in, rising: the envelope drinking gas.
+    function inhale(){
+      if(!audioCtx || !masterGain) return;
+      const t = audioCtx.currentTime, len = 2.4;
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*len, audioCtx.sampleRate), data = buf.getChannelData(0);
+      for(let i = 0; i < data.length; i++) data[i] = Math.random()*2 - 1;
+      const src = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+      src.buffer = buf;
+      f.type = 'bandpass'; f.Q.value = 2.2;
+      f.frequency.setValueAtTime(260, t);
+      f.frequency.exponentialRampToValueAtTime(1500, t+len);
+      g.gain.setValueAtTime(.001, t);
+      g.gain.exponentialRampToValueAtTime(.32, t+len*.7);
+      g.gain.exponentialRampToValueAtTime(.001, t+len);
+      src.connect(f); f.connect(g); g.connect(masterGain);
+      src.start(t); src.stop(t+len);
+    }
+    // Out of gas: the wind carries the balloon home along a slow arc, to beside the logo.
+    function goHome(){
+      if(!pilot || pilot.home) return;
+      const from = pilot.pos.clone();
+      const out = from.clone().setY(0);
+      if(out.lengthSq() < 1) out.set(0, 0, 1);
+      const to = out.normalize().multiplyScalar(30).setY(5);
+      const ctrl = from.clone().lerp(to, .5).add(new THREE.Vector3(0, 16, 0));
+      pilot.home = { t0: performance.now(), from, ctrl, to, dur: Math.max(6, Math.min(14, from.distanceTo(to)/12))*1000, landed: 0 };
+      pilot.speed = 0;
+      playNote(NOTES[0]/2);
+    }
+    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; } };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
-      const p = pilot, free = !p.selecting; // while choosing a piece the stick belongs to the selection
-      const sx = free ? pad.x : 0, sy = free ? pad.y : 0, burning = free && pad.held[0];
+      const p = pilot, free = !p.selecting && !p.home; // while choosing a piece the stick belongs to the selection
+      const sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
+      // the tank: the burner and the pilot flame spend it; low, the flame coughs
+      if(free) gas = Math.max(0, gas - dt*(GAS_IDLE + (held ? GAS_BURN : 0)));
+      const cough = gas < GAS_LOW && Math.sin(now*.023) + Math.sin(now*.0071)*1.3 < -.35;
+      const burning = held && gas > 0 && !cough;
+      burnerOn = burning;
+      if(free && gas <= 0) goHome();
       // driven like a car: stick up accelerates, down brakes and backs up slowly, left/right turns
       const k = 1-Math.exp(-dt*2.2);
       p.turn += (-sx - p.turn)*(p.selecting ? 1-Math.exp(-dt*6) : k);
@@ -1922,7 +2081,7 @@ import Layout from '../layouts/Layout.astro';
       const target = sy < 0 ? TOP : sy > 0 ? (p.speed > .5 ? 0 : REVERSE) : 0;
       p.speed += (target - p.speed)*(1-Math.exp(-dt*(p.selecting ? 4 : sy ? 1.1 : .7))); // choosing: it stops so the view holds
       // no air physics: hold the burner and it goes up, let go and gravity takes it down gently; paused, it hangs still
-      const climb = p.selecting ? 0 : burning ? CLIMB : SINK;
+      const climb = p.selecting ? 0 : burning ? CLIMB*(gas < GAS_LOW ? .55 : 1) : SINK;
       p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting ? 6 : 1.8)));
       p.pos.y += p.vy*dt;
       if(p.pos.y < -PILOT_Y){ p.pos.y = -PILOT_Y; p.vy = Math.max(0, p.vy); }
@@ -1930,10 +2089,44 @@ import Layout from '../layouts/Layout.astro';
       // and the wind of its layer still pushes it a little
       const wind = windAt(p.pos.y);
       p.drift.lerp(wind.clone().multiplyScalar(p.selecting ? 0 : WIND_PUSH), 1-Math.exp(-dt*.5));
-      const f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
-      p.pos.addScaledVector(f, p.speed*dt).addScaledVector(p.drift, dt);
-      const r = Math.hypot(p.pos.x, p.pos.z);
-      if(r > PILOT_R){ p.pos.x *= PILOT_R/r; p.pos.z *= PILOT_R/r; } // the edge of the archive holds it back
+      let f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+      if(!p.home){
+        p.pos.addScaledVector(f, p.speed*dt).addScaledVector(p.drift, dt);
+        const r = Math.hypot(p.pos.x, p.pos.z);
+        if(r > PILOT_R){ p.pos.x *= PILOT_R/r; p.pos.z *= PILOT_R/r; } // the edge of the archive holds it back
+        // a nebula: the balloon slows down and drinks
+        const was = p.drawing;
+        p.drawing = gas < .999 ? gasClouds.findIndex(c => c.reserve > .02 && c.pos.distanceTo(p.pos) < c.r) : -1;
+        if(p.drawing >= 0 && !p.selecting){
+          const c = gasClouds[p.drawing], take = Math.min(c.reserve*1.3, GAS_DRAW*dt, 1-gas);
+          gas += take; c.reserve -= take/1.3;
+          p.speed *= Math.exp(-dt*1.4);
+          if(was < 0 && now-inhaledAt > 3000){ inhaledAt = now; inhale(); }
+        }
+      } else {
+        // carried home by the wind, then the logo fills the tank and the balloon heads out again
+        const h = p.home, u = Math.min(1, (now-h.t0)/h.dur), e = u*u*(3-2*u), r = 1-e;
+        const next = h.from.clone().multiplyScalar(r*r).addScaledVector(h.ctrl, 2*r*e).addScaledVector(h.to, e*e);
+        const step = next.clone().sub(p.pos);
+        if(step.x*step.x + step.z*step.z > 1e-6){
+          const want = Math.atan2(step.x, step.z);
+          p.heading += Math.atan2(Math.sin(want-p.heading), Math.cos(want-p.heading))*(1-Math.exp(-dt*2));
+        }
+        p.pos.copy(next); p.vy = 0; p.speed = 0; p.turn *= .9; p.drawing = -1;
+        if(u >= 1 && !h.landed){
+          h.landed = now;
+          burstAt = now; // the logo lights the burner again
+          burnerBreath(1.8, .6);
+          [0, 2, 4].forEach((n, i) => setTimeout(() => playNote(NOTES[n]), i*140));
+        }
+        if(h.landed) gas = Math.min(1, gas + dt/1.8);
+        if(h.landed && now-h.landed > 2200){
+          p.home = null;
+          p.heading = Math.atan2(p.pos.x, p.pos.z); // facing out, into the archive
+          p.vy = 7;
+        }
+        f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+      }
       const g = balloon.group;
       g.position.copy(p.pos);
       if(!reduced) g.position.y += Math.sin(now*.0011)*.25;
@@ -1955,6 +2148,11 @@ import Layout from '../layouts/Layout.astro';
         $('wind-arrow').style.transform = `rotate(${-ang}deg)`;
         const d = new Date();
         $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
+        $('gas-fill').style.width = `${Math.round(gas*100)}%`;
+        $('pilot-hud').classList.toggle('low', gas < GAS_LOW && !p.home);
+        $('gas-msg').textContent = p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
+          : p.drawing >= 0 ? 'drawing gas from the nebula'
+          : gas < GAS_LOW ? 'low gas · nebulae lie in the past' : '';
       }
       return Math.min(.12, wind.length()/80) + (burning ? .12 : 0) + Math.abs(p.speed)/TOP*.1; // wind, burner and speed, in sound and lens
     }
@@ -2157,6 +2355,7 @@ import Layout from '../layouts/Layout.astro';
       }
       if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded;
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
+      updateGas(dt, frozen ? 0 : dt, now);
       if(pointerFresh && balloon && focused < 0 && !flight && !boarded){
         const near = balloon.mode === 'cruise' && Math.hypot((ndc.x+1)/2*window.innerWidth-balloon.sx, (1-ndc.y)/2*window.innerHeight-balloon.sy) < 56;
         if(near !== hoverBalloon){
@@ -2571,7 +2770,7 @@ import Layout from '../layouts/Layout.astro';
       { label: 'ila', url: 'https://www.ila-web.de', image: '/img/ila.png' },
     ];
     interface Floater { el: HTMLAnchorElement; x: number; y: number; vx: number; vy: number; w: number; h: number; }
-    const floaterBox = $('floaters');
+    const floaterBox = $('floaters'), pilotHudEl = $('pilot-hud');
     let floaters: Floater[] = [];
     const FL_TOP = 50, FL_BOTTOM = 130; // clear of the nav and the readout
     function buildFloaters(list: SiteLink[]){
@@ -2613,10 +2812,12 @@ import Layout from '../layouts/Layout.astro';
       flLast = now;
       const W = window.innerWidth, H = window.innerHeight;
       const piece = focused >= 0 && camera && pieces[focused] ? rectOf(pieces[focused], 28) : null;
+      const hud = pilot ? pilotHudEl.getBoundingClientRect() : null; // the flying readout stays readable
       floaters.forEach((f, i) => {
         f.x += f.vx*dt; f.y += f.vy*dt;
         for(const g of floaters.slice(i + 1)) if(bounceOff(f, g.x, g.y, g.w, g.h)){ g.vx = -f.vx; g.vy = -f.vy; }
         if(piece) bounceOff(f, piece.x - piece.w/2, piece.y - piece.h/2, piece.w, piece.h);
+        if(hud) bounceOff(f, hud.left - 12, hud.top - 8, hud.width + 24, hud.height + 16);
         if(f.x < 0){ f.x = 0; f.vx = Math.abs(f.vx); }
         if(f.x + f.w > W){ f.x = Math.max(0, W - f.w); f.vx = -Math.abs(f.vx); }
         if(f.y < FL_TOP){ f.y = FL_TOP; f.vy = Math.abs(f.vy); }
