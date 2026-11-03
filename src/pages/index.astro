@@ -73,6 +73,24 @@ import Layout from '../layouts/Layout.astro';
       .sky-mark.sun { color: #ffb347; }
       .sky-mark.sun i { border-radius: 50%; width: 22px; height: 22px; transform: none; }
       .sky-mark[hidden] { display: none; }
+      /* Xibalbá: the deeper you go, the darker and redder the edges */
+      #xib-dark { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(20,4,8,.15) 30%, rgba(40,6,10,.85) 100%); }
+      #xib-panel { position: fixed; left: 2.4rem; bottom: 5rem; z-index: 12; width: min(380px, 80vw); opacity: 0; pointer-events: none; transition: opacity .6s; text-shadow: 0 0 18px rgba(8,8,16,.95); }
+      #xib-panel.show { opacity: 1; pointer-events: auto; }
+      #xib-panel .kicker { font-size: .6rem; letter-spacing: .22em; text-transform: uppercase; color: #ffb37a; }
+      #xib-name { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: 2.6rem; line-height: 1; margin: .4rem 0 .6rem; }
+      #xib-where { font-family: var(--serif); font-size: 1.05rem; line-height: 1.4; color: var(--text); }
+      #xib-words { list-style: none; margin: .9rem 0; display: flex; flex-direction: column; gap: .35rem; }
+      #xib-words li { font-family: var(--serif); font-style: italic; font-size: 1rem; color: rgba(240,237,232,.8); }
+      #xib-words li small { font-family: var(--mono); font-style: normal; font-size: .55rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-left: .5rem; }
+      #xib-form { display: flex; flex-direction: column; gap: .4rem; }
+      #xib-form label { font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+      #xib-form span { display: flex; gap: .4rem; }
+      #xib-form input { flex: 1; min-width: 0; background: rgba(8,8,16,.6); border: 1px solid rgba(255,179,122,.35); color: var(--text); font: inherit; font-family: var(--serif); font-size: 1rem; padding: .5rem .6rem; outline: none; }
+      #xib-form button { font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: #ffb37a; border: 1px solid rgba(255,179,122,.45); padding: .5rem .7rem; white-space: nowrap; }
+      .sky-mark.xib { color: #ffb37a; }
+      .sky-mark.xib i { width: 10px; height: 10px; border-radius: 50%; transform: none; background: currentColor; border: none; box-shadow: 0 0 10px currentColor; }
+      body.focus #xib-panel, body.aboard #xib-panel { opacity: 0; pointer-events: none; }
       /* crossing into another galaxy: everything goes to light */
       #warp { position: fixed; inset: 0; z-index: 40; pointer-events: none; background: #f0ede8; opacity: 0; transition: opacity .9s ease-in; }
       #warp.on { opacity: 1; }
@@ -266,6 +284,17 @@ import Layout from '../layouts/Layout.astro';
   </div>
   <div id="warp" aria-hidden="true"></div>
   <div id="sky-marks" aria-hidden="true"></div>
+  <div id="xib-dark" aria-hidden="true"></div>
+  <aside id="xib-panel" aria-live="polite">
+    <p class="kicker">Xibalbá</p>
+    <h2 id="xib-name"></h2>
+    <p id="xib-where"></p>
+    <ul id="xib-words"></ul>
+    <form id="xib-form">
+      <label for="xib-input">words for him</label>
+      <span><input id="xib-input" maxlength="300" autocomplete="off" placeholder="…"><button type="submit">leave them</button></span>
+    </form>
+  </aside>
   <aside id="world-info" aria-live="polite">
     <p id="world-kicker"></p>
     <h2 id="world-title"></h2>
@@ -2233,7 +2262,7 @@ import Layout from '../layouts/Layout.astro';
       pilot.speed = 0;
       playNote(NOTES[0]/2);
     }
-    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get pieces(){ return pieces; }, visit: (k: number) => visitWorld(k) };
+    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get pieces(){ return pieces; }, get xib(){ return xib; }, visit: (k: number) => visitWorld(k) };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
       const p = pilot;
@@ -2250,6 +2279,7 @@ import Layout from '../layouts/Layout.astro';
         else if(p.dockFree){ p.undock = p.dock; p.dock = -1; }
       }
       const moored = p.dock >= 0;
+      const withHim = nearHim(p.pos); // beside him the balloon hovers, as long as you don't push on
       const free = !p.selecting && !p.home && !moored; // while choosing a piece the stick belongs to the selection
       const sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
       // the tank: the burner and the pilot flame spend it; low, the flame coughs
@@ -2266,10 +2296,11 @@ import Layout from '../layouts/Layout.astro';
       const target = sy < 0 ? TOP : sy > 0 ? (p.speed > .5 ? 0 : REVERSE) : 0;
       p.speed += (target - p.speed)*(1-Math.exp(-dt*(p.selecting || moored ? 4 : sy ? 1.1 : .7))); // choosing or moored: it stops so the view holds
       // no air physics: hold the burner and it goes up, let go and gravity takes it down gently; paused, it hangs still
-      const climb = p.selecting || moored ? 0 : burning ? CLIMB*(gas < GAS_LOW ? .55 : 1) : SINK;
+      const climb = p.selecting || moored || (withHim && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW ? .55 : 1) : SINK;
       p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting || moored ? 6 : 1.8)));
       p.pos.y += p.vy*dt;
-      if(p.pos.y < -PILOT_Y){ p.pos.y = -PILOT_Y; p.vy = Math.max(0, p.vy); }
+      const floor = inXibalba(p.pos) || (xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260) ? xibBottom() : -PILOT_Y; // under the Sun the road goes down to Xibalbá
+      if(p.pos.y < floor){ p.pos.y = floor; p.vy = Math.max(0, p.vy); }
       if(p.pos.y > PILOT_Y){ p.pos.y = PILOT_Y; p.vy = Math.min(0, p.vy); }
       // and the wind of its layer still pushes it a little
       const wind = windAt(p.pos.y);
@@ -2360,7 +2391,11 @@ import Layout from '../layouts/Layout.astro';
         const d = new Date();
         $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
         const mw = moored ? worlds[p.dock].link : p.nearGalaxy >= 0 ? worlds[p.nearGalaxy].link : null, kb = document.body.classList.contains('kb');
-        $('gas-msg').textContent = mw?.galaxy ? `${mw.label}'s galaxy · ${!mw.galaxy.open ? 'closed: knock at its door with the mouse' : gas < CROSS_COST ? 'you need 2 gallons to cross' : 'fly into its heart to cross over'}`
+        const xibAt = xib && inXibalba(p.pos) ? journeyAt() : null;
+        const xibLevel = xib && inXibalba(p.pos) ? Math.max(0, Math.min(8, Math.floor((xib.top - p.pos.y)/LEVEL_H + .5))) : -1;
+        $('gas-msg').textContent = withHim ? `${xib!.j.name || 'papá'} · en su viaje · tramo ${xibAt ? xibAt.i + 1 : 9} de 9`
+          : xibLevel >= 0 ? `Xibalbá · ${xibLevel + 1} · ${LEVELS[xibLevel]}`
+          : mw?.galaxy ? `${mw.label}'s galaxy · ${!mw.galaxy.open ? 'closed: knock at its door with the mouse' : gas < CROSS_COST ? 'you need 2 gallons to cross' : 'fly into its heart to cross over'}`
           : moored ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
@@ -2577,6 +2612,7 @@ import Layout from '../layouts/Layout.astro';
       updateGas(dt, frozen ? 0 : dt, now);
       updateWorlds(frozen ? 0 : dt);
       updateBeacons(now);
+      updateXibalba(now);
       manageThumbs(now);
       if(pointerFresh && balloon && focused < 0 && !flight && !boarded){
         const near = balloon.mode === 'cruise' && Math.hypot((ndc.x+1)/2*window.innerWidth-balloon.sx, (1-ndc.y)/2*window.innerHeight-balloon.sy) < 56;
@@ -3293,6 +3329,151 @@ import Layout from '../layouts/Layout.astro';
       sunMark.innerHTML = '<i></i><b>➤</b><span>☉ the Sun</span>';
       $('sky-marks').append(sunMark);
     }
+    // ── Xibalbá ──
+    // Under the Sun, along the ceiba (the world tree, a thin green-gold axis through it), the nine stretches of the
+    // road to Xibalbá as the Popol Vuh tells it: the descent, the rivers, the crossroads of the four roads, and the
+    // houses of trial. Eze's father travels it in a canoe of light, in real time: four years from the day he left
+    // (the length of the journey to the land of the dead in the neighbouring Mexica tradition), across the nine,
+    // and then he rises with the Sun and stays in the sky beside it. Only the family sees any of this: it is built
+    // only when the server answers a device logged in as one of them. They can fly down, stay with him a while
+    // (the balloon hovers), see the photos that travel with him and leave him words.
+    interface Journey { name: string; died: string; photos: { id: string; caption: string }[]; words: { from: string; text: string; at: string }[]; }
+    const LEVELS = ['el descenso', 'los ríos de sangre y de pus', 'la encrucijada de los cuatro caminos', 'la Casa Oscura', 'la Casa de las Navajas', 'la Casa del Frío', 'la Casa de los Jaguares', 'la Casa del Fuego', 'la Casa de los Murciélagos'];
+    const JOURNEY_MS = 4*365.25*864e5, LEVEL_H = 70;
+    let xib: { j: Journey; top: number; c: THREE.Vector3; light: THREE.Group; photos: THREE.Mesh[]; mark: HTMLElement } | null = null;
+    const xibDark = $('xib-dark'), xibPanel = $('xib-panel');
+    function serifLabel(text: string, color = '#f0ede8'){
+      const cv = document.createElement('canvas');
+      cv.width = 1024; cv.height = 96;
+      const c = cv.getContext('2d')!;
+      c.font = "italic 300 58px 'Cormorant Garamond', serif"; c.fillStyle = color; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(text, 512, 48);
+      const mesh = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, opacity: .55, depthWrite: false }));
+      mesh.scale.set(42, 3.9, 1);
+      billboards.push(mesh); scene.add(mesh);
+      return mesh;
+    }
+    function canoe(){
+      const cv = document.createElement('canvas');
+      cv.width = 256; cv.height = 128;
+      const c = cv.getContext('2d')!;
+      c.fillStyle = '#2a1408'; c.strokeStyle = '#ffb37a'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(20, 70); c.quadraticCurveTo(128, 120, 236, 70); c.quadraticCurveTo(128, 92, 20, 70); c.fill(); c.stroke();
+      // the two paddlers, and the one who travels between them, a point of light
+      for(const x of [70, 186]){ c.fillStyle = '#ffb37a'; c.beginPath(); c.arc(x, 52, 7, 0, Math.PI*2); c.fill(); c.fillRect(x-4, 58, 8, 16); c.strokeStyle = '#ffb37a'; c.beginPath(); c.moveTo(x+6, 60); c.lineTo(x+22, 96); c.stroke(); }
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
+      sp.scale.set(16, 8, 1); sp.position.y = -5;
+      return sp;
+    }
+    async function loadXibalba(){
+      if(!ownerPass || !renderer || xib) return;
+      const r = await fetch('/api/frases/xibalba', { headers: { 'X-Auth': ownerPass } }).catch(() => null);
+      if(!r?.ok) return; // not family, or not begun: nothing below
+      buildXibalba(await r.json());
+    }
+    function buildXibalba(j: Journey){
+      const c = sunAt(), top = c.y - 140;
+      // the ceiba, from high above the Sun down past the last house
+      const tree = new THREE.Mesh(new THREE.CylinderGeometry(.9, 1.6, 1200, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0x9fd86a, transparent: true, opacity: .22, depthWrite: false, blending: THREE.AdditiveBlending }));
+      tree.position.set(c.x, top + 600 - 9*LEVEL_H/2 - 60, c.z);
+      scene.add(tree);
+      const tint = (i: number) => new THREE.Color().setHSL(.02 - i*.012 + 1, .75, .42 - i*.025);
+      LEVELS.forEach((name, i) => {
+        const y = top - i*LEVEL_H;
+        const ring = new THREE.Mesh(new THREE.RingGeometry(148, 150.5, 128), new THREE.MeshBasicMaterial({ color: tint(i), transparent: true, opacity: .45, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+        ring.rotation.x = -Math.PI/2; ring.position.set(c.x, y, c.z);
+        scene.add(ring);
+        serifLabel(`${i+1} · ${name}`, '#ffcfa8').position.set(c.x, y + 4, c.z - 156);
+        if(i === 2){ // the crossroads: red, white, black and yellow roads
+          ['#e4232b', '#f0ede8', '#1d1d3a', '#ffd200'].forEach((col, k) => {
+            const road = new THREE.Mesh(new THREE.PlaneGeometry(140, 2.2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .6, side: THREE.DoubleSide, depthWrite: false }));
+            road.rotation.x = -Math.PI/2; road.rotation.z = k*Math.PI/2 + Math.PI/4;
+            road.position.set(c.x + Math.cos(k*Math.PI/2 + Math.PI/4)*70, y, c.z - Math.sin(k*Math.PI/2 + Math.PI/4)*70);
+            scene.add(road);
+          });
+        }
+      });
+      // him, in the canoe, carried by two paddlers
+      const light = new THREE.Group();
+      const glow = (color: number, size: number, opacity: number) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: SOFT, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending })); sp.scale.setScalar(size); return sp; };
+      light.add(glow(0xff9a4a, 70, .35), glow(0xffe6c0, 16, 1), canoe());
+      scene.add(light);
+      const mark = document.createElement('div');
+      mark.className = 'sky-mark xib';
+      mark.innerHTML = '<i></i><b>➤</b><span></span>';
+      mark.querySelector('span')!.textContent = `✦ ${j.name || 'papá'}`;
+      $('sky-marks').append(mark);
+      xib = { j, top, c, light, photos: [], mark };
+      // the photos travel with him, close around the canoe
+      j.photos.forEach((ph, k) => {
+        fetch(`/api/frases/xibalba/photo/${ph.id}`, { headers: { 'X-Auth': ownerPass } }).then(r => r.ok ? r.blob() : null).then(b => {
+          if(!b || !xib) return;
+          const img = new Image();
+          img.onload = () => {
+            const mat = new THREE.MeshBasicMaterial({ map: new THREE.Texture(img), transparent: true, opacity: .9, depthWrite: false });
+            mat.map!.needsUpdate = true;
+            const m = new THREE.Mesh(plane, mat), a = img.naturalWidth/img.naturalHeight;
+            m.scale.set(a >= 1 ? 9 : 9*a, a >= 1 ? 9/a : 9, 1);
+            m.userData.k = k; m.userData.n = j.photos.length;
+            billboards.push(m); scene.add(m); xib!.photos.push(m);
+          };
+          img.src = URL.createObjectURL(b);
+        }).catch(() => {});
+      });
+      PILOT_R = Math.max(PILOT_R, c.length() + 200);
+    }
+    // where he is today: a fraction of the four years, as a descent spiralling round the ceiba through the nine
+    function journeyAt(now = Date.now()){
+      const f = Math.max(0, Math.min(1, (now - Date.parse(xib!.j.died))/JOURNEY_MS));
+      const L = f*9, i = Math.min(8, Math.floor(L));
+      return { f, i, arrived: f >= 1, pos: f >= 1 ? xib!.c.clone().add(new THREE.Vector3(60, 45, 0)) // in the sky, beside the Sun
+        : new THREE.Vector3(xib!.c.x + Math.cos(L*Math.PI*1.6 + .3)*105, xib!.top - L*LEVEL_H, xib!.c.z - Math.sin(L*Math.PI*1.6 + .3)*105) };
+    }
+    const inXibalba = (p: THREE.Vector3) => !!xib && Math.hypot(p.x - xib.c.x, p.z - xib.c.z) < 260 && p.y < xib.top + 30;
+    const xibBottom = () => xib ? xib.top - 9*LEVEL_H - 30 : -PILOT_Y;
+    const nearHim = (p: THREE.Vector3) => !!xib && p.distanceTo(xib.light.position) < 55;
+    function updateXibalba(now: number){
+      if(!xib) return;
+      const at = journeyAt();
+      xib.light.position.copy(at.pos).add(new THREE.Vector3(0, Math.sin(now*.0012)*1.2, 0));
+      xib.photos.forEach(m => {
+        const a = m.userData.k/m.userData.n*Math.PI*2 + now*.00005;
+        m.position.copy(xib!.light.position).add(new THREE.Vector3(Math.cos(a)*24, 6 + Math.sin(a*2)*2, Math.sin(a)*24));
+      });
+      // darker and redder the deeper the camera goes
+      const depth = Math.hypot(camera.position.x - xib.c.x, camera.position.z - xib.c.z) < 320 ? (xib.top - camera.position.y)/(LEVEL_H*5) : 0;
+      xibDark.style.opacity = String(Math.max(0, Math.min(.7, depth)));
+      xib.mark.hidden = !!pilot && pilot.pos.distanceTo(xib.light.position) < 90;
+      if(!xib.mark.hidden) placeMark(xib.mark, xib.light.position, window.innerWidth, window.innerHeight);
+      const show = !!pilot && focused < 0 && nearHim(pilot.pos);
+      if(show && !xibPanel.classList.contains('show')) paintXibPanel(at);
+      xibPanel.classList.toggle('show', show);
+    }
+    function since(ms: number){
+      const d = Math.floor(ms/864e5), y = Math.floor(d/365.25), m = Math.floor((d - y*365.25)/30.44);
+      return [y ? `${y} ${y === 1 ? 'año' : 'años'}` : '', m ? `${m} ${m === 1 ? 'mes' : 'meses'}` : ''].filter(Boolean).join(' y ') || `${d} días`;
+    }
+    function paintXibPanel(at = journeyAt()){
+      if(!xib) return;
+      const j = xib.j, left = Date.parse(j.died), arrives = new Date(left + JOURNEY_MS);
+      $('xib-name').textContent = j.name || 'papá';
+      $('xib-where').textContent = at.arrived
+        ? `Atravesó los nueve. Desde el ${arrives.toLocaleDateString('es')} viaja con el Sol.`
+        : `Lleva ${since(Date.now() - left)} de viaje. Ahora cruza ${LEVELS[at.i]}, el tramo ${at.i + 1} de 9. Sube con el Sol el ${arrives.toLocaleDateString('es')}.`;
+      $('xib-words').innerHTML = '';
+      j.words.slice(-5).reverse().forEach(w => { const li = document.createElement('li'); li.textContent = w.text; const sm = document.createElement('small'); sm.textContent = w.from; li.append(sm); $('xib-words').append(li); });
+    }
+    $('xib-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const input = $('xib-input') as HTMLInputElement, text = input.value.trim();
+      if(!text || !xib) return;
+      const r = await fetch('/api/frases/xibalba/words', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Auth': ownerPass }, body: JSON.stringify({ text }) }).catch(() => null);
+      if(!r?.ok) return;
+      xib.j.words.push({ from: whoAmI || '', text, at: new Date().toISOString() });
+      input.value = '';
+      [0, 2, 4, 7].forEach((n, i) => setTimeout(() => playNote(NOTES[n % NOTES.length]/2), i*220)); // low, going down to him
+      paintXibPanel();
+    });
     const galaxySize = (sh: Shape) => 40*Math.max(.85, Math.min(1.7, sh.R/110));
     // the data of every galaxy we're allowed to see, to draw its shape (once per page)
     const shapesAsked = new Set<string>();
@@ -3544,6 +3725,7 @@ import Layout from '../layouts/Layout.astro';
       linkList = GAL ? [] : DEFAULT_LINKS;
       buildSun();
       buildWorlds();
+      loadXibalba();
       if(locked) return;
       fetch(BASE + '/links.json', { cache: 'no-store' })
         .then(r => r.ok ? r.json() : null)

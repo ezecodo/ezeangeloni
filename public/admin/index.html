@@ -280,6 +280,7 @@
       <button data-tab="door" data-guest hidden>door</button>
       <button data-tab="messages" data-guest hidden>messages</button>
       <button data-tab="galaxies" data-owner>galaxies</button>
+      <button data-tab="xibalba" data-owner>xibalbá</button>
     </nav>
 
     <section class="tab active" id="tab-upload">
@@ -387,6 +388,22 @@
       <div id="galMe" class="link-row"></div>
       <div id="galList"></div>
       <p id="galStatus" class="status"></p>
+    </section>
+
+    <section class="tab" id="tab-xibalba">
+      <p class="hint">his journey through the underworld · only you and the family you tick ever see it · nothing here is public</p>
+      <div class="words-meta" style="margin-top:.6rem">
+        <div><label for="xibName">his name</label><input type="text" id="xibName" maxlength="60" placeholder="papá"></div>
+        <div style="flex:.7"><label for="xibDied">the day he left</label><input type="date" id="xibDied"></div>
+      </div>
+      <label>who can go down with you</label>
+      <div id="xibFamily" class="hint" style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:.3rem"></div>
+      <button class="primary" id="xibSave" type="button">save</button>
+      <p id="xibStatus" class="status"></p>
+      <label for="xibFile" style="margin-top:1.6rem">photos that travel with him</label>
+      <input type="file" id="xibFile" accept="image/jpeg,image/png,image/webp" multiple>
+      <div id="xibPhotos" class="shots"></div>
+      <div class="recent"><h3>words left for him</h3><ul id="xibWords"></ul></div>
     </section>
 
     <section class="tab" id="tab-door">
@@ -2340,6 +2357,47 @@
     } catch (e) { $('galStatus').className = 'status error'; $('galStatus').textContent = e.message; }
   });
   document.querySelector('.tabs button[data-tab=galaxies]').addEventListener('click', loadGalaxies);
+
+  // ===== XIBALBÁ (Eze only) =====
+  // His father's journey: name, the day he left (the journey runs in real time from it), who in the family can go
+  // down, the photos that travel with him, and the words the family leaves him. All private on the server.
+  async function xibPhotoUrl(id) {
+    const r = await api(`/api/frases/xibalba/photo/${id}`);
+    return r.ok ? URL.createObjectURL(await r.blob()) : '';
+  }
+  async function loadXibalba() {
+    try {
+      const [st, gs] = await Promise.all([api('/api/frases/xibalba/settings').then(r => r.json()), api('/api/frases/galaxies').then(r => r.json())]);
+      $('xibName').value = st.name || ''; $('xibDied').value = st.died || ''; $('xibDied').max = new Date().toISOString().slice(0, 10);
+      $('xibFamily').innerHTML = (gs.galaxies || []).map(g => `<label style="margin:0;display:flex;gap:.4rem;align-items:center;text-transform:none;letter-spacing:.05em"><input type="checkbox" value="${attr(g.slug)}" ${st.family.includes(g.slug) ? 'checked' : ''} style="display:inline-block">${escapeHtml(g.name)}</label>`).join('') || 'no galaxies yet';
+      $('xibPhotos').replaceChildren(...st.photos.map(ph => {
+        const el = document.createElement('div'); el.className = 'shot';
+        el.innerHTML = `<img alt=""><button class="x" type="button" aria-label="remove">✕</button><div class="fields"><span class="hint">${escapeHtml(ph.caption || '')}</span></div>`;
+        xibPhotoUrl(ph.id).then(u => { if (u) el.querySelector('img').src = u; });
+        el.querySelector('.x').addEventListener('click', async () => { if (!confirm('Remove this photo from his journey?')) return; await api(`/api/frases/xibalba/photos/${ph.id}`, { method: 'DELETE' }); loadXibalba(); });
+        return el;
+      }));
+      $('xibWords').innerHTML = st.words.map(w => `<li><q>${escapeHtml(w.text)}</q><span>${escapeHtml(w.from)} · ${escapeHtml(w.at.slice(0, 10))}</span></li>`).join('') || '<li><span>no words yet</span></li>';
+    } catch { $('xibStatus').textContent = 'connection error'; }
+  }
+  $('xibSave').addEventListener('click', async () => {
+    const family = [...document.querySelectorAll('#xibFamily input:checked')].map(i => i.value);
+    const r = await api('/api/frases/xibalba/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('xibName').value, died: $('xibDied').value, family }) });
+    const j = await r.json().catch(() => ({}));
+    $('xibStatus').className = r.ok ? 'status' : 'status error';
+    $('xibStatus').textContent = r.ok ? 'saved · his journey runs from that day' : (j.error || 'error');
+  });
+  $('xibFile').addEventListener('change', async (e) => {
+    const files = [...e.target.files];
+    for (const [i, f] of files.entries()) {
+      $('xibStatus').className = 'status'; $('xibStatus').textContent = `uploading ${i + 1} / ${files.length}`;
+      let blob = f; try { blob = await shrink(f); } catch {}
+      const form = new FormData(); form.append('photo', blob, 'photo.jpg');
+      await api('/api/frases/xibalba/photos', { method: 'POST', body: form });
+    }
+    e.target.value = ''; $('xibStatus').textContent = files.length ? 'they travel with him now' : ''; loadXibalba();
+  });
+  document.querySelector('.tabs button[data-tab=xibalba]').addEventListener('click', loadXibalba);
 
   // ===== DOOR (someone's galaxy) =====
   // Who's knocking and who's been let in. Turning someone away gives the galaxy a new address: everyone still

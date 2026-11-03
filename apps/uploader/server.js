@@ -6,6 +6,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { saveLinks, storeLinkImage } from './links.js';
 import * as galaxies from './galaxies.js';
+import * as xibalba from './xibalba.js';
 import { addPhoto, addText, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
 
 // === Config ===
@@ -683,6 +684,22 @@ app.delete('/api/frases/guests/:id', checkWho, galaxyRoute(async (req) => {
   if (req.who.owner) throw Object.assign(new Error('your galaxy is open to all'), { status: 400 });
   return galaxies.turnAway(req.who.slug, req.params.id);
 }));
+
+// ── Xibalbá: the father's journey, for the family only (a device logged in as one of them) ──
+// To anyone else these routes answer 404, as if there were nothing below.
+const family = async (req) => { const who = await visitor(req); if (!who || !(await xibalba.isFamily(who.slug))) throw Object.assign(new Error('not found'), { status: 404 }); return who; };
+app.get('/api/frases/xibalba', galaxyRoute(async (req) => { doorLimit(req); await family(req); const j = await xibalba.journey(); if (!j) throw Object.assign(new Error('not found'), { status: 404 }); return j; }));
+app.get('/api/frases/xibalba/photo/:id', async (req, res) => {
+  try { doorLimit(req); await family(req); const { file, type } = await xibalba.photoFile(req.params.id); res.type(type).set('Cache-Control', 'private, max-age=86400').sendFile(file); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+app.post('/api/frases/xibalba/words', express.json({ limit: '8kb' }), galaxyRoute(async (req) => { wordsLimit(req); const who = await family(req); return xibalba.leaveWords(who.name, req.body?.text); }));
+// Eze's admin
+app.get('/api/frases/xibalba/settings', checkAuth, galaxyRoute(async () => xibalba.settings()));
+app.put('/api/frases/xibalba/settings', express.json(), checkAuth, galaxyRoute(async (req) => xibalba.configure(req.body || {})));
+const xibUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
+app.post('/api/frases/xibalba/photos', checkAuth, xibUpload.single('photo'), galaxyRoute(async (req) => { if (!req.file) throw Object.assign(new Error('photo required'), { status: 400 }); return xibalba.addPhoto(req.file.buffer, req.body?.caption); }));
+app.delete('/api/frases/xibalba/photos/:id', checkAuth, galaxyRoute(async (req) => xibalba.removePhoto(req.params.id)));
 
 // Words left with the balloon in someone else's galaxy (Eze's own still go to his Telegram through n8n).
 app.post('/api/frases/words', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {
