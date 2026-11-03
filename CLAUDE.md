@@ -92,6 +92,7 @@ The project's reason for being is **digital independence**. The user (Eze) is a 
 
 The site makes barrios from the month of `fecha`, so backdating is all it takes. Two doors write `frases.json`, both through `apps/uploader/frases.js` (one writer at a time, atomic rename; new entries get `subida`):
 - **Admin → photos tab** (`/admin/#photos`, installable on the phone via `manifest.webmanifest`): pick a batch, each date read from EXIF (green), the file name (`IMG_20190714…`) or the file time (gold, check it), editable, grouped by month as the barrios they'll form. Resized in the browser to 2400px JPEG (orientation applied; HEIC only where the browser decodes it), sent one per request to `POST /api/frases/photo`.
+- **Admin → words tab** (`/admin/#words`): write a frase, date optional (today by default), `POST /api/frases/text`; shows the last 8 frases with their links.
 - **Telegram bot** (n8n workflow "My workflow 3"): photo and text messages are forwarded raw to `POST /api/frases/telegram` on loopback; the uploader checks the chat id (`TELEGRAM_CHAT`), downloads the photo (`TELEGRAM_TOKEN`) and replies with the barrio and link. A date at the start of the text dates it: `2019-07-14 Misil`, `14/07/2019 · Misil`, `2019-07 …`. A photo sent as a file (uncompressed) keeps its EXIF date. `/list` and `/delete` are still the old n8n SSH nodes (index-based, still valid since entries are appended).
 
 ## Set uploader (mini backend)

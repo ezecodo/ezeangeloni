@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>sets · admin</title>
+<title>eze · admin</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="/admin/manifest.webmanifest">
 <meta name="theme-color" content="#080810">
@@ -219,6 +219,18 @@
   .bulk { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-top:1rem; font-size:.62rem; color:var(--muted); letter-spacing:.1em; }
   .bulk input[type=date] { width:auto; padding:.35rem .5rem; font-size:.7rem; }
 
+  /* words: write a frase, like the bot */
+  #wordText { font-family:'Cormorant Garamond', serif; font-style:italic; font-weight:300; font-size:1.5rem; line-height:1.35; min-height:150px; padding:1rem; }
+  .words-meta { display:flex; gap:.7rem; align-items:end; }
+  .words-meta > div { flex:1; }
+  .words-meta .count { font-size:.6rem; color:var(--muted); letter-spacing:.1em; padding-bottom:.7rem; }
+  .recent { margin-top:1.8rem; }
+  .recent h3 { font-size:.6rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); font-weight:400; border-bottom:1px solid var(--line); padding-bottom:.4rem; }
+  .recent li { list-style:none; padding:.7rem 0; border-bottom:1px solid var(--line); display:flex; gap:.8rem; align-items:baseline; }
+  .recent li q { flex:1; font-family:'Cormorant Garamond', serif; font-style:italic; font-size:1.1rem; quotes:none; }
+  .recent li span { font-size:.58rem; color:var(--muted); letter-spacing:.1em; white-space:nowrap; }
+  .recent li a { color:inherit; text-decoration:none; }
+
   @media (max-width: 640px) {
     .strip { grid-template-columns: repeat(2, 1fr); }
     main { padding: 1.5rem 1.1rem; }
@@ -227,7 +239,7 @@
 </head>
 <body data-view="login">
 <main>
-  <h1>sets · admin</h1>
+  <h1>eze · admin</h1>
   <div class="accent"></div>
   <p class="subtitle">ezeangeloni · private</p>
 
@@ -243,6 +255,7 @@
       <button data-tab="upload" class="active">new set</button>
       <button data-tab="manage">manage</button>
       <button data-tab="photos">photos</button>
+      <button data-tab="words">words</button>
     </nav>
 
     <section class="tab active" id="tab-upload">
@@ -321,6 +334,22 @@
 
     <section class="tab" id="tab-manage">
       <div id="setList"><p class="empty">loading...</p></div>
+    </section>
+
+    <section class="tab" id="tab-words">
+      <label for="wordText">a frase</label>
+      <textarea id="wordText" maxlength="2000" placeholder="…"></textarea>
+      <div class="words-meta">
+        <div>
+          <label for="wordDate">date</label>
+          <input type="date" id="wordDate">
+        </div>
+        <span class="count" id="wordCount"></span>
+      </div>
+      <p class="hint">today by default · an earlier date sends it to that month's barrio</p>
+      <button class="primary" id="wordSave" disabled>save</button>
+      <p id="wordStatus" class="status"></p>
+      <div class="recent"><h3>last words</h3><ul id="wordRecent"></ul></div>
     </section>
 
     <section class="tab" id="tab-photos">
@@ -2002,7 +2031,57 @@
       : `${ok} in the universe · <a href="/" style="color:var(--cyan)">go see them</a>`;
     renderShots();
   });
-  if (location.hash === '#photos') document.querySelector('.tabs button[data-tab=photos]')?.click();
+
+  // ===== WORDS =====
+  // A frase, like the bot gets them. The share link is the same id the site gives it: t + hash of date and text.
+  function hash36(s) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0).toString(36);
+  }
+  const wordText = $('wordText'), wordDate = $('wordDate');
+  wordDate.max = todayStr();
+  wordDate.value = todayStr();
+  function wordReady() {
+    const t = wordText.value.trim();
+    $('wordCount').textContent = t ? `${t.length}` : '';
+    $('wordSave').disabled = !t || !okDate(wordDate.value);
+  }
+  wordText.addEventListener('input', wordReady);
+  wordDate.addEventListener('change', wordReady);
+  async function loadRecent() {
+    try {
+      const d = await fetch('/frases.json', { cache: 'no-store' }).then(r => r.json());
+      const list = (d.frases || []).filter(f => f.texto).slice(-8).reverse();
+      $('wordRecent').innerHTML = list.map(f => `<li><a href="/#t${hash36((f.fecha || '') + f.texto)}"><q>${escapeHtml(f.texto)}</q></a><span>${escapeHtml(f.fecha || '')}</span></li>`).join('')
+        || '<li><span>nothing yet</span></li>';
+    } catch {}
+  }
+  $('wordSave').addEventListener('click', async () => {
+    $('wordSave').disabled = true;
+    $('wordStatus').className = 'status';
+    $('wordStatus').textContent = 'saving...';
+    try {
+      const r = await api('/api/frases/text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: wordText.value, fecha: wordDate.value }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `error ${r.status}`);
+      const when = j.entry.fecha === todayStr() ? 'today' : `barrio ${j.barrio}`;
+      $('wordStatus').innerHTML = `saved · ${escapeHtml(when)} · <a href="/#t${hash36(j.entry.fecha + j.entry.texto)}" style="color:var(--cyan)">see it</a>`;
+      wordText.value = '';
+      wordDate.value = todayStr();
+      wordReady();
+      loadRecent();
+    } catch (e) {
+      $('wordStatus').className = 'status error';
+      $('wordStatus').textContent = e.message;
+      wordReady();
+    }
+  });
+  document.querySelector('.tabs button[data-tab=words]').addEventListener('click', loadRecent);
+
+  // /admin/#photos or #words opens that tab (the home screen app starts on photos).
+  const startTab = location.hash.slice(1);
+  if (startTab) document.querySelector(`.tabs button[data-tab="${CSS.escape(startTab)}"]`)?.click();
 </script>
 </body>
 </html>

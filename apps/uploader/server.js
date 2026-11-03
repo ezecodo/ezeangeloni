@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-import { addPhoto, fromTelegram, ensureImagesDir, monthLabel } from './frases.js';
+import { addPhoto, addText, fromTelegram, ensureImagesDir, monthLabel } from './frases.js';
 
 // === Config ===
 const PORT = parseInt(process.env.PORT || '3010', 10);
@@ -586,6 +586,18 @@ app.post('/api/frases/photo', checkAuth, photoUpload.single('photo'), async (req
     res.json({ ok: true, entry, barrio: monthLabel(entry.fecha) });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// A frase from the admin's words tab. The date is optional (today when missing).
+app.post('/api/frases/text', express.json({ limit: '64kb' }), checkAuth, async (req, res) => {
+  const texto = String(req.body?.texto || '').trim();
+  if (!texto) return res.status(400).json({ error: 'text required' });
+  try {
+    const entry = await addText(texto, req.body.fecha);
+    res.json({ ok: true, entry, barrio: monthLabel(entry.fecha) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
