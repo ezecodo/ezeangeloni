@@ -74,6 +74,17 @@ import Layout from '../layouts/Layout.astro';
       #world-visit { display: inline-block; font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; text-decoration: none; padding: .6rem .9rem; border: 1px solid rgba(110,249,245,.45); background: rgba(8,8,16,.55); }
       #world-visit:hover { background: rgba(110,249,245,.12); }
       #world-visit[hidden] { display: none; }
+      /* a visa, given at the gate of a private galaxy */
+      .visa { display: flex; flex-direction: column; gap: .45rem; margin-top: .2rem; }
+      .visa[hidden] { display: none; }
+      .visa label { font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+      .visa span { display: flex; gap: .4rem; }
+      .visa input { flex: 1; min-width: 0; background: rgba(8,8,16,.6); border: 1px solid rgba(240,237,232,.25); color: var(--text); font: inherit; font-size: .72rem; padding: .55rem .6rem; outline: none; }
+      .visa input:focus { border-color: rgba(110,249,245,.6); }
+      .visa button { font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; border: 1px solid rgba(110,249,245,.45); padding: .5rem .8rem; }
+      .visa-msg { font-size: .62rem; letter-spacing: .1em; color: var(--muted); min-height: 1em; }
+      .visa-msg.bad { color: #ff3f3f; }
+      #locked .visa { width: min(420px, 90vw); text-align: left; }
       @media (max-width: 640px) {
         #world-info { right: 1rem; left: 1rem; width: auto; top: auto; bottom: 4.4rem; transform: translateY(12px); }
         #world-info.show { transform: none; }
@@ -233,6 +244,11 @@ import Layout from '../layouts/Layout.astro';
     <p class="kicker">a private galaxy</p>
     <h2 id="locked-title"></h2>
     <p>It can only be entered with a visa: a link from the person whose galaxy this is.</p>
+    <form class="visa" id="locked-visa">
+      <label for="locked-input">have a visa? paste it here</label>
+      <span><input id="locked-input" autocomplete="off" spellcheck="false" placeholder="the link or the code"><button type="submit">open</button></span>
+      <p class="visa-msg" id="locked-msg"></p>
+    </form>
     <a href="/">← back to Eze's galaxy</a>
   </div>
   <div id="warp" aria-hidden="true"></div>
@@ -242,6 +258,11 @@ import Layout from '../layouts/Layout.astro';
     <p id="world-desc"></p>
     <p id="world-tags"></p>
     <a id="world-visit" target="_blank" rel="noopener"></a>
+    <form class="visa" id="visa-form" hidden>
+      <label for="visa-input">have a visa? paste it here</label>
+      <span><input id="visa-input" autocomplete="off" spellcheck="false" placeholder="the link or the code"><button type="submit">open</button></span>
+      <p class="visa-msg" id="visa-msg"></p>
+    </form>
   </aside>
 
   <div id="index-sheet" class="sheet">
@@ -1793,7 +1814,7 @@ import Layout from '../layouts/Layout.astro';
     }
     const tap = (i: number) => pad.held[i] && !pad.prev[i];
     function pollPad(now: number){
-      if(!readPad()) return;
+      if(locked || !readPad()) return; // at a closed galaxy's gate nothing flies
       const dir = pad.x || pad.y;
       if(!dir) padRepeat = 0;
       if(!dir && !pad.held.some(Boolean)) return;
@@ -2423,6 +2444,7 @@ import Layout from '../layouts/Layout.astro';
       if(boarded || anyOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
       if(pilot && KB_PILOT.includes(e.key.toLowerCase())) return; // flying: the balloon handles these
       const tag = (e.target as HTMLElement).tagName;
+      if(tag === 'INPUT' || tag === 'TEXTAREA') return; // typing a visa, not steering
       if(e.key === ' ' && tag === 'BUTTON') return;
       switch(e.key){
         case 'ArrowDown': case 'ArrowRight': case 'PageDown': case ' ': case 'j': touched(); stepFocus(1); e.preventDefault(); break;
@@ -3129,14 +3151,17 @@ import Layout from '../layouts/Layout.astro';
         $('world-title').textContent = `${l.label}'s galaxy`;
         $('world-desc').textContent = g.home ? 'The first universe of this sky, Eze’s past turned into space. Fly back in.'
           : g.open ? `Someone else’s past, under the same sky: ${l.label}’s photos and words, each in the barrio of its month. Fly in.`
-          : `Its light reaches you blurred. It can only be entered with a visa: a link from ${l.label}.`;
+          : `Its light reaches you blurred. Its doors open with a visa from ${l.label}.`;
         $('world-tags').replaceChildren();
         visitEl.hidden = !g.open;
+        visaForm.hidden = g.open;
+        visaForm.dataset.slug = g.slug;
+        $('visa-msg').textContent = ''; $('visa-msg').className = 'visa-msg';
         visitEl.href = l.url; visitEl.target = '_self';
         visitEl.textContent = g.home ? 'back to Eze’s galaxy' : `enter ${l.label}’s galaxy`;
         return;
       }
-      visitEl.hidden = false; visitEl.target = '_blank';
+      visitEl.hidden = false; visitEl.target = '_blank'; visaForm.hidden = true;
       $('world-kicker').textContent = `elsewhere · ${host(l.url)}`;
       $('world-title').textContent = l.label || host(l.url);
       $('world-desc').textContent = l.description || '';
@@ -3196,6 +3221,44 @@ import Layout from '../layouts/Layout.astro';
     visitEl.addEventListener('click', e => {
       const w = worlds.find(x => x.link.url === visitEl.getAttribute('href') && x.link.galaxy);
       if(w){ e.preventDefault(); enterGalaxy(w); }
+    });
+    // A visa is the link someone shares (…?g=lucho&v=TOKEN) or just its code. It's checked by asking for that
+    // galaxy's data where the token says it is; if it's there, the doors open and this device remembers it.
+    const visaForm = $('visa-form') as HTMLFormElement;
+    function visaFrom(text: string){
+      const t = text.trim();
+      try { const v = new URL(t, location.origin).searchParams.get('v'); if(v) return v; } catch {}
+      return /^[\w-]{6,}$/.test(t) ? t : '';
+    }
+    async function tryVisa(slug: string, text: string, msg: HTMLElement){
+      const v = visaFrom(text);
+      msg.className = 'visa-msg';
+      if(!v){ msg.textContent = 'that doesn’t look like a visa'; msg.classList.add('bad'); return false; }
+      msg.textContent = 'checking…';
+      const ok = await fetch(`/galaxies/${slug}-${encodeURIComponent(v)}/frases.json`, { cache: 'no-store' }).then(r => r.ok).catch(() => false);
+      if(!ok){ msg.textContent = 'this visa doesn’t open this galaxy'; msg.classList.add('bad'); return false; }
+      try { localStorage.setItem('visa:' + slug, v); } catch {}
+      msg.textContent = 'the doors are open';
+      [0, 2, 4].forEach((n, i) => setTimeout(() => playNote(NOTES[n]*2), i*120));
+      return true;
+    }
+    visaForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const slug = visaForm.dataset.slug || '';
+      if(!await tryVisa(slug, ($('visa-input') as HTMLInputElement).value, $('visa-msg'))) return;
+      ($('visa-input') as HTMLInputElement).value = '';
+      // the nebula becomes a spiral, right where it was; the panel now offers the way in
+      const at = worlds.findIndex(w => w.link.galaxy?.slug === slug), keepAt = worldAt === at, dock = pilot?.dock;
+      worldAt = -1; // rebuilt in place: no flying back to the overview
+      buildWorlds();
+      const k = worlds.findIndex(w => w.link.galaxy?.slug === slug);
+      if(keepAt && k >= 0){ worldAt = k; btnBack.hidden = false; showWorldMeta(k); }
+      if(pilot && dock === at) pilot.dock = k;
+      worldShown = -1;
+    });
+    $('locked-visa').addEventListener('submit', async e => {
+      e.preventDefault();
+      if(await tryVisa(GAL, ($('locked-input') as HTMLInputElement).value, $('locked-msg'))) setTimeout(() => location.reload(), 500);
     });
     function showLocked(){
       $('locked-title').textContent = registry.find(g => g.slug === GAL) ? `${galaxyName}'s galaxy` : 'No galaxy here';
