@@ -1659,7 +1659,7 @@ import Layout from '../layouts/Layout.astro';
     // and pieces open up as you approach them. Built for a digital 8-way stick and 4 buttons (Competition Pro).
     const pad = { x:0, y:0, px:0, py:0, held:[false,false,false,false], prev:[false,false,false,false] };
     interface Homing { t0: number; from: THREE.Vector3; ctrl: THREE.Vector3; to: THREE.Vector3; dur: number; landed: number; }
-    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number } | null = null;
+    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number } | null = null;
     let padRepeat = 0;
     const PILOT_R = 150, PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
     // The keyboard drives the same virtual pad, so everything below works the same without a joystick:
@@ -1764,7 +1764,7 @@ import Layout from '../layouts/Layout.astro';
       balloon.group.scale.setScalar(BALLOON_SCALE);
       balloon.mode = 'pilot';
       balloon.peek = 0;
-      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1 };
+      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1, dock:-1, dockFree:false, undock:-1 };
       if(windMotes) windMotes.visible = true;
       controls.enabled = false;
       hovered = -1;
@@ -2103,7 +2103,19 @@ import Layout from '../layouts/Layout.astro';
     if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, visit: (k: number) => visitWorld(k) };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
-      const p = pilot, free = !p.selecting && !p.home; // while choosing a piece the stick belongs to the selection
+      const p = pilot;
+      // Arriving at a world (Eze's other work) the journey pauses: the balloon moors there, hovering still, no gas
+      // spent, no wind, while its story reads beside it. A fresh push of the stick or the burner sails on.
+      const wants = !!(pad.x || pad.y || pad.held[0]);
+      const near = p.home || p.selecting ? -1 : worlds.findIndex(w => w.home && w.mesh.position.distanceTo(p.pos) < 22);
+      if(p.undock >= 0 && near !== p.undock) p.undock = -1; // out of its reach: it can moor there again
+      if(p.dock < 0 && near >= 0 && near !== p.undock){ p.dock = near; p.dockFree = !wants; playNote(NOTES[5]); }
+      if(p.dock >= 0){
+        if(!wants) p.dockFree = true; // you were still pushing when you arrived: let go first
+        else if(p.dockFree){ p.undock = p.dock; p.dock = -1; }
+      }
+      const moored = p.dock >= 0;
+      const free = !p.selecting && !p.home && !moored; // while choosing a piece the stick belongs to the selection
       const sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
       // the tank: the burner and the pilot flame spend it; low, the flame coughs
       if(free) gas = Math.max(0, gas - dt*(GAS_IDLE + (held ? GAS_BURN : 0)));
@@ -2116,16 +2128,16 @@ import Layout from '../layouts/Layout.astro';
       p.turn += (-sx - p.turn)*(p.selecting ? 1-Math.exp(-dt*6) : k);
       p.heading += p.turn*1.3*dt;
       const target = sy < 0 ? TOP : sy > 0 ? (p.speed > .5 ? 0 : REVERSE) : 0;
-      p.speed += (target - p.speed)*(1-Math.exp(-dt*(p.selecting ? 4 : sy ? 1.1 : .7))); // choosing: it stops so the view holds
+      p.speed += (target - p.speed)*(1-Math.exp(-dt*(p.selecting || moored ? 4 : sy ? 1.1 : .7))); // choosing or moored: it stops so the view holds
       // no air physics: hold the burner and it goes up, let go and gravity takes it down gently; paused, it hangs still
-      const climb = p.selecting ? 0 : burning ? CLIMB*(gas < GAS_LOW ? .55 : 1) : SINK;
-      p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting ? 6 : 1.8)));
+      const climb = p.selecting || moored ? 0 : burning ? CLIMB*(gas < GAS_LOW ? .55 : 1) : SINK;
+      p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting || moored ? 6 : 1.8)));
       p.pos.y += p.vy*dt;
       if(p.pos.y < -PILOT_Y){ p.pos.y = -PILOT_Y; p.vy = Math.max(0, p.vy); }
       if(p.pos.y > PILOT_Y){ p.pos.y = PILOT_Y; p.vy = Math.min(0, p.vy); }
       // and the wind of its layer still pushes it a little
       const wind = windAt(p.pos.y);
-      p.drift.lerp(wind.clone().multiplyScalar(p.selecting ? 0 : WIND_PUSH), 1-Math.exp(-dt*.5));
+      p.drift.lerp(wind.clone().multiplyScalar(p.selecting || moored ? 0 : WIND_PUSH), 1-Math.exp(-dt*(moored ? 3 : .5)));
       let f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
       if(!p.home){
         p.pos.addScaledVector(f, p.speed*dt).addScaledVector(p.drift, dt);
@@ -2172,10 +2184,23 @@ import Layout from '../layouts/Layout.astro';
         .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), p.speed/TOP*.07));
       // the camera rides behind and a little above
       const c = 1-Math.exp(-dt*2.4);
-      camera.position.lerp(p.pos.clone().addScaledVector(f, -22).add(new THREE.Vector3(0, 6 + p.vy*.3, 0)), c);
-      look.lerp(p.pos.clone().addScaledVector(f, 12).add(new THREE.Vector3(0, 2.5, 0)), c);
+      if(moored){
+        // moored: step aside so the balloon and the world sit together on the left, their story on the right
+        const w = worlds[p.dock].mesh.position, mid = p.pos.clone().lerp(w, .5).add(new THREE.Vector3(0, 2, 0));
+        const axis = w.clone().sub(p.pos).setY(0).normalize(), up = new THREE.Vector3(0, 1, 0);
+        const side = axis.clone().cross(up);
+        if(side.dot(camera.position.clone().sub(mid)) < 0) side.negate(); // the side the camera is already on
+        const eye = mid.clone().addScaledVector(side, 38).add(new THREE.Vector3(0, 7, 0));
+        const right = mid.clone().sub(eye).normalize().cross(up).normalize();
+        const narrow = window.innerWidth < 640;
+        camera.position.lerp(eye, 1-Math.exp(-dt*1.6));
+        look.lerp(narrow ? mid.clone().add(new THREE.Vector3(0, -8, 0)) : mid.clone().addScaledVector(right, 12), 1-Math.exp(-dt*1.6));
+      } else {
+        camera.position.lerp(p.pos.clone().addScaledVector(f, -22).add(new THREE.Vector3(0, 6 + p.vy*.3, 0)), c);
+        look.lerp(p.pos.clone().addScaledVector(f, 12).add(new THREE.Vector3(0, 2.5, 0)), c);
+      }
       camera.lookAt(look);
-      updateWind(p.selecting ? 0 : dt, p.pos); // the wind holds its breath too
+      updateWind(p.selecting || moored ? 0 : dt, p.pos); // the wind holds its breath too
       // readout: the clock that drives the wind, where it blows on screen, how strong
       if(now > p.hudAt){
         p.hudAt = now + 250;
@@ -2184,7 +2209,8 @@ import Layout from '../layouts/Layout.astro';
         $('wind-arrow').style.transform = `rotate(${-ang}deg)`;
         const d = new Date();
         $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
-        $('gas-msg').textContent = p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
+        $('gas-msg').textContent = moored ? `moored at ${worlds[p.dock].link.label || 'a world'} · ${document.body.classList.contains('kb') ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
+          : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
           : gas < GAS_LOW ? 'low gas · nebulae lie in the past' : '';
       }
@@ -2969,8 +2995,8 @@ import Layout from '../layouts/Layout.astro';
         if(k !== worldAt) w.phase += dt*Math.PI*2/90;
         w.mesh.position.set(w.home.x + Math.cos(w.phase)*2.4, w.home.y + Math.sin(w.phase*2)*.8, w.home.z + Math.sin(w.phase)*2.4);
         w.mesh.scale.setScalar(k === hoverWorld || k === worldAt ? 14 : 13);
-        if(pilot && focused < 0 && !pilot.home && w.mesh.position.distanceTo(pilot.pos) < 22) open = k;
       });
+      if(pilot && focused < 0 && pilot.dock >= 0) open = pilot.dock;
       if(worldAt >= 0 && !flight) open = worldAt;
       const show = open >= 0 && !boarded;
       if(show) fillWorldInfo(open);
