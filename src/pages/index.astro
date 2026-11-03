@@ -103,12 +103,8 @@ import Layout from '../layouts/Layout.astro';
       body.selecting:not(.focus) #pilot-hud .choosing { display: inline; }
       body.kb #pilot-hud .pad, body:not(.kb) #pilot-hud .kb { display: none; }
       #pilot-hud .wind { display: block; margin-top: .55rem; text-align: center; color: #6ef9f5; }
-      #pilot-hud .gas { display: block; margin-top: .45rem; text-align: center; }
-      #gas-msg { color: #ffd166; margin-right: 1.2em; }
-      #gas-msg:empty { display: none; }
-      #gas-bar { display: inline-block; vertical-align: middle; width: 84px; height: 3px; margin-left: .8em; background: rgba(240,237,232,.16); }
-      #gas-fill { display: block; height: 100%; width: 100%; background: #ffd166; transition: width .3s, background .4s; }
-      #pilot-hud.low #gas-fill { background: #ff3f3f; animation: blink 1s steps(2) infinite; }
+      #pilot-hud .gas { display: block; margin-top: .45rem; text-align: center; color: #ffd166; }
+      #pilot-hud .gas:empty { display: none; }
       #wind-arrow { display: inline-block; margin-right: .7em; font-weight: 400; transition: transform .4s; }
       #selector { position: fixed; left: 0; top: 0; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .25s, transform .22s ease-out, width .22s ease-out, height .22s ease-out; }
       #selector.on { opacity: 1; animation: breathe 1.6s ease-in-out infinite; }
@@ -228,7 +224,7 @@ import Layout from '../layouts/Layout.astro';
   <div id="cands" aria-hidden="true"></div>
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas"><span id="gas-msg"></span>gas<b id="gas-bar"><i id="gas-fill"></i></b></span></span><span class="choosing"><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span></span><span class="choosing"><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
@@ -1394,9 +1390,22 @@ import Layout from '../layouts/Layout.astro';
     function swayGarland(s: Balloon, now: number){
       const pos = s.thread.geometry.attributes.position as THREE.BufferAttribute;
       pos.setXYZ(0, 0, -2.55, 0);
+      // refuelling, the string of lights reaches out into the nebula's core: a hose for the gas
+      let from: THREE.Vector3 | null = null, to: THREE.Vector3 | null = null;
+      const e = reach*reach*(3-2*reach);
+      if(e > .001 && reachCloud && s.mode === 'pilot'){
+        s.group.updateMatrixWorld();
+        from = s.group.localToWorld(new THREE.Vector3(0, -2.55, 0));
+        to = reachCloud.pos.clone();
+      }
       s.bulbs.forEach((b, k) => {
         const h = s.home[k], a = (k+1)*.045;
         const at = new THREE.Vector3(h.x + Math.sin(now*.0013 - k*.35)*a, h.y, h.z + Math.sin(now*.0009 - k*.3)*a*.6);
+        if(from && to){
+          const t = (k+1)/11, w = from.clone().lerp(to, t);
+          w.y -= Math.sin(t*Math.PI)*2.2 - Math.sin(now*.002 + k*.6)*.25; // it sags, and breathes
+          at.lerp(s.group.worldToLocal(w), e);
+        }
         if(b.parent === s.group) b.position.copy(at);
         pos.setXYZ(k+1, at.x, at.y, at.z);
       });
@@ -1475,9 +1484,12 @@ import Layout from '../layouts/Layout.astro';
         }
       }
       const idle = s.mode === 'cruise' ? Math.floor(now*.006) % 11 : -1;
+      // piloting, the eleven lights are the tank: one per gallon, the last one fading as it's spent; nearly empty they flash red
+      const tank = s.mode === 'pilot' ? gas*11 : -1, empty = tank >= 0 && gas < GAS_LOW;
       s.lamps.forEach((m, k) => {
-        const c = s.over ? hexRgb('#ff3f3f') : hexRgb(COLORS[k % COLORS.length]);
-        const on = s.over ? (Math.floor(now*.008) % 2 ? 1.4 : .2) : k < s.lit ? 1.7 : k === idle ? 1 : .1;
+        const c = s.over || (empty && k < Math.ceil(tank)) ? hexRgb('#ff3f3f') : hexRgb(COLORS[k % COLORS.length]);
+        const on = tank >= 0 ? (k < Math.floor(tank) ? 1.7 : k < tank ? .12 + 1.58*(tank-k) : .08)*(empty ? (Math.floor(now*.006) % 2 ? 1 : .25) : 1)
+          : s.over ? (Math.floor(now*.008) % 2 ? 1.4 : .2) : k < s.lit ? 1.7 : k === idle ? 1 : .1;
         m.color.setRGB(c[0]*on, c[1]*on, c[2]*on);
         const g = s.bulbs[k].parent === s.group ? .22 : .6; // a soft halo while hanging, a bright one while falling
         s.bulbs[k].userData.glow?.color.setRGB(c[0]*on*g, c[1]*on*g, c[2]*on*g);
@@ -1754,7 +1766,6 @@ import Layout from '../layouts/Layout.astro';
       if(pilot.home) gas = 1; // landed on the way home: you're home
       pilot = null;
       burnerOn = false;
-      $('pilot-hud').classList.remove('low');
       document.body.classList.remove('pilot');
       if(windMotes) windMotes.visible = false;
       balloon.mode = 'away'; // it drifts back into its own route a moment later
@@ -1949,7 +1960,8 @@ import Layout from '../layouts/Layout.astro';
     // so refuelling means travelling into the past; a set gone supernova is a station too. Inside one the balloon
     // slows, the gas flows into the envelope in the nebula's colour and stays as a tint; each holds a reserve
     // that comes back with time, so you move on to the next.
-    let gas = 1, burnerOn = false, inhaledAt = 0;
+    let gas = 1, burnerOn = false, inhaledAt = 0, gallons = 11;
+    let reach = 0, reachCloud: GasCloud | null = null; // the string of lights stretching into a nebula
     const GAS_BURN = 1/190, GAS_IDLE = 1/1200, GAS_LOW = .15, GAS_DRAW = .16, GAS_REGEN = 1/90;
     const GAS_COLORS = ['#c77dff', '#6ef9f5', '#ff6eb4', '#38bdf8', '#b8f75b', '#ffd166'];
     interface GasCloud { pos: THREE.Vector3; r: number; color: THREE.Color; reserve: number; group?: THREE.Group; mats?: THREE.Material[]; }
@@ -2018,18 +2030,29 @@ import Layout from '../layouts/Layout.astro';
         c.mats!.forEach(m => m.opacity = m.userData.base*(.3 + .7*c.reserve));
       }
       const drawing = pilot && pilot.drawing >= 0 && focused < 0 ? gasClouds[pilot.drawing] : null;
-      if(drawing) gasTint.copy(drawing.color);
+      if(drawing){ gasTint.copy(drawing.color); reachCloud = drawing; }
+      reach += ((drawing ? 1 : 0) - reach)*(1-Math.exp(-dt*(drawing ? 1.5 : 2.6)));
+      if(!drawing && reach < .002){ reach = 0; reachCloud = null; }
+      // each gallon gained sings like a word does; each one spent, a low note
+      const g = Math.floor(gas*11 + 1e-6);
+      if(pilot && g !== gallons){
+        if(g > gallons) playNote(NOTES[(g-1) % NOTES.length]*(g === 11 ? 2 : 1));
+        else if(!pilot.home) playNote(NOTES[g % NOTES.length]/2);
+      }
+      gallons = g;
       gasTintK = drawing ? Math.min(1, gasTintK + dt*.8) : gasTintK*Math.exp(-dt/9);
       if(!intake || !balloon) return;
-      intake.visible = !!drawing && !reduced;
+      intake.visible = !!drawing && reach > .85 && !reduced;
       if(!intake.visible) return;
-      const mouth = balloon.group.localToWorld(new THREE.Vector3(0, 5.5, 0)); // into the envelope
+      // the gas runs up the string of lights, from the nebula's core into the envelope
+      const g2 = balloon.group;
+      const path = [drawing!.pos.clone(), ...[...balloon.bulbs].reverse().map(b => b.getWorldPosition(new THREE.Vector3())),
+        g2.localToWorld(new THREE.Vector3(0, -2.55, 0)), g2.localToWorld(new THREE.Vector3(0, 4, 0))];
       const attr = intake.geometry.getAttribute('position') as THREE.BufferAttribute;
-      (intake.material as THREE.PointsMaterial).color.copy(drawing!.color).multiplyScalar(.8);
+      (intake.material as THREE.PointsMaterial).color.copy(drawing!.color).multiplyScalar(.9);
       intake.userData.seeds.forEach(([ph, dir]: [number, THREE.Vector3], i: number) => {
-        const u = (ph + now*.00042) % 1, from = drawing!.pos.clone().addScaledVector(dir, drawing!.r*.8);
-        const q = u*u, pt = from.lerp(mouth, q);
-        pt.y += Math.sin(u*Math.PI)*3;
+        const u = ((ph + now*.00035) % 1)*(path.length-1), j = Math.floor(u);
+        const pt = path[j].clone().lerp(path[Math.min(path.length-1, j+1)], u-j).addScaledVector(dir, .18);
         attr.setXYZ(i, pt.x, pt.y, pt.z);
       });
       attr.needsUpdate = true;
@@ -2098,7 +2121,7 @@ import Layout from '../layouts/Layout.astro';
         const was = p.drawing;
         p.drawing = gas < .999 ? gasClouds.findIndex(c => c.reserve > .02 && c.pos.distanceTo(p.pos) < c.r) : -1;
         if(p.drawing >= 0 && !p.selecting){
-          const c = gasClouds[p.drawing], take = Math.min(c.reserve*1.3, GAS_DRAW*dt, 1-gas);
+          const c = gasClouds[p.drawing], take = reach > .85 ? Math.min(c.reserve*1.3, GAS_DRAW*dt, 1-gas) : 0; // once the string is plugged in
           gas += take; c.reserve -= take/1.3;
           p.speed *= Math.exp(-dt*1.4);
           if(was < 0 && now-inhaledAt > 3000){ inhaledAt = now; inhale(); }
@@ -2116,8 +2139,7 @@ import Layout from '../layouts/Layout.astro';
         if(u >= 1 && !h.landed){
           h.landed = now;
           burstAt = now; // the logo lights the burner again
-          burnerBreath(1.8, .6);
-          [0, 2, 4].forEach((n, i) => setTimeout(() => playNote(NOTES[n]), i*140));
+          burnerBreath(1.8, .6); // and the eleven lights fill up again, one note each
         }
         if(h.landed) gas = Math.min(1, gas + dt/1.8);
         if(h.landed && now-h.landed > 2200){
@@ -2148,8 +2170,6 @@ import Layout from '../layouts/Layout.astro';
         $('wind-arrow').style.transform = `rotate(${-ang}deg)`;
         const d = new Date();
         $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
-        $('gas-fill').style.width = `${Math.round(gas*100)}%`;
-        $('pilot-hud').classList.toggle('low', gas < GAS_LOW && !p.home);
         $('gas-msg').textContent = p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
           : gas < GAS_LOW ? 'low gas · nebulae lie in the past' : '';
