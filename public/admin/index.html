@@ -457,7 +457,7 @@
     </section>
 
     <div class="center">
-      <a href="/" class="back">← back to site</a>
+      <a href="/" class="back" id="backToSite">← back to site</a>
       <button class="ghost logout" id="logoutBtn">logout</button>
     </div>
   </div>
@@ -514,6 +514,7 @@
     me = who;
     BASE = me.owner ? '' : `/galaxies/${me.dir}`;
     siteLink = me.owner ? '/' : `/?g=${me.slug}`;
+    document.getElementById('backToSite').href = siteLink; // back to your own galaxy, not always Eze's
     document.querySelector('h1').textContent = `${me.owner ? 'eze' : me.name.toLowerCase()} · admin`;
     document.title = document.querySelector('h1').textContent;
     document.querySelectorAll('[data-owner]').forEach(b => { b.hidden = !me.owner; });
