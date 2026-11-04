@@ -40,6 +40,17 @@ import Layout from '../layouts/Layout.astro';
       #nav button { text-transform: inherit; padding: .2rem 0; opacity: .72; transition: opacity .2s; }
       #nav button:hover, #nav button.on { opacity: 1; }
       #nav button.on::before { content: '● '; }
+      #btn-me { color: #ff6eb4; }
+      #me-menu { position: absolute; right: 1.4rem; top: 3.2rem; display: flex; flex-direction: column; align-items: flex-end; gap: .7rem; padding: .9rem 1rem; background: rgba(8,8,16,.85); border: 1px solid rgba(240,237,232,.16); }
+      #me-menu[hidden] { display: none; }
+      #me-menu a, #me-menu button { opacity: .85; }
+      #me-menu a:hover, #me-menu button:hover { opacity: 1; }
+      #signin, #signed-as { margin-top: 3rem; padding-top: 1.4rem; border-top: 1px solid rgba(240,237,232,.12); max-width: 34rem; font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+      #signin label { display: block; margin-bottom: .8rem; }
+      #signin div { display: flex; gap: 1rem; align-items: baseline; }
+      #signin input { flex: 1; min-width: 0; background: transparent; border: 0; border-bottom: 1px solid rgba(240,237,232,.4); color: var(--ink); font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; padding: .2rem 0; outline: none; }
+      #signin button, #signed-as button { color: #ff6eb4; letter-spacing: .16em; text-transform: uppercase; font-size: .62rem; }
+      #signin-msg { min-height: 1em; margin: .8rem 0 0; color: #ff6eb4; }
       #nav button[hidden] { display: none; }
       #meta { position: absolute; left: 1.4rem; right: 1.4rem; bottom: calc(var(--dial) + .7rem); display: flex; align-items: baseline; gap: 1.2rem; }
       #meta-id { white-space: nowrap; }
@@ -346,9 +357,11 @@ import Layout from '../layouts/Layout.astro';
         <button id="btn-scan" aria-pressed="false">scan</button>
         <button id="btn-index">index</button>
         <button id="btn-about">about</button>
+        <button id="btn-me" hidden aria-haspopup="true" aria-expanded="false"></button>
         <button id="btn-sound" aria-pressed="true">sound</button>
       </nav>
     </header>
+    <div id="me-menu" hidden><a href="/admin/" id="me-admin">admin ↗</a><button id="me-out">sign out</button></div>
     <button id="act" hidden>play set</button>
     <div id="meta">
       <span id="lamp"></span>
@@ -488,6 +501,12 @@ import Layout from '../layouts/Layout.astro';
       <p>On the technical side, I'm a full-stack developer working with Next.js, React, and Node — building editorial platforms, CMS systems, and interactive experiences.</p>
       <p>Currently available for freelance work. If you've got something interesting brewing, I'd love to hear about it.</p>
     </div>
+    <form id="signin" autocomplete="on">
+      <label for="signin-pass">is this your galaxy? sign in</label>
+      <div><input id="signin-pass" name="password" type="password" autocomplete="current-password" placeholder="your password" /><button>sign in</button></div>
+      <p id="signin-msg"></p>
+    </form>
+    <p id="signed-as" hidden></p>
   </div>
 
   <script>
@@ -4067,7 +4086,34 @@ import Layout from '../layouts/Layout.astro';
     // little while, so the nebula opens by itself, with a chime, the moment they say yes.
     const knockForm = $('knock') as HTMLFormElement, lockedKnock = $('locked-knock') as HTMLFormElement;
     let whoAmI = '', mine = false, mySlug = '', myDir = ''; // mine: logged in here as this galaxy's owner
+    // ── Signing in from the universe: no need to type the admin's address ──
+    // The same session as the admin (the password kept in this browser): once in, your name sits in the top bar
+    // with a way to the admin and out. Signing in the first time is at the foot of the about sheet.
+    const btnMe = $('btn-me'), meMenu = $('me-menu'), signin = $('signin') as HTMLFormElement, signinPass = $('signin-pass') as HTMLInputElement, signinMsg = $('signin-msg');
+    function paintMe(name: string){
+      btnMe.hidden = !name;
+      btnMe.textContent = name.toLowerCase();
+      signin.hidden = !!name;
+      const as = $('signed-as');
+      as.hidden = !name;
+      if(name){ as.innerHTML = ''; as.append(`signed in as ${name} · `); const b = document.createElement('button'); b.textContent = 'sign out'; b.addEventListener('click', signOut); as.append(b); }
+    }
+    function signOut(){ try { localStorage.removeItem('eze-upload-pass'); } catch {} location.reload(); }
+    btnMe.addEventListener('click', e => { e.stopPropagation(); touched(); meMenu.hidden = !meMenu.hidden; btnMe.setAttribute('aria-expanded', String(!meMenu.hidden)); });
+    document.addEventListener('pointerdown', e => { if(!meMenu.hidden && !meMenu.contains(e.target as Node) && e.target !== btnMe) meMenu.hidden = true; });
+    $('me-out').addEventListener('click', signOut);
+    signin.addEventListener('submit', async e => {
+      e.preventDefault();
+      const pass = signinPass.value.trim();
+      if(!pass) return;
+      signinMsg.textContent = '…';
+      const r = await fetch('/api/frases/whoami', { headers: { 'X-Auth': pass } }).catch(() => null);
+      if(r?.ok){ store.set('eze-upload-pass', pass); signinMsg.textContent = 'welcome'; setTimeout(() => location.reload(), 400); } // everything that depends on who you are starts again
+      else signinMsg.textContent = r?.status === 429 ? 'too many tries · wait a few minutes' : r ? 'that’s not it' : 'no connection';
+    });
+    signinPass.addEventListener('keydown', e => e.stopPropagation()); // typing here isn't steering
     if(ownerPass) fetch('/api/frases/whoami', { headers: { 'X-Auth': ownerPass } }).then(r => r.ok ? r.json() : null).then(w => {
+      paintMe(w ? (w.owner ? 'Eze' : w.name) : '');
       whoAmI = w ? (w.owner ? 'Eze' : w.name) : '';
       mine = !!w && (GAL ? w.slug === GAL : !!w.owner);
       mySlug = w ? (w.owner ? 'eze' : w.slug) : ''; myDir = w?.dir || '';
