@@ -9,7 +9,7 @@ import * as galaxies from './galaxies.js';
 import * as xibalba from './xibalba.js';
 import * as threads from './threads.js';
 import { attachSky, iceServers } from './sky.js';
-import { addPhoto, addText, removeItem, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
+import { addPhoto, addText, removeItem, editItem, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
 
 // === Config ===
 const PORT = parseInt(process.env.PORT || '3010', 10);
@@ -631,6 +631,14 @@ app.post('/api/frases/remove', express.json({ limit: '16kb' }), checkWho, async 
   try {
     const b = req.body || {};
     res.json(await removeItem({ index: b.index, imagen: b.imagen ? String(b.imagen) : '', texto: b.texto, fecha: b.fecha }, rootFor(req)));
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// A photo's description or date, changed later (admin's archive tab).
+app.post('/api/frases/edit', express.json({ limit: '16kb' }), checkWho, async (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json(await editItem({ index: b.index, imagen: b.imagen ? String(b.imagen) : '', caption: b.caption, fecha: b.fecha }, rootFor(req)));
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 

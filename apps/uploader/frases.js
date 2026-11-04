@@ -197,6 +197,26 @@ export function removeItem({ index, imagen, texto, fecha }, root = PUBLIC_ROOT) 
   });
 }
 
+// Changing a photo's description or its date later (the admin's archive tab): describing from a phone is fiddly,
+// so photos often go up bare and get their words at a desk. Its link is its file name, so nothing breaks;
+// a new date moves it to another barrio.
+export function editItem({ index, imagen, caption, fecha }, root = PUBLIC_ROOT) {
+  return withLock(root, async () => {
+    const data = await load(root);
+    const same = (f) => !!imagen && f.imagen === imagen;
+    const k = Number.isInteger(index) && data.frases[index] && same(data.frases[index]) ? index : data.frases.findIndex(same);
+    if (k < 0) throw Object.assign(new Error('not found (removed?)'), { status: 404 });
+    const entry = data.frases[k];
+    if (caption !== undefined) entry.caption = String(caption || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (fecha !== undefined) {
+      if (!validDate(fecha)) throw Object.assign(new Error('that date doesn’t look right'), { status: 400 });
+      entry.fecha = fecha;
+    }
+    await save(root, data);
+    return { ok: true, entry, barrio: monthLabel(entry.fecha) };
+  });
+}
+
 export function addText(texto, fecha, root = PUBLIC_ROOT) {
   return withLock(root, async () => {
     const entry = { texto: String(texto).trim().slice(0, 2000), fecha: validDate(fecha) ? fecha : today(), subida: today() };

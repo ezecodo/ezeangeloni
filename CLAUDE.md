@@ -95,6 +95,10 @@ The project's reason for being is **digital independence**. The user (Eze) is a 
 
 `POST /api/frases/remove` (`removeItem` in `frases.js`, any galaxy's own password, for its own root): finds the entry (by index and/or `imagen`, or `texto`+`fecha`), takes it out of `frases.json` and moves its photo to a private trash outside the web root, `/root/cronovisor-trash/<galaxy>/` (env `ARCHIVE_TRASH`), logging the entry in `trash.json` there, so it can be put back by hand; the thumbnail is dropped. Two doors: the admin's **archive** tab (every piece by month, newest first, searchable, ✕ with a confirm) and, on the site, `#remove-piece` ("remove from the archive") shown only to the galaxy's owner logged in on that device (`mine`) at a photo or frase (not sets). Telegram's `/delete N` (by index) still works too. Removing on the site hides the piece at once (and moves it to layer 31 so clicks don't hit it) and drops its index cell; `frases.json` and `sets.json` are always fetched with `cache: 'no-cache'` (revalidated), so a removal or a new piece shows on the next visit even without nginx cache headers.
 
+## Describing photos later
+
+Describing from a phone is fiddly, so photos often go up bare. The admin's **archive** tab gives every photo a description field and a date field, saved as you leave them (`POST /api/frases/edit`, `editItem` in `frases.js`, `checkWho`, own root only; green border saved, red failed, the new barrio in its tooltip), and a checkbox "only photos without a description". A photo's link is its file name, so nothing breaks; frases aren't editable (their link is a hash of date and words).
+
 ## Photos and frases with their own date (barrios)
 
 The site makes barrios from the month of `fecha`, so backdating is all it takes. Two doors write `frases.json`, both through `apps/uploader/frases.js` (one writer at a time, atomic rename; new entries get `subida`):

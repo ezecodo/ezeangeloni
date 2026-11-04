@@ -219,6 +219,10 @@
   .shot img { display:block; width:100%; aspect-ratio:1; object-fit:cover; background:#11111f; }
   .shot .fields { padding:.45rem; display:flex; flex-direction:column; gap:.35rem; }
   .shot input { padding:.35rem .45rem; font-size:.68rem; border-radius:6px; }
+  .shot input.saved { border-color:var(--green); }
+  .shot input.bad { border-color:var(--red); }
+  .arch-bare { display:flex; gap:.5rem; align-items:center; margin-top:.6rem; font-size:.62rem; letter-spacing:.12em; text-transform:none; color:var(--muted); cursor:pointer; }
+  .arch-bare input { display:inline-block; width:auto; margin:0; }
   .shot .src { position:absolute; top:.4rem; left:.4rem; font-size:.5rem; letter-spacing:.15em; text-transform:uppercase; padding:.15rem .4rem; border-radius:4px; background:rgba(8,8,16,0.75); color:var(--muted); }
   .shot .src.exif { color:var(--green); }
   .shot .src.guess { color:var(--gold); }
@@ -392,8 +396,9 @@
     </section>
 
     <section class="tab" id="tab-archive">
-      <p class="hint">everything in your galaxy, newest first · remove what you don't want any more (it goes to a private trash on the server, not erased)</p>
+      <p class="hint">everything in your galaxy, newest first · give a photo its words or a new date (saved as you leave the field) · remove what you don't want any more (it goes to a private trash on the server, not erased)</p>
       <input type="text" id="archSearch" placeholder="search a word, a title or a date (2019-07)…" style="margin-top:.6rem">
+      <label class="arch-bare"><input type="checkbox" id="archBare"> only photos without a description</label>
       <p id="archCount" class="hint"></p>
       <div id="archList"></div>
     </section>
@@ -2482,7 +2487,8 @@
   }
   function renderArchive() {
     const q = $('archSearch').value.trim().toLowerCase();
-    const list = archive.filter(f => !q || [(f.texto || ''), (f.caption || ''), (f.fecha || '')].join(' ').toLowerCase().includes(q));
+    const bare = $('archBare').checked;
+    const list = archive.filter(f => (!q || [(f.texto || ''), (f.caption || ''), (f.fecha || '')].join(' ').toLowerCase().includes(q)) && (!bare || (f.imagen && !(f.caption || '').trim())));
     $('archCount').textContent = `${list.length} of ${archive.length} pieces`;
     const months = new Map();
     list.slice(0, 400).forEach(f => { const m = (f.fecha || '????-??').slice(0, 7); if (!months.has(m)) months.set(m, []); months.get(m).push(f); });
@@ -2497,7 +2503,22 @@
           + `<button class="x" type="button" aria-label="remove" title="remove from the archive">✕</button><div class="fields"><span class="hint"></span></div>`;
         if (f.imagen) { const im = el.querySelector('img'); im.src = thumb; im.onerror = () => { im.onerror = null; im.src = BASE + f.imagen; }; }
         else el.querySelector('div').textContent = f.texto;
-        el.querySelector('.hint').textContent = `${f.fecha || ''}${f.caption ? ' · ' + f.caption : ''}`;
+        if (f.imagen) { // a photo: its words and its date can change; a frase is its words (and its link), so it stays
+          const fields = el.querySelector('.fields');
+          fields.innerHTML = `<input type="text" class="cap" maxlength="300" placeholder="a description…"><input type="date" class="when">`;
+          const cap = fields.querySelector('.cap'), when = fields.querySelector('.when');
+          cap.value = f.caption || ''; when.value = f.fecha || ''; when.max = new Date().toISOString().slice(0, 10);
+          const saveIt = async (input, body) => {
+            input.classList.remove('saved', 'bad');
+            const r = await api('/api/frases/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: f.index, imagen: f.imagen, ...body }) }).catch(() => null);
+            const j = r ? await r.json().catch(() => ({})) : {};
+            if (r?.ok) { Object.assign(f, j.entry || body); input.classList.add('saved'); input.title = j.barrio ? `barrio ${j.barrio}` : 'saved'; }
+            else { input.classList.add('bad'); input.title = j.error || 'could not save'; }
+          };
+          cap.addEventListener('change', () => { if (cap.value.trim() !== (f.caption || '')) saveIt(cap, { caption: cap.value }); });
+          cap.addEventListener('keydown', e => { if (e.key === 'Enter') cap.blur(); });
+          when.addEventListener('change', () => { if (when.value && when.value !== f.fecha) saveIt(when, { fecha: when.value }); });
+        } else el.querySelector('.hint').textContent = f.fecha || '';
         el.querySelector('.x').addEventListener('click', async () => {
           if (!confirm(`Take this out of your galaxy?\n\n${f.texto || f.caption || f.imagen}\n${f.fecha || ''}\n\n(It goes to a private trash on the server.)`)) return;
           const r = await api('/api/frases/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: f.index, imagen: f.imagen || '', texto: f.texto, fecha: f.fecha }) });
@@ -2510,6 +2531,7 @@
     }));
   }
   $('archSearch').addEventListener('input', renderArchive);
+  $('archBare').addEventListener('change', renderArchive);
   document.querySelector('.tabs button[data-tab=archive]').addEventListener('click', loadArchive);
 
   // ===== XIBALBÁ (Eze only) =====
