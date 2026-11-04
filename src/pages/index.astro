@@ -2569,7 +2569,7 @@ import Layout from '../layouts/Layout.astro';
     // ── Input ─────────────────────────────────────────────
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
-    let pointerFresh = false, press: { x: number, y: number, t: number } | null = null, wheelAt = 0;
+    let pointerFresh = false, press: { x: number, y: number, t: number } | null = null, wheelAt = 0, wheelSum = 0, wheelDone = false;
     function pick(){
       ray.setFromCamera(ndc, camera);
       const hit = ray.intersectObjects(pieces.map(p => p.mesh), false)[0];
@@ -2616,10 +2616,17 @@ import Layout from '../layouts/Layout.astro';
     screen.addEventListener('wheel', e => {
       touched();
       if(focused < 0 || boarded) return;
-      const now = performance.now();
-      if(now-wheelAt < 650 || Math.abs(e.deltaY)+Math.abs(e.deltaX) < 8) return;
+      // one gesture, one step: a two-finger swipe on a trackpad keeps sending wheel events for a second
+      // or more of inertia, and a fixed cooldown turned that into two or three flights cut short.
+      // A gesture lasts until the events go quiet; it steps once, after enough travel in one direction
+      const now = performance.now(), d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      if(now-wheelAt > 220){ wheelSum = 0; wheelDone = false; }
       wheelAt = now;
-      stepFocus((Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) > 0 ? 1 : -1);
+      if(wheelDone) return;
+      wheelSum += d;
+      if(Math.abs(wheelSum) < 40) return;
+      wheelDone = true;
+      stepFocus(wheelSum > 0 ? 1 : -1);
     }, { passive:true });
     btnBack.addEventListener('click', () => { touched(); if(worldAt >= 0) leaveWorld(); else backOut(); });
 
