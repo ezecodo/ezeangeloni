@@ -3340,7 +3340,7 @@ import Layout from '../layouts/Layout.astro';
       registry = Array.isArray(d?.galaxies) ? d.galaxies : [];
       mainKin = d?.main?.kin || null;
       mainLook = d?.main?.balloon || null;
-      houseLook = (GAL ? (registry.find(x => x.slug === GAL) as any)?.balloon : mainLook) || null; // the balloon of whoever's galaxy this is
+      // visitors always fly the Wiphala, the site's own balloon; a design is its owner's, seen when they fly (Eze, 2026-11-04)
       if(!GAL) return;
       const g = registry.find(x => x.slug === GAL);
       if(!g){ locked = true; return; }
