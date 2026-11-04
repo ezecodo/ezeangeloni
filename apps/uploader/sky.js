@@ -11,13 +11,14 @@
 //   → join {g}                        ← room {g, peers:[{id, name, s}]} · others get in {id, name}
 //                                     ← nope {g}  if the door is closed
 //   → s {s:[...]}  state              others get s {id, s}
-//   → to {to, e:{k, ...}}             that one gets ev {from, e}: bump, say {text}, gas (nothing is kept)
+//   → to {to, e:{k, ...}}             that one gets ev {from, e}: bump, say {text}, gas, the expedition's
+//                                     invite/join/leave/look/cross, and voice: sdp {d}, ice {c} (nothing is kept)
 //                                     ← out {id}  someone left the room
 import { WebSocketServer } from 'ws';
 import crypto from 'crypto';
 import * as galaxies from './galaxies.js';
 
-const MAX_MSG = 600;          // bytes: a state is ~120
+const MAX_MSG = 12000;        // bytes: a state is ~120, a voice offer (WebRTC SDP) a few thousand
 const MAX_RATE = 40;          // messages per second per socket, well over the 10 it sends
 const RECHECK_MS = 60 * 1000; // doors are asked again this often
 const HELLO_MS = 8000;        // say who you are within this, or goodbye
@@ -84,7 +85,7 @@ export function attachSky(server, ezePassword) {
         for (const o of rooms.get(c.room) || []) if (o.id === m.to && o !== c) send(o.ws, { t: 'ev', from: c.id, e: m.e });
         return;
       }
-      if (m.t === 's' && c.room && Array.isArray(m.s) && m.s.length <= 16 && m.s.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+      if (m.t === 's' && c.room && raw.length < 600 && Array.isArray(m.s) && m.s.length <= 16 && m.s.every((v) => typeof v === 'number' && Number.isFinite(v))) {
         c.state = m.s;
         others(c, { t: 's', id: c.id, s: m.s });
       }
@@ -112,4 +113,18 @@ export function attachSky(server, ezePassword) {
   }, RECHECK_MS).unref();
 
   return wss;
+}
+
+// Voice goes browser to browser (WebRTC); phones on 4G/5G usually can't reach each other directly, so a relay of
+// our own (coturn on the VPS, `use-auth-secret`) carries it when needed. Credentials last six hours and are made
+// from the shared secret, nothing stored. Without TURN_SECRET only a direct connection is tried (same network).
+export function iceServers() {
+  const secret = process.env.TURN_SECRET, host = process.env.TURN_HOST || 'ezeangeloni.xyz';
+  if (!secret) return [];
+  const username = `${Math.floor(Date.now() / 1000) + 6 * 3600}:cronovisor`;
+  const credential = crypto.createHmac('sha1', secret).update(username).digest('base64');
+  return [
+    { urls: `stun:${host}:3478` },
+    { urls: [`turn:${host}:3478?transport=udp`, `turn:${host}:3478?transport=tcp`], username, credential },
+  ];
 }

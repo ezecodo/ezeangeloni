@@ -8,7 +8,7 @@ import { saveLinks, storeLinkImage } from './links.js';
 import * as galaxies from './galaxies.js';
 import * as xibalba from './xibalba.js';
 import * as threads from './threads.js';
-import { attachSky } from './sky.js';
+import { attachSky, iceServers } from './sky.js';
 import { addPhoto, addText, removeItem, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
 
 // === Config ===
@@ -693,6 +693,14 @@ app.post('/api/frases/requests/:id', express.json(), checkWho, galaxyRoute(async
 app.delete('/api/frases/guests/:id', checkWho, galaxyRoute(async (req) => {
   if (req.who.owner) throw Object.assign(new Error('your galaxy is open to all'), { status: 400 });
   return galaxies.turnAway(req.who.slug, req.params.id);
+}));
+
+// voice on an expedition: where to find the relay (only for whoever flies in the shared sky)
+app.post('/api/frases/sky-turn', express.json({ limit: '4kb' }), galaxyRoute(async (req) => {
+  doorLimit(req);
+  const who = await visitor(req);
+  if (!(await galaxies.skyMember(String(req.body?.device || ''), who?.slug, who?.name))) throw Object.assign(new Error('not found'), { status: 404 });
+  return { iceServers: iceServers() };
 }));
 
 // ── Xibalbá: the father's journey, for the family only (a device logged in as one of them) ──

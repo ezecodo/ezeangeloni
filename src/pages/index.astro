@@ -223,6 +223,12 @@ import Layout from '../layouts/Layout.astro';
       body.meeting:not(.focus):not(.selecting) #t-b3 .meeting { display: inline; }
       .sky-name .say { display: block; margin-top: .3rem; max-width: 15rem; white-space: normal; text-align: center; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.05rem; letter-spacing: 0; text-transform: none; color: var(--ink); }
       .sky-name .say:empty { display: none; }
+      #mic { position: fixed; left: calc(1.4rem + env(safe-area-inset-left)); top: calc(3.7rem + env(safe-area-inset-top)); z-index: 13; font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink); padding: .45rem .7rem; border: 1px solid rgba(255,110,180,.45); background: rgba(8,8,16,.55); }
+      #mic[hidden] { display: none; }
+      #mic::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: .55rem; background: #ff6eb4; vertical-align: 1px; }
+      #mic.off { border-color: rgba(240,237,232,.25); color: var(--muted); }
+      #mic.off::before { background: rgba(240,237,232,.3); }
+      #mic.wait::before { animation: blink 1s steps(2) infinite; }
       #sky-names { position: fixed; inset: 0; z-index: 11; pointer-events: none; }
       .sky-name { position: absolute; left: 0; top: 0; font-size: .58rem; letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 0 10px rgba(8,8,16,.95); display: none; }
       .sky-name.show { display: block; }
@@ -411,6 +417,7 @@ import Layout from '../layouts/Layout.astro';
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span><span class="crew" id="crew-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <button id="mic" hidden></button>
   <div id="meet" hidden>
     <p class="meet-kick">you bumped into</p>
     <h2 id="meet-name"></h2>
@@ -2821,6 +2828,7 @@ import Layout from '../layouts/Layout.astro';
         case 't': board(); break;
         case 'c': if(meet){ openTalk(); e.preventDefault(); } break;
         case 'g': if(meet) giveGas(); break;
+        case 'v': toggleMute(); break;
         case 'x': if(meet){ if(invitedBy) acceptTrip(); else inviteTrip(); } break;
         case 'm': toggleSound(); break;
         case '1': playSong(); break;
@@ -4254,6 +4262,7 @@ import Layout from '../layouts/Layout.astro';
       o.tag.remove();
       others.delete(id);
       if(meet?.id === id) closeMeet();
+      hangUp(id);
       if(crew.delete(id)) paintCrew();
       if(follow?.id === id){ follow = null; flashCrew(`${o.name} is gone`); }
     }
@@ -4450,6 +4459,7 @@ import Layout from '../layouts/Layout.astro';
     function onSkyEvent(from: string, e: { k?: string; text?: unknown; g?: unknown; id?: unknown }){
       const o = others.get(from);
       if(!o) return;
+      if(e.k === 'sdp' || e.k === 'ice'){ onVoice(o, e as any); return; }
       if(['invite', 'decline', 'join', 'leave', 'cross', 'look'].includes(e.k || '')) return onTripEvent(o, e.k!, e);
       if(e.k === 'bump'){
         if(!pilot || focused >= 0) return;
@@ -4487,6 +4497,7 @@ import Layout from '../layouts/Layout.astro';
       if(!meet || follow) return;
       invited = meet.id;
       sendTo(meet.id, { k:'invite' });
+      getMic(); // asked now, on the tap: the voice starts when they say yes
       logMeet('', `you asked ${others.get(meet.id)?.name || ''} to come along…`, true);
     }
     function showInvite(o: Other){
@@ -4499,6 +4510,7 @@ import Layout from '../layouts/Layout.astro';
       const o = invitedBy && others.get(invitedBy);
       if(!o || !pilot) return;
       hideInvite();
+      getMic();
       sendTo(o.id, { k:'join' });
       startFollow(o);
     }
@@ -4514,6 +4526,7 @@ import Layout from '../layouts/Layout.astro';
       if(!follow) return;
       const o = others.get(follow.id);
       if(o) sendTo(o.id, { k:'leave' });
+      hangUp(follow.id);
       follow = null;
       if(why) flashCrew(why); else paintCrew();
     }
@@ -4533,11 +4546,13 @@ import Layout from '../layouts/Layout.astro';
         invited = '';
         crew.add(o.id);
         lookSent = '';
+        call(o.id, true); // whoever leads calls
         if(meet?.id === o.id) closeMeet();
         playNote(NOTES[4]); setTimeout(() => playNote(NOTES[2]*2), 140);
         paintCrew();
       }
       else if(k === 'leave'){
+        hangUp(o.id);
         if(crew.delete(o.id)) flashCrew(`${o.name} flies on their own`);
         if(follow?.id === o.id){ follow = null; flashCrew(`${o.name} let you go`); }
       }
@@ -4574,6 +4589,101 @@ import Layout from '../layouts/Layout.astro';
         else if(now-follow.waiting > 60000) stopFollow(`${o.name} landed`);
       } else if(follow.waiting){ follow.waiting = 0; paintCrew(); }
     }, 1000);
+    // ── Voice on an expedition: whoever leads and whoever follows hear each other, as if in the same basket ──
+    // Browser to browser (WebRTC), the relay on the VPS (coturn) when the network won't let them meet directly.
+    // Whoever leads calls; the microphone is asked for when you invite or go along (a tap), never on loading.
+    const calls = new Map<string, { pc: RTCPeerConnection; audio: HTMLAudioElement; pending: RTCIceCandidateInit[] }>();
+    let mic: MediaStream | null = null, micAsk: Promise<MediaStream | null> | null = null, muted = false, micDenied = false, ice: RTCIceServer[] | null = null;
+    const micBtn = $('mic') as HTMLButtonElement;
+    function paintMic(){
+      micBtn.hidden = !calls.size;
+      if(!calls.size) return;
+      const names = [...calls.keys()].map(id => others.get(id)?.name).filter(Boolean).join(', ');
+      const live = [...calls.values()].some(c => c.pc.connectionState === 'connected');
+      const kb = document.body.classList.contains('touch') ? '' : ' · v';
+      micBtn.textContent = !live ? `connecting voice with ${names}…` : micDenied ? `listening to ${names} · no microphone` : muted ? `muted · tap to talk to ${names}${kb}` : `talking with ${names}${kb} mutes`;
+      micBtn.classList.toggle('off', muted || micDenied);
+      micBtn.classList.toggle('wait', !live);
+    }
+    function getMic(){
+      if(mic) return Promise.resolve(mic);
+      if(micAsk) return micAsk;
+      if(!navigator.mediaDevices?.getUserMedia){ micDenied = true; return Promise.resolve(null); }
+      micAsk = navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } })
+        .then(m => { mic = m; micDenied = false; m.getAudioTracks().forEach(t => t.enabled = !muted); return m; })
+        .catch(() => { micDenied = true; return null; })
+        .finally(() => { micAsk = null; paintMic(); });
+      return micAsk;
+    }
+    async function iceServers(){
+      if(ice) return ice;
+      const r = await fetch('/api/frases/sky-turn', { method:'POST', headers:doorHeaders(), body:JSON.stringify({ device:DEVICE }) }).then(r => r.ok ? r.json() : null).catch(() => null);
+      return ice = Array.isArray(r?.iceServers) ? r.iceServers : [];
+    }
+    // one setup per person, even when their first candidates arrive before their offer
+    const setups = new Map<string, Promise<{ pc: RTCPeerConnection; audio: HTMLAudioElement; pending: RTCIceCandidateInit[] }>>();
+    function call(id: string, offer: boolean){
+      if(!setups.has(id)) setups.set(id, setUp(id, offer));
+      return setups.get(id)!;
+    }
+    async function setUp(id: string, offer: boolean){
+      const audio = new Audio();
+      audio.autoplay = true;
+      audio.setAttribute('playsinline', '');
+      const c = { pc: new RTCPeerConnection(), audio, pending: [] as RTCIceCandidateInit[] };
+      calls.set(id, c);
+      paintMic();
+      c.pc.setConfiguration({ iceServers: await iceServers() });
+      c.pc.onicecandidate = e => { if(e.candidate) sendTo(id, { k:'ice', c:e.candidate.toJSON() }); };
+      c.pc.ontrack = e => { audio.srcObject = e.streams[0] || new MediaStream([e.track]); audio.play().catch(() => {}); };
+      c.pc.onconnectionstatechange = () => { paintMic(); if(c.pc.connectionState === 'failed') c.pc.restartIce?.(); };
+      const m = await getMic();
+      if(m) m.getAudioTracks().forEach(t => c.pc.addTrack(t, m));
+      else c.pc.addTransceiver('audio', { direction:'recvonly' }); // no microphone: you can still listen
+      if(offer){
+        await c.pc.setLocalDescription(await c.pc.createOffer());
+        sendTo(id, { k:'sdp', d:c.pc.localDescription?.toJSON() });
+      }
+      return c;
+    }
+    function hangUp(id: string){
+      const c = calls.get(id);
+      if(!c) return;
+      c.pc.close();
+      c.audio.srcObject = null;
+      calls.delete(id);
+      setups.delete(id);
+      if(!calls.size && mic){ mic.getTracks().forEach(t => t.stop()); mic = null; } // the browser's microphone light goes off
+      paintMic();
+    }
+    async function onVoice(o: Other, e: { k?: string; d?: any; c?: any }){
+      if(!(crew.has(o.id) || follow?.id === o.id)) return; // only the two on an expedition
+      try {
+        if(e.k === 'sdp' && e.d?.type){
+          const c = await call(o.id, false);
+          await c.pc.setRemoteDescription(e.d);
+          for(const x of c.pending.splice(0)) await c.pc.addIceCandidate(x).catch(() => {});
+          if(e.d.type === 'offer'){
+            await c.pc.setLocalDescription(await c.pc.createAnswer());
+            sendTo(o.id, { k:'sdp', d:c.pc.localDescription?.toJSON() });
+          }
+        } else if(e.k === 'ice' && e.c){
+          const c = await call(o.id, false);
+          if(c.pc.remoteDescription) await c.pc.addIceCandidate(e.c).catch(() => {});
+          else c.pending.push(e.c);
+        }
+      } catch {}
+    }
+    function toggleMute(){
+      if(!calls.size) return;
+      if(micDenied){ getMic().then(m => { if(m) for(const c of calls.values()) m.getAudioTracks().forEach(t => c.pc.addTrack(t, m)); }); return; }
+      muted = !muted;
+      mic?.getAudioTracks().forEach(t => t.enabled = !muted);
+      paintMic();
+    }
+    micBtn.addEventListener('click', () => { touched(); toggleMute(); });
+    // a browser that wouldn't play the voice yet (no tap since the page loaded, after crossing) plays it on the next one
+    window.addEventListener('pointerdown', () => { for(const c of calls.values()) if(c.audio.paused && c.audio.srcObject) c.audio.play().catch(() => {}); });
     meetForm.addEventListener('submit', e => {
       e.preventDefault();
       const text = meetInput.value.replace(/\s+/g, ' ').trim().slice(0, 200);
@@ -4615,7 +4725,7 @@ import Layout from '../layouts/Layout.astro';
       if(meet && now-meetSyncAt > 500){ meetSyncAt = now; syncMeet(); }
       updateFlows(now);
     }
-    if(import.meta.env.DEV) (window as any).__sky = { get others(){ return others; }, get sky(){ return sky; }, get meet(){ return meet; }, ev: onSkyEvent, get focused(){ return focused; }, get stations(){ return stations; } };
+    if(import.meta.env.DEV) (window as any).__sky = { get others(){ return others; }, get sky(){ return sky; }, get meet(){ return meet; }, ev: onSkyEvent, get focused(){ return focused; }, get stations(){ return stations; }, call, get calls(){ return calls; }, crew };
     galaxyReady.then(() => {
       linkList = GAL ? [] : DEFAULT_LINKS;
       buildSun();

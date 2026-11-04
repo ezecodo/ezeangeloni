@@ -69,6 +69,8 @@ Tamaño: **S–M** (casi todo reutiliza lo que hay).
 
 ## Etapa 3 · Hablar (voz espacial)
 
+**2026-11-04: hecha la voz durante la expedición** (Eze: "que todo suceda con la voz"; sin espacialidad porque van juntos). Pendiente: voz por cercanía fuera de la expedición, si hace falta.
+
 **Objetivo:** cerca uno del otro, se oyen; lejos, no.
 
 ### Servidor
