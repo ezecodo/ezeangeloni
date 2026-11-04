@@ -2613,10 +2613,15 @@ import Layout from '../layouts/Layout.astro';
         else if(p.dockFree){ p.undock = p.dock; p.dock = -1; }
       }
       // at the Sun, once a visit: the journey pauses for the platform's statement (the camera opens out to the side)
-      if(!sunScene && sun && !p.home && !p.auto && !follow && !crew.size && !p.selecting && p.dock < 0 && p.pos.distanceTo(sun.position) < 200 && !sessionStorage.getItem('cv-sun')) startSunScene(now, wants);
+      // visitors get it every time they arrive (once they've been away from the Sun); a signed-in owner only once
+      const dSun = sun ? p.pos.distanceTo(sun.position) : Infinity;
+      if(dSun > 260) sunArmed = true;
+      if(!sunScene && sunArmed && sun && !p.home && !p.auto && !follow && !crew.size && !p.selecting && p.dock < 0 && dSun < 200 && !(ownerPass && store.get('cv-sun-seen'))) startSunScene(now, wants);
       if(sunScene){
-        if(!wants) sunScene.free = true; // still pushing on arrival: let go first
-        else if(sunScene.free && now-sunScene.t0 > 2500) endSunScene();
+        // a fresh push flies on; so does pushing on and on (holding the stick since before arriving felt like being trapped)
+        sunScene.push = wants ? sunScene.push + dt : 0;
+        if(!wants) sunScene.free = true;
+        if(now-sunScene.t0 > 2500 && wants && (sunScene.free || sunScene.push > 1.2)) endSunScene();
       }
       const moored = p.dock >= 0 || !!sunScene;
       const withHim = nearHim(p.pos); // beside him the balloon hovers, as long as you don't push on
@@ -3772,11 +3777,12 @@ import Layout from '../layouts/Layout.astro';
     const sunAt = () => universeAt(kinFor(GAL)).negate();
     let sun: THREE.Group | null = null, sunMark: HTMLElement | null = null;
     // The statement at the Sun: arriving, the light swells, a low chord, then the words one line at a time.
-    let sunScene: { t0: number; free: boolean; timers: number[] } | null = null;
+    let sunScene: { t0: number; free: boolean; push: number; timers: number[] } | null = null, sunArmed = true;
     const sunWords = $('sun-words'), sunGlow = $('sun-glow');
     function startSunScene(now: number, pushing: boolean){
-      try { sessionStorage.setItem('cv-sun', '1'); } catch {}
-      sunScene = { t0:now, free:!pushing, timers:[] };
+      sunArmed = false;
+      if(ownerPass) store.set('cv-sun-seen', '1');
+      sunScene = { t0:now, free:!pushing, push:0, timers:[] };
       document.body.classList.add('sunscene');
       sunGlow.classList.add('on');
       sunScene.timers.push(window.setTimeout(() => sunGlow.classList.replace('on', 'soft'), 2600));
