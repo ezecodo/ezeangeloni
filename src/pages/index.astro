@@ -137,6 +137,21 @@ import Layout from '../layouts/Layout.astro';
       .sky-mark.xib i { width: 10px; height: 10px; border-radius: 50%; transform: none; background: currentColor; border: none; box-shadow: 0 0 10px currentColor; }
       body.focus #xib-panel, body.aboard #xib-panel { opacity: 0; pointer-events: none; }
       /* crossing into another galaxy: everything goes to light */
+      #sun-glow { position: fixed; inset: 0; z-index: 9; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 30% 50%, rgba(255,200,120,.55), rgba(255,140,40,.18) 45%, transparent 75%); mix-blend-mode: screen; transition: opacity 2.4s ease; }
+      #sun-glow.on { opacity: 1; }
+      #sun-glow.soft { opacity: .35; }
+      #sun-words { position: fixed; right: 2.6rem; top: 50%; transform: translateY(-50%); z-index: 13; width: min(460px, 40vw); max-height: 86vh; overflow-y: auto; text-shadow: 0 0 18px rgba(8,8,16,.95), 0 0 2px rgba(8,8,16,.9); transition: opacity 1.2s; }
+      #sun-words[hidden] { display: none; }
+      #sun-words.out { opacity: 0; }
+      #sun-words > * { opacity: 0; transform: translateY(6px); transition: opacity 1.6s ease, transform 1.6s ease; }
+      #sun-words > .shown { opacity: 1; transform: none; }
+      #sun-words h2 { margin: 0; font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: clamp(2.4rem, 4.6vw, 3.6rem); line-height: 1; color: #fff6e4; }
+      #sun-words p { margin: 0 0 1rem; font-family: 'Cormorant Garamond', serif; font-weight: 300; font-size: clamp(1.05rem, 1.5vw, 1.3rem); line-height: 1.45; color: var(--ink); }
+      #sun-words .sub { margin: .3rem 0 1.6rem; font-family: 'DM Mono', monospace; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: #ffd28a; }
+      #sun-words .sign { font-style: italic; color: #ffd28a; }
+      #sun-words .go { margin-top: 1.6rem; font-family: 'DM Mono', monospace; font-size: .58rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+      body.sunscene #pilot-hud, body.sunscene #tour, body.sunscene #sky-marks { opacity: 0 !important; }
+      @media (max-width: 760px) { #sun-words { right: 1rem; left: 1rem; width: auto; top: auto; bottom: 1.4rem; transform: none; max-height: 58vh; } }
       #warp { position: fixed; inset: 0; z-index: 40; pointer-events: none; background: #f0ede8; opacity: 0; transition: opacity .9s ease-in; }
       #warp.on { opacity: 1; }
       /* a world (a piece of Eze's other work): what it is, beside the planet, and the only way out to it */
@@ -452,6 +467,18 @@ import Layout from '../layouts/Layout.astro';
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span><span class="crew" id="crew-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <div id="sun-glow" aria-hidden="true"></div>
+  <div id="sun-words" hidden aria-live="polite">
+    <h2>Cronovisor</h2>
+    <p class="sub">pasado observado</p>
+    <p>This is not a feed. Nothing here is ranked, sold or sped up.</p>
+    <p>It is an archive that behaves like a sky. Every photo and every phrase is a light placed by its date: the further you travel from the centre, the further back in time you go. Memories age the way stars do (born bright, burning steady, turning red and pale), while the original underneath is never touched.</p>
+    <p>It runs on a server I own, with code I wrote. No platform decides who sees it, no algorithm decides what matters, nothing is sold in between.</p>
+    <p>Around this Sun turn the galaxies of the people closest to me, each one placed by the day they were born in the Maya calendar. You can only enter where a door has been opened.</p>
+    <p>You are flying a balloon through someone else's time. Go slowly. Leave a word if something moves you.</p>
+    <p class="sign">Eze Angeloni · Barcelona, 2026</p>
+    <p class="go" id="sun-go">fly on when you're ready</p>
+  </div>
   <div id="tour" hidden aria-live="polite">
     <p id="tour-line"></p>
     <div id="tour-foot"><span id="tour-step"></span><button id="tour-go" hidden>learn to fly</button><button id="tour-skip">skip</button></div>
@@ -2211,6 +2238,7 @@ import Layout from '../layouts/Layout.astro';
       endSelection();
       pilot.picked = null;
       if(follow) stopFollow('');
+      endSunScene();
       const to = pilot.overview;
       if(pilot.home) gas = 1; // landed on the way home: you're home
       pilot = null;
@@ -2584,7 +2612,13 @@ import Layout from '../layouts/Layout.astro';
         if(!wants) p.dockFree = true; // you were still pushing when you arrived: let go first
         else if(p.dockFree){ p.undock = p.dock; p.dock = -1; }
       }
-      const moored = p.dock >= 0;
+      // at the Sun, once a visit: the journey pauses for the platform's statement (the camera opens out to the side)
+      if(!sunScene && sun && !p.home && !p.auto && !follow && !crew.size && !p.selecting && p.dock < 0 && p.pos.distanceTo(sun.position) < 200 && !sessionStorage.getItem('cv-sun')) startSunScene(now, wants);
+      if(sunScene){
+        if(!wants) sunScene.free = true; // still pushing on arrival: let go first
+        else if(sunScene.free && now-sunScene.t0 > 2500) endSunScene();
+      }
+      const moored = p.dock >= 0 || !!sunScene;
       const withHim = nearHim(p.pos); // beside him the balloon hovers, as long as you don't push on
       const free = !p.selecting && !p.home && !moored; // while choosing a piece the stick belongs to the selection
       let sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
@@ -2721,7 +2755,16 @@ import Layout from '../layouts/Layout.astro';
         .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), p.speed/TOP*.07));
       // the camera rides behind and a little above
       const c = 1-Math.exp(-dt*2.4);
-      if(moored){
+      if(sunScene && sun){
+        // arriving at the Sun: the camera steps back and to the right of the balloon, so the balloon and the Sun sit
+        // on the left of the view and the words read on the right, over the dark (on a phone the Sun rides high)
+        const S = sun.position, flat = S.clone().sub(p.pos).setY(0).normalize(), side = new THREE.Vector3(-flat.z, 0, flat.x);
+        const eye = p.pos.clone().addScaledVector(flat, -34).addScaledVector(side, 7).add(new THREE.Vector3(0, 6, 0));
+        const far = S.distanceTo(eye), wide = window.innerWidth > 760;
+        const aim = wide ? S.clone().addScaledVector(side, far*.24) : S.clone().add(new THREE.Vector3(0, -far*.2, 0));
+        camera.position.lerp(eye, reduced ? 1 : 1-Math.exp(-dt*.7));
+        look.lerp(aim, reduced ? 1 : 1-Math.exp(-dt*.9));
+      } else if(moored){
         // moored: step aside so the balloon and the world sit together on the left, their story on the right
         const w = worlds[p.dock].mesh.position, mid = p.pos.clone().lerp(w, .5).add(new THREE.Vector3(0, 2, 0));
         const axis = w.clone().sub(p.pos).setY(0).normalize(), up = new THREE.Vector3(0, 1, 0);
@@ -2994,7 +3037,7 @@ import Layout from '../layouts/Layout.astro';
         controls.update();
         look.copy(controls.target);
       }
-      if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded;
+      if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded && !sunScene; // still air for the words at the Sun
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
       updateSky(now, dt);
       updateMeeting(now);
@@ -3728,6 +3771,36 @@ import Layout from '../layouts/Layout.astro';
     }
     const sunAt = () => universeAt(kinFor(GAL)).negate();
     let sun: THREE.Group | null = null, sunMark: HTMLElement | null = null;
+    // The statement at the Sun: arriving, the light swells, a low chord, then the words one line at a time.
+    let sunScene: { t0: number; free: boolean; timers: number[] } | null = null;
+    const sunWords = $('sun-words'), sunGlow = $('sun-glow');
+    function startSunScene(now: number, pushing: boolean){
+      try { sessionStorage.setItem('cv-sun', '1'); } catch {}
+      sunScene = { t0:now, free:!pushing, timers:[] };
+      document.body.classList.add('sunscene');
+      sunGlow.classList.add('on');
+      sunScene.timers.push(window.setTimeout(() => sunGlow.classList.replace('on', 'soft'), 2600));
+      [0, 2, 4].forEach((n, i) => setTimeout(() => playNote(NOTES[n]/2), i*220)); // a low chord, warm
+      setTimeout(() => playNote(NOTES[4]), 900);
+      if(audioCtx) burnerBreath(1.4, .4);
+      sunWords.hidden = false; sunWords.classList.remove('out');
+      const lines = [...sunWords.children] as HTMLElement[];
+      lines.forEach(l => l.classList.remove('shown'));
+      let at = 2200; // after the camera has swung out
+      for(const l of lines){
+        sunScene.timers.push(window.setTimeout(() => l.classList.add('shown'), at));
+        at += 800 + (l.textContent || '').length*30; // time to read it
+      }
+    }
+    function endSunScene(){
+      if(!sunScene) return;
+      sunScene.timers.forEach(clearTimeout);
+      sunScene = null;
+      document.body.classList.remove('sunscene');
+      sunGlow.classList.remove('on', 'soft');
+      sunWords.classList.add('out');
+      setTimeout(() => { if(!sunScene) sunWords.hidden = true; }, 1200);
+    }
     function buildSun(){
       if(!renderer || sun) return;
       sun = new THREE.Group();
