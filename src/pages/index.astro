@@ -2844,7 +2844,7 @@ import Layout from '../layouts/Layout.astro';
     // Frame budget: full rate (capped at 60, even on 120Hz screens) while something moves;
     // fewer frames when the picture is still, so the machine can rest.
     function frameBudget(now: number){
-      if(!focusedWindow) return 1000/10;                            // another window has the focus: barely tick
+      if(!focusedWindow) return follow || crew.size || skyMoving ? 1000/30 : 1000/10; // another window has the focus: barely tick, unless flying with someone
       const moving = flight || boarded || delivering || impactAt || (pilot && !pilot.selecting && focused < 0) || now-lastInput < 1200 || skyMoving;
       if(moving) return 1000/60;
       if(focused >= 0 || pilot?.selecting) return 1000/24;           // a piece on screen, or the universe paused
