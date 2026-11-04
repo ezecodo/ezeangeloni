@@ -216,7 +216,9 @@ import Layout from '../layouts/Layout.astro';
       #meet-form button { font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; }
       .meet-hint { margin: .7rem 0 0; opacity: .7; }
       @media (max-width: 600px) { #meet { left: 1rem; right: 1rem; width: auto; top: 5rem; } }
-      .t-btn .meeting { display: none; }
+      .t-btn .meeting, .t-btn .letgo { display: none; }
+      body.following:not(.focus):not(.selecting) #t-b0 .flying { display: none; }
+      body.following:not(.focus):not(.selecting) #t-b0 .letgo { display: inline; }
       body.meeting:not(.focus):not(.selecting) #t-b3 .flying { display: none; }
       body.meeting:not(.focus):not(.selecting) #t-b3 .meeting { display: inline; }
       .sky-name .say { display: block; margin-top: .3rem; max-width: 15rem; white-space: normal; text-align: center; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.05rem; letter-spacing: 0; text-transform: none; color: var(--ink); }
@@ -420,7 +422,7 @@ import Layout from '../layouts/Layout.astro';
   </div>
   <button id="t-fly" aria-label="fly the balloon">fly</button>
   <div id="t-zone" aria-hidden="true"></div><div id="t-base" aria-hidden="true"></div><div id="t-knob" aria-hidden="true"></div>
-  <button class="t-btn" id="t-b0" aria-hidden="true" tabindex="-1"><span class="flying">burner</span><span class="at-piece">slide<br>show</span></button>
+  <button class="t-btn" id="t-b0" aria-hidden="true" tabindex="-1"><span class="flying">burner</span><span class="letgo">let<br>go</span><span class="at-piece">slide<br>show</span></button>
   <button class="t-btn" id="t-b1" aria-hidden="true" tabindex="-1"><span class="flying">pause</span><span class="choosing">open</span><span class="at-piece">next</span></button>
   <button class="t-btn" id="t-b2" aria-hidden="true" tabindex="-1"><span class="flying">land</span><span class="choosing">resume</span><span class="at-piece">fly on</span></button>
   <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="meeting">gas</span><span class="at-piece">word</span></button>
@@ -2632,11 +2634,13 @@ import Layout from '../layouts/Layout.astro';
         look.lerp(narrow ? mid.clone().add(new THREE.Vector3(0, -8, 0)) : mid.clone().addScaledVector(right, 12), 1-Math.exp(-dt*1.6));
       } else {
         // behind the balloon, swung round it while you look about on a voyage
-        const back = f.clone().multiplyScalar(-22).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.lookYaw);
-        back.multiplyScalar(Math.cos(p.lookPitch*.8)).setY(6 + p.vy*.3 + Math.sin(p.lookPitch*.8)*22);
-        camera.position.lerp(p.pos.clone().add(back), c);
+        // on an expedition the camera rides behind whoever leads: you see what they see, your balloon beside theirs
+        const anchor = leader ? leader.body.group.position : p.pos, fw = leader ? leader.dir : f;
+        const back = fw.clone().multiplyScalar(-22).applyAxisAngle(new THREE.Vector3(0, 1, 0), p.lookYaw);
+        back.multiplyScalar(Math.cos(p.lookPitch*.8)).setY(6 + (leader ? 0 : p.vy*.3) + Math.sin(p.lookPitch*.8)*22);
+        camera.position.lerp(anchor.clone().add(back), c);
         const looking = Math.min(1, Math.abs(p.lookYaw) + Math.abs(p.lookPitch)); // looking about: at the balloon, the sky behind it
-        look.lerp(p.pos.clone().addScaledVector(f, 12*(1 - looking)).add(new THREE.Vector3(0, 2.5, 0)), c);
+        look.lerp(anchor.clone().addScaledVector(fw, 12*(1 - looking)).add(new THREE.Vector3(0, 2.5, 0)), c);
       }
       camera.lookAt(look);
       updateWind(p.selecting || moored ? 0 : dt, p.pos); // the wind holds its breath too
@@ -4218,6 +4222,7 @@ import Layout from '../layouts/Layout.astro';
     const skyNames = document.createElement('div');
     skyNames.id = 'sky-names';
     document.body.appendChild(skyNames);
+    let lookSent = '';
     let sky: WebSocket | null = null, skyIn = false, skyBackoff = 2000, skySentAt = 0, skyLastMode = -1;
     const skyRoom = GAL || 'eze';
     function addOther(id: string, name: string){
@@ -4302,6 +4307,9 @@ import Layout from '../layouts/Layout.astro';
           sky.send(JSON.stringify({ t:'s', s:[r(_p.x), r(_p.y), r(_p.z), r(_q.x, 1e4), r(_q.y, 1e4), r(_q.z, 1e4), r(_q.w, 1e4), r(myPower), pilot ? r(gas, 1000) : -1, mode] }));
         }
       }
+      // leading an expedition: whoever follows opens the piece I open, and leaves it when I do
+      const looking = focused > 0 && pilot ? stations[focused]?.id || '' : '';
+      if(crew.size && looking !== lookSent){ lookSent = looking; for(const id of crew) sendTo(id, { k:'look', id:looking }); }
       // what I see: each of the others, a little in the past, between the two states around that moment
       const at = now-SKY_DELAY, hideTags = focused >= 0 || boarded;
       skyMoving = false;
@@ -4439,10 +4447,10 @@ import Layout from '../layouts/Layout.astro';
         if(!alive){ scene.remove(f.pts); f.pts.geometry.dispose(); flows.splice(i, 1); }
       }
     }
-    function onSkyEvent(from: string, e: { k?: string; text?: unknown; g?: unknown }){
+    function onSkyEvent(from: string, e: { k?: string; text?: unknown; g?: unknown; id?: unknown }){
       const o = others.get(from);
       if(!o) return;
-      if(['invite', 'decline', 'join', 'leave', 'cross'].includes(e.k || '')) return onTripEvent(o, e.k!, e);
+      if(['invite', 'decline', 'join', 'leave', 'cross', 'look'].includes(e.k || '')) return onTripEvent(o, e.k!, e);
       if(e.k === 'bump'){
         if(!pilot || focused >= 0) return;
         o.flash = performance.now();
@@ -4470,8 +4478,9 @@ import Layout from '../layouts/Layout.astro';
     const crew = new Set<string>(); // who follows me
     const crewMsg = $('crew-msg');
     function paintCrew(){
+      document.body.classList.toggle('following', !!follow);
       const f = follow && others.get(follow.id);
-      crewMsg.textContent = f ? `following ${f.name} · ${document.body.classList.contains('kb') ? 'arrows look around · space' : 'stick looks around · burner'} flies on your own`
+      crewMsg.textContent = f ? `following ${f.name}, seeing what they see · ${document.body.classList.contains('kb') ? 'arrows look around · space lets go' : document.body.classList.contains('touch') ? 'let go to fly on your own' : 'stick looks around · burner lets go'}`
         : crew.size ? `${[...crew].map(id => others.get(id)?.name || '').filter(Boolean).join(', ')} ${crew.size > 1 ? 'follow' : 'follows'} you` : '';
     }
     function inviteTrip(){
@@ -4514,7 +4523,7 @@ import Layout from '../layouts/Layout.astro';
       clearTimeout(crewFlashT);
       crewFlashT = window.setTimeout(paintCrew, 3500);
     }
-    function onTripEvent(o: Other, k: string, e: { g?: unknown }){
+    function onTripEvent(o: Other, k: string, e: { g?: unknown; id?: unknown }){
       if(k === 'invite'){ if(pilot && !follow){ openMeet(o); showInvite(o); playNote(NOTES[6]); } }
       else if(k === 'decline'){ if(meet?.id === o.id) logMeet('', `${o.name} can't come now`, true); if(invited === o.id) invited = ''; }
       else if(k === 'join'){
@@ -4523,6 +4532,7 @@ import Layout from '../layouts/Layout.astro';
         if(!wanted || !pilot) return sendTo(o.id, { k:'leave' });
         invited = '';
         crew.add(o.id);
+        lookSent = '';
         if(meet?.id === o.id) closeMeet();
         playNote(NOTES[4]); setTimeout(() => playNote(NOTES[2]*2), 140);
         paintCrew();
@@ -4530,6 +4540,11 @@ import Layout from '../layouts/Layout.astro';
       else if(k === 'leave'){
         if(crew.delete(o.id)) flashCrew(`${o.name} flies on their own`);
         if(follow?.id === o.id){ follow = null; flashCrew(`${o.name} let you go`); }
+      }
+      else if(k === 'look' && follow?.id === o.id && pilot){
+        const i = e.id ? stations.findIndex(st => st.id === String(e.id)) : -1;
+        if(i > 0 && i !== focused) focusOn(i, 1300);
+        else if(!e.id && focused >= 0) backOut();
       }
       else if(k === 'cross' && follow?.id === o.id){
         const w = worlds.find(x => x.link.galaxy && x.link.galaxy.slug === String(e.g ?? ''));
@@ -4600,7 +4615,7 @@ import Layout from '../layouts/Layout.astro';
       if(meet && now-meetSyncAt > 500){ meetSyncAt = now; syncMeet(); }
       updateFlows(now);
     }
-    if(import.meta.env.DEV) (window as any).__sky = { get others(){ return others; }, get sky(){ return sky; }, get meet(){ return meet; }, ev: onSkyEvent };
+    if(import.meta.env.DEV) (window as any).__sky = { get others(){ return others; }, get sky(){ return sky; }, get meet(){ return meet; }, ev: onSkyEvent, get focused(){ return focused; }, get stations(){ return stations; } };
     galaxyReady.then(() => {
       linkList = GAL ? [] : DEFAULT_LINKS;
       buildSun();
