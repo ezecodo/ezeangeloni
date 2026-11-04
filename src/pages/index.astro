@@ -2528,10 +2528,10 @@ import Layout from '../layouts/Layout.astro';
         if(there && gas > .98) p.auto.sun = false; // full: on to the galaxy
       }
       const leader = follow && free ? others.get(follow.id) : null;
-      if(leader){ sx = 0; sy = 0; held = false; } // towed: the stick looks around, only the pilot flame burns
+      if(leader){ sx = 0; sy = 0; held = false; } // towed: the stick looks around, and the tank rests
       // the tank: the burner and the pilot flame spend it; low, the flame coughs
       const voidK = inVoid(p.pos);
-      if(free) gas = Math.max(0, gas - dt*(GAS_IDLE*(voidK ? VOID_IDLE : 1) + (held ? GAS_BURN*(voidK ? VOID_BURN : 1) : 0)));
+      if(free && !leader) gas = Math.max(0, gas - dt*(GAS_IDLE*(voidK ? VOID_IDLE : 1) + (held ? GAS_BURN*(voidK ? VOID_BURN : 1) : 0)));
       const cough = gas < GAS_LOW && !inXibalba(p.pos) && Math.sin(now*.023) + Math.sin(now*.0071)*1.3 < -.35; // never in Xibalbá: you can always climb out
       const burning = held && gas > 0 && !cough;
       burnerOn = burning;
@@ -4014,7 +4014,7 @@ import Layout from '../layouts/Layout.astro';
         try { sessionStorage.setItem('cv-lead', JSON.stringify({ names:[...crew].map(id => others.get(id)?.name).filter(Boolean), t:Date.now() })); } catch {}
       }
       // arriving still in the balloon, at the edge you came in from, with the gas you had
-      if(flying || pilot){ try { sessionStorage.setItem('cv-arrive', JSON.stringify({ from: GAL, gas: gas - CROSS_COST, t: Date.now() })); } catch {} }
+      if(flying || pilot){ try { sessionStorage.setItem('cv-arrive', JSON.stringify({ from: GAL, gas: gas - (follow ? 0 : CROSS_COST), t: Date.now() })); } catch {} }
       $('warp').classList.add('on');
       if(audioCtx) burnerBreath(1.2, .5);
       setTimeout(() => { location.href = w.link.url; }, 900);
@@ -4280,8 +4280,8 @@ import Layout from '../layouts/Layout.astro';
         let m: any;
         try { m = JSON.parse(e.data); } catch { return; }
         if(m.t === 'welcome'){ skyBackoff = 2000; ws.send(JSON.stringify({ t:'join', g:skyRoom })); }
-        else if(m.t === 'room'){ skyIn = true; skyLastMode = -1; for(const p of m.peers || []){ const o = addOther(p.id, p.name); takeState(o, p.s); setTimeout(() => rejoin(o), 1500); } }
-        else if(m.t === 'in'){ const o = addOther(m.id, m.name); setTimeout(() => rejoin(o), 1500); }
+        else if(m.t === 'room'){ skyIn = true; skyLastMode = -1; for(const p of m.peers || []){ const o = addOther(p.id, p.name); takeState(o, p.s); } }
+        else if(m.t === 'in'){ addOther(m.id, m.name); }
         else if(m.t === 's'){ const o = others.get(m.id); if(o) takeState(o, m.s); }
         else if(m.t === 'out') dropOther(m.id);
         else if(m.t === 'ev') onSkyEvent(m.from, m.e || {});
@@ -4534,7 +4534,7 @@ import Layout from '../layouts/Layout.astro';
     function flashCrew(text: string){
       crewMsg.textContent = text;
       clearTimeout(crewFlashT);
-      crewFlashT = window.setTimeout(paintCrew, 3500);
+      crewFlashT = window.setTimeout(paintCrew, 8000);
     }
     function onTripEvent(o: Other, k: string, e: { g?: unknown; id?: unknown }){
       if(k === 'invite'){ if(pilot && !follow){ openMeet(o); showInvite(o); playNote(NOTES[6]); } }
@@ -4542,7 +4542,7 @@ import Layout from '../layouts/Layout.astro';
       else if(k === 'join'){
         let wanted = invited === o.id;
         try { const l = JSON.parse(sessionStorage.getItem('cv-lead') || 'null'); if(l && Date.now()-l.t < 60000 && l.names.includes(o.name)) wanted = true; } catch {}
-        if(!wanted || !pilot) return sendTo(o.id, { k:'leave' });
+        if(!wanted) return sendTo(o.id, { k:'leave' }); // just arrived, maybe not flying yet: still welcome
         invited = '';
         crew.add(o.id);
         lookSent = '';
@@ -4564,21 +4564,24 @@ import Layout from '../layouts/Layout.astro';
       else if(k === 'cross' && follow?.id === o.id){
         const w = worlds.find(x => x.link.galaxy && x.link.galaxy.slug === String(e.g ?? ''));
         if(!w?.link.galaxy?.open){ stopFollow(`${o.name} crossed into a galaxy you can't enter`); return; }
-        if(gas < CROSS_COST){ stopFollow(`${o.name} crossed over · you need ${Math.round(CROSS_COST*11)} gallons to follow`); return; }
         try { sessionStorage.setItem('cv-follow', JSON.stringify({ name:o.name, t:Date.now() })); } catch {}
         enterGalaxy(w, true);
       }
     }
     // after crossing together: find each other again on the other side
-    function rejoin(o: Other){
-      try {
-        const f = JSON.parse(sessionStorage.getItem('cv-follow') || 'null');
-        if(!f || Date.now()-f.t > 60000 || f.name !== o.name || follow || !pilot) return;
-        sessionStorage.removeItem('cv-follow');
-        sendTo(o.id, { k:'join' });
-        startFollow(o);
-      } catch {}
-    }
+    // keep looking for a minute: the new galaxy takes a while to load, and either of you may arrive first
+    setInterval(() => {
+      let f: { name: string; t: number } | null = null;
+      try { f = JSON.parse(sessionStorage.getItem('cv-follow') || 'null'); } catch {}
+      if(!f) return;
+      if(Date.now()-f.t > 60000){ sessionStorage.removeItem('cv-follow'); return; }
+      if(follow || !pilot) return;
+      const o = [...others.values()].find(x => x.name === f!.name);
+      if(!o) return;
+      sessionStorage.removeItem('cv-follow');
+      sendTo(o.id, { k:'join' });
+      startFollow(o);
+    }, 1000);
     // whoever leads lands for a moment (or the window loses them): you hover where they were and wait a minute
     setInterval(() => {
       if(!follow) return;
@@ -4683,7 +4686,9 @@ import Layout from '../layouts/Layout.astro';
     }
     micBtn.addEventListener('click', () => { touched(); toggleMute(); });
     // a browser that wouldn't play the voice yet (no tap since the page loaded, after crossing) plays it on the next one
-    window.addEventListener('pointerdown', () => { for(const c of calls.values()) if(c.audio.paused && c.audio.srcObject) c.audio.play().catch(() => {}); });
+    const replay = () => { for(const c of calls.values()) if(c.audio.paused && c.audio.srcObject) c.audio.play().catch(() => {}); };
+    window.addEventListener('pointerdown', replay, true); // capture: the touch buttons stop their own events
+    window.addEventListener('keydown', replay, true);
     meetForm.addEventListener('submit', e => {
       e.preventDefault();
       const text = meetInput.value.replace(/\s+/g, ' ').trim().slice(0, 200);
@@ -4699,8 +4704,12 @@ import Layout from '../layouts/Layout.astro';
     $('meet-yes').addEventListener('click', () => { touched(); acceptTrip(); });
     $('meet-no').addEventListener('click', () => { touched(); if(invitedBy) sendTo(invitedBy, { k:'decline' }); hideInvite(); });
     // touching: the envelopes meet (each about 2.3 across at the balloon's scale, a little taller than wide)
+    function crossingTogether(){ // just crossed on an expedition: you arrive at the same spot, no bumping while you find each other
+      for(const k of ['cv-follow', 'cv-lead']){ try { const v = JSON.parse(sessionStorage.getItem(k) || 'null'); if(v && Date.now()-v.t < 60000) return true; } catch {} }
+      return false;
+    }
     function checkBump(now: number){
-      if(!pilot || focused >= 0 || pilot.selecting || pilot.home || boarded) return;
+      if(!pilot || focused >= 0 || pilot.selecting || pilot.home || boarded || crossingTogether()) return;
       for(const o of others.values()){
         if(o.vis < .8 || follow?.id === o.id || crew.has(o.id)) continue; // flying together: no bumping
         const d = centre(pilot.pos).sub(centre(o.body.group.position));
