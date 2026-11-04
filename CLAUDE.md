@@ -99,6 +99,8 @@ The project's reason for being is **digital independence**. The user (Eze) is a 
 
 Describing from a phone is fiddly, so photos often go up bare. The admin's **archive** tab gives every photo a description field and a date field, saved as you leave them (`POST /api/frases/edit`, `editItem` in `frases.js`, `checkWho`, own root only; green border saved, red failed, the new barrio in its tooltip), and a checkbox "only photos without a description". A photo's link is its file name, so nothing breaks; frases aren't editable (their link is a hash of date and words).
 
+And flying, which Eze liked better: at one of their own photos the owner (`mine`) sees `#describe-piece` ("add a description", blinking while there's none, or "edit the description") above `remove from the archive`; it opens `#describe`, a serif field over the basket (Enter saves through the same `/api/frases/edit`, Esc or flying on cancels), and the words show at once in the meta line (`showMeta`) and the index cell's title.
+
 ## Photos and frases with their own date (barrios)
 
 The site makes barrios from the month of `fecha`, so backdating is all it takes. Two doors write `frases.json`, both through `apps/uploader/frases.js` (one writer at a time, atomic rename; new entries get `subida`):

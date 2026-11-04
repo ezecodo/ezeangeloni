@@ -105,6 +105,14 @@ import Layout from '../layouts/Layout.astro';
       #remove-piece { position: fixed; right: 1.4rem; bottom: calc(var(--dial) + 3rem); z-index: 12; font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,63,63,.75); border: 1px solid rgba(255,63,63,.35); padding: .45rem .7rem; background: rgba(8,8,16,.5); }
       #remove-piece:hover { color: #ff3f3f; border-color: #ff3f3f; }
       #remove-piece[hidden] { display: none; }
+      #describe-piece { position: fixed; right: 1.4rem; bottom: calc(var(--dial) + 5.8rem); z-index: 12; font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; border: 1px solid rgba(110,249,245,.4); padding: .45rem .7rem; background: rgba(8,8,16,.5); }
+      #describe-piece.empty { animation: blink 2s steps(2) infinite; }
+      #describe-piece[hidden], #describe[hidden] { display: none; }
+      #describe { position: fixed; left: 50%; bottom: calc(var(--dial) + 4.6rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 15; width: min(620px, 88vw); display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 1rem 1.2rem .8rem; background: rgba(8,8,16,.82); border: 1px solid rgba(110,249,245,.35); }
+      #describe-input { width: 100%; background: transparent; border: 0; border-bottom: 1px solid rgba(240,237,232,.4); color: var(--ink); font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.4rem; text-align: center; padding: .2rem 0; outline: none; }
+      #describe span { font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+      #describe span button { color: #6ef9f5; }
+      #describe span button[type=button] { color: var(--muted); }
       /* arriving in a galaxy: its name, like the title of a chapter, then gone */
       #arrival { position: fixed; left: 0; right: 0; top: 22vh; z-index: 13; text-align: center; pointer-events: none; opacity: 0; transition: opacity 1.6s ease; text-shadow: 0 0 24px rgba(8,8,16,.9); }
       #arrival.show { opacity: 1; transition-duration: 1.2s; }
@@ -398,6 +406,8 @@ import Layout from '../layouts/Layout.astro';
   <div id="sky-marks" aria-hidden="true"></div>
   <div id="arrival" aria-live="polite"><p></p><h2></h2></div>
   <button id="remove-piece" hidden>remove from the archive</button>
+  <button id="describe-piece" hidden></button>
+  <form id="describe" hidden><input id="describe-input" maxlength="300" autocomplete="off" enterkeyhint="done" placeholder="what is it, where, who…" /><span><button>save</button> · <button type="button" id="describe-cancel">cancel</button></span></form>
   <aside id="thread-note" hidden></aside>
   <button id="connect-piece" hidden>connect with one of mine</button>
   <div id="xib-dark" aria-hidden="true"></div>
@@ -4418,6 +4428,43 @@ import Layout from '../layouts/Layout.astro';
       backOut();
       if(p){ p.mesh.visible = false; p.mesh.layers.set(31); if(p.star) p.star.visible = false; if(p.halo) p.halo.visible = false; } // layer 31: not drawn, not hit by a click // gone; the map closes over it on the next visit
       document.querySelector(`#index-grid .cell[data-i="${p?.i}"]`)?.remove(); // and from the index
+    });
+    // ...and give one of their photos its words right there, flying (describing from a phone at upload is fiddly).
+    // Its link is its file name, so nothing breaks; the words show at once in the meta line and the index.
+    const describeBtn = $('describe-piece') as HTMLButtonElement, describeForm = $('describe') as HTMLFormElement, describeInput = $('describe-input') as HTMLInputElement;
+    let describing = -1;
+    setInterval(() => {
+      const st = focused > 0 ? stations[focused] : null, can = !!(mine && st && st.kind === 'photo' && !flight);
+      describeBtn.hidden = !can || describing >= 0;
+      if(can){ const label = st!.text ? 'edit the description' : 'add a description'; if(describeBtn.textContent !== label) describeBtn.textContent = label; describeBtn.classList.toggle('empty', !st!.text); }
+      if(describing >= 0 && focused !== describing) closeDescribe(); // flew on: the words wait
+    }, 300);
+    function closeDescribe(){ describing = -1; describeForm.hidden = true; describeInput.blur(); }
+    describeBtn.addEventListener('click', () => {
+      touched();
+      describing = focused;
+      describeInput.value = stations[focused]?.text || '';
+      describeForm.hidden = false;
+      describeInput.focus();
+      describeInput.select();
+    });
+    $('describe-cancel').addEventListener('click', closeDescribe);
+    describeInput.addEventListener('keydown', e => { e.stopPropagation(); if(e.key === 'Escape') closeDescribe(); }); // typing isn't steering
+    describeForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const i = describing, st = stations[i];
+      if(!st || st.kind !== 'photo' || !st.src) return closeDescribe();
+      const caption = describeInput.value.replace(/\s+/g, ' ').trim().slice(0, 300);
+      if(caption === (st.text || '')) return closeDescribe();
+      const r = await fetch('/api/frases/edit', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Auth': ownerPass }, body: JSON.stringify({ imagen: st.src.slice(BASE.length), caption }) }).catch(() => null);
+      if(!r?.ok){ describeInput.style.borderBottomColor = '#ff3f3f'; describeInput.title = 'could not save it'; return; }
+      describeInput.style.borderBottomColor = '';
+      st.text = caption;
+      closeDescribe();
+      if(focused === i) showMeta(i);
+      const cell = document.querySelector(`#index-grid .cell[data-i="${i}"]`);
+      if(cell) cell.setAttribute('title', caption);
+      [2, 4].forEach((n, k) => setTimeout(() => playNote(NOTES[n]*2), k*120));
     });
     function showLocked(){
       const known = !!registry.find(g => g.slug === GAL);
