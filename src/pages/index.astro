@@ -193,6 +193,28 @@ import Layout from '../layouts/Layout.astro';
       #pilot-hud .wind { display: block; margin-top: .55rem; text-align: center; color: #6ef9f5; }
       #pilot-hud .gas { display: block; margin-top: .45rem; text-align: center; color: #ffd166; }
       #pilot-hud .gas:empty { display: none; }
+      /* touch piloting: a stick that appears under the left thumb, four round buttons under the right one */
+      #t-fly, #t-zone, .t-btn, #t-base, #t-knob { display: none; }
+      body.touch:not(.pilot):not(.focus):not(.aboard):not(.world) #t-fly { display: flex; }
+      body.touch.pilot:not(.aboard) #t-zone, body.touch.pilot:not(.aboard) .t-btn { display: flex; }
+      #t-fly { position: fixed; right: 1rem; bottom: calc(var(--dial) + 3.4rem); z-index: 12; width: 62px; height: 62px; border-radius: 50%; align-items: center; justify-content: center; border: 1px solid rgba(110,249,245,.6); color: #6ef9f5; background: rgba(8,8,16,.45); font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; touch-action: manipulation; }
+      #t-zone { position: fixed; left: 0; top: 22vh; bottom: 0; width: 50vw; z-index: 11; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+      #t-base, #t-knob { position: fixed; left: 0; top: 0; z-index: 11; border-radius: 50%; pointer-events: none; }
+      #t-base { width: 110px; height: 110px; border: 1px solid rgba(240,237,232,.3); }
+      #t-knob { width: 44px; height: 44px; background: rgba(240,237,232,.16); border: 1px solid rgba(240,237,232,.55); }
+      body.touch.pilot #t-base.on, body.touch.pilot #t-knob.on { display: block; }
+      .t-btn { position: fixed; z-index: 12; border-radius: 50%; align-items: center; justify-content: center; text-align: center; line-height: 1.3; border: 1px solid rgba(240,237,232,.4); background: rgba(8,8,16,.4); color: var(--ink); font-size: .5rem; letter-spacing: .12em; text-transform: uppercase; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: background .12s, opacity .3s; }
+      .t-btn.on { background: rgba(240,237,232,.22); }
+      #t-b0 { width: 80px; height: 80px; right: 1rem; bottom: calc(var(--dial) + 3.2rem); border-color: rgba(255,159,28,.7); color: #ffd166; }
+      #t-b0.on { background: rgba(255,159,28,.35); }
+      #t-b1 { width: 58px; height: 58px; right: 6.4rem; bottom: calc(var(--dial) + 3rem); border-color: rgba(110,249,245,.6); color: #6ef9f5; }
+      #t-b2 { width: 50px; height: 50px; right: 1.4rem; bottom: calc(var(--dial) + 9.4rem); }
+      #t-b3 { width: 50px; height: 50px; right: 5.6rem; bottom: calc(var(--dial) + 7.6rem); color: #ff6eb4; border-color: rgba(255,110,180,.5); }
+      .t-btn .choosing, .t-btn .at-piece, body.focus .t-btn .flying, body.selecting .t-btn .flying { display: none; }
+      body.focus .t-btn .at-piece { display: inline; }
+      body.selecting:not(.focus) .t-btn .choosing { display: inline; }
+      body.selecting:not(.focus) #t-b0, body.selecting:not(.focus) #t-b3 { opacity: .15; pointer-events: none; }
+      body.touch #pilot-hud .pad, body.touch #pilot-hud .kb, body:not(.touch) #pilot-hud .tch { display: none; }
       #wind-arrow { display: inline-block; margin-right: .7em; font-weight: 400; transition: transform .4s; }
       #selector { position: fixed; left: 0; top: 0; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .25s, transform .22s ease-out, width .22s ease-out, height .22s ease-out; }
       #selector.on { opacity: 1; animation: breathe 1.6s ease-in-out infinite; }
@@ -355,7 +377,13 @@ import Layout from '../layouts/Layout.astro';
   <div id="cands" aria-hidden="true"></div>
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span></span><span class="choosing"><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <button id="t-fly" aria-label="fly the balloon">fly</button>
+  <div id="t-zone" aria-hidden="true"></div><div id="t-base" aria-hidden="true"></div><div id="t-knob" aria-hidden="true"></div>
+  <button class="t-btn" id="t-b0" aria-hidden="true" tabindex="-1"><span class="flying">burner</span><span class="at-piece">slide<br>show</span></button>
+  <button class="t-btn" id="t-b1" aria-hidden="true" tabindex="-1"><span class="flying">pause</span><span class="choosing">open</span><span class="at-piece">next</span></button>
+  <button class="t-btn" id="t-b2" aria-hidden="true" tabindex="-1"><span class="flying">land</span><span class="choosing">resume</span><span class="at-piece">fly on</span></button>
+  <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="at-piece">word</span></button>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
@@ -1871,6 +1899,56 @@ import Layout from '../layouts/Layout.astro';
     });
     window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => keys.clear());
+    // Touch drives it too: a stick under the left thumb (it appears where the thumb lands, read in eight
+    // directions like the Competition Pro) and four round buttons with the pad's roles under the right one.
+    // A tap shorter than a frame is latched so it still counts once
+    const tpad = { x:0, y:0, held:[false,false,false,false], latch:[false,false,false,false] };
+    let flyWanted = 0;
+    if(isTouch) document.body.classList.add('touch');
+    window.addEventListener('pointerdown', e => { if(e.pointerType === 'touch') document.body.classList.add('touch'); }, true);
+    $('t-fly').addEventListener('click', () => { touched(); flyWanted = performance.now(); });
+    [0,1,2,3].forEach(i => {
+      const b = $('t-b'+i);
+      const up = () => { tpad.held[i] = false; b.classList.remove('on'); };
+      b.addEventListener('pointerdown', e => {
+        e.preventDefault(); e.stopPropagation();
+        tpad.held[i] = tpad.latch[i] = true; b.classList.add('on'); touched();
+        try { b.setPointerCapture(e.pointerId); } catch {}
+      });
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+      b.addEventListener('contextmenu', e => e.preventDefault());
+    });
+    {
+      const zone = $('t-zone'), base = $('t-base'), knob = $('t-knob'), R = 48;
+      let id = -1, ox = 0, oy = 0;
+      const at = (el: HTMLElement, x: number, y: number) => { el.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%)`; };
+      zone.addEventListener('pointerdown', e => {
+        if(id >= 0) return;
+        e.preventDefault();
+        id = e.pointerId; ox = e.clientX; oy = e.clientY;
+        try { zone.setPointerCapture(id); } catch {}
+        at(base, ox, oy); at(knob, ox, oy);
+        base.classList.add('on'); knob.classList.add('on');
+        touched();
+      });
+      zone.addEventListener('pointermove', e => {
+        if(e.pointerId !== id) return;
+        let dx = e.clientX-ox, dy = e.clientY-oy;
+        const r = Math.hypot(dx, dy);
+        if(r > R){ dx *= R/r; dy *= R/r; }
+        at(knob, ox+dx, oy+dy);
+        if(r < 16){ tpad.x = tpad.y = 0; return; }
+        const k = Math.round(Math.atan2(dy, dx)/(Math.PI/4))*Math.PI/4;
+        tpad.x = Math.round(Math.cos(k)); tpad.y = Math.round(Math.sin(k));
+      });
+      const release = (e: PointerEvent) => {
+        if(e.pointerId !== id) return;
+        id = -1; tpad.x = tpad.y = 0;
+        base.classList.remove('on'); knob.classList.remove('on');
+      };
+      zone.addEventListener('pointerup', release); zone.addEventListener('pointercancel', release);
+      zone.addEventListener('contextmenu', e => e.preventDefault());
+    }
     function readPad(){
       let x = 0, y = 0, held = [false, false, false, false], usedPad = false;
       const gp = [...(navigator.getGamepads?.() || [])].find(g => g && g.connected);
@@ -1891,6 +1969,12 @@ import Layout from '../layouts/Layout.astro';
         held = (/Vendor: 0079/i.test(gp.id) ? [3, 0, 1, 4] : [0, 1, 2, 3]).map(b);
         usedPad = !!(x || y || held.some(Boolean));
       }
+      const tl = tpad.held.map((h, i) => h || tpad.latch[i]);
+      tpad.latch.fill(false);
+      if(!x) x = tpad.x;
+      if(!y) y = tpad.y;
+      held = held.map((h, i) => h || tl[i]);
+      if(tpad.x || tpad.y || tl.some(Boolean)) usedPad = true;
       const k = (...names: string[]) => names.some(n => keys.has(n));
       const kx = (k('d','arrowright') ? 1 : 0) - (k('a','arrowleft') ? 1 : 0);
       const ky = (k('s','arrowdown') ? 1 : 0) - (k('w','arrowup') ? 1 : 0);
@@ -1910,6 +1994,10 @@ import Layout from '../layouts/Layout.astro';
     const tap = (i: number) => pad.held[i] && !pad.prev[i];
     function pollPad(now: number){
       if(locked || !readPad()) return; // at a closed galaxy's gate nothing flies
+      if(flyWanted){ // the touch "fly" button: take off as soon as the balloon is free
+        if(pilot || now-flyWanted > 4000) flyWanted = 0;
+        else if(balloon?.mode === 'cruise' && !flight && focused < 0 && worldAt < 0 && !boarded){ flyWanted = 0; enterPilot(); }
+      }
       const dir = pad.x || pad.y;
       if(!dir) padRepeat = 0;
       if(!dir && !pad.held.some(Boolean)) return;
@@ -2589,7 +2677,8 @@ import Layout from '../layouts/Layout.astro';
         setNdc(e);
         const w = pickWorld();
         if(w >= 0 && worlds[w].link.galaxy?.open){ voyage(w); return; }
-        exitPilot(); return;
+        if(e.pointerType === 'mouse') exitPilot(); // a finger lands with its own button
+        return;
       }
       press = { x:e.clientX, y:e.clientY, t:performance.now() };
       touched();
