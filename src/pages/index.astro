@@ -4109,7 +4109,8 @@ import Layout from '../layouts/Layout.astro';
     // Offered once (an invitation on the first visit, gone if you'd rather explore), again from about or `h`.
     // Looking first (most people only want to see the photos), then taking off, the burner, choosing a memory.
     // Words for the keyboard, a joystick or a phone, whichever is in use; [W] becomes a drawn key.
-    type TourStep = { kb: string; pad: string; touch: string; done?: () => boolean; wait?: number };
+    type TourStep = { kb: string; pad: string; touch: string; done?: () => boolean; wait?: number; start?: () => void };
+    let tourSel = -1; // where the frame was when you were asked to move it
     let tourOn = -1, tourT = 0, tourDrag = 0, tourTurn = 0, tourBurn = 0, tourFast = 0, tourWas = { focused:-1 };
     const TOUR: TourStep[] = [
       { kb:'drag to look around', pad:'drag with the mouse to look around', touch:'drag to look around', done:() => tourDrag > 60 },
@@ -4118,8 +4119,9 @@ import Layout from '../layouts/Layout.astro';
       { kb:'now fly: [W] takes off', pad:'now fly: push the stick', touch:'now fly: tap fly', done:() => !!pilot },
       { kb:'[A] [D] turn · [W] [S] speed up and brake', pad:'the stick drives: up goes, down brakes, sideways turns', touch:'your left thumb is the stick: up goes, sideways turns', done:() => tourTurn > .8 && tourFast > 8 },
       { kb:'hold [space]: the burner lifts you', pad:'hold ● left: the burner lifts you', touch:'hold burner: it lifts you', done:() => tourBurn > .8 },
-      { kb:'[E] stops the universe · arrows choose a memory', pad:'● right stops the universe · the stick chooses a memory', touch:'pause stops the universe · your thumb chooses a memory', done:() => !!pilot?.selecting },
-      { kb:'[E] again opens it', pad:'● right again opens it', touch:'open', done:() => focused > 0 && !!pilot },
+      { kb:'[E] stops the universe: the memories ahead of you light up', pad:'● right stops the universe: the memories ahead of you light up', touch:'pause stops the universe: the memories ahead of you light up', done:() => !!pilot?.selecting },
+      { kb:'the arrows move the frame from one memory to another', pad:'the stick moves the frame from one memory to another', touch:'your left thumb moves the frame from one memory to another', start:() => { tourSel = pilot?.sel ?? -1; }, done:() => !!pilot?.selecting && (pilot.sel !== tourSel || pilot.cands.length < 2) }, // a lone memory: nothing to move to
+      { kb:'[E] again opens the one in the frame', pad:'● right again opens the one in the frame', touch:'open shows the one in the frame', done:() => focused > 0 && !!pilot },
       { kb:'[Q] flies on', pad:'▲ flies on', touch:'fly on', done:() => focused < 0 && !!pilot && !pilot.selecting },
       { kb:'the lights under your basket are your gas · the nebulae refill it', pad:'the lights under your basket are your gas · the nebulae refill it', touch:'the lights under your basket are your gas · the nebulae refill it', wait:6500 },
       { kb:'[T] leaves a word · [Q] lands · the sky is yours', pad:'▲ right leaves a word · ▲ left lands · the sky is yours', touch:'word leaves a word · land comes down · the sky is yours', wait:7000 },
@@ -4186,6 +4188,7 @@ import Layout from '../layouts/Layout.astro';
         playNote(NOTES[(tourOn + 2) % NOTES.length]*2);
         tourOn++; tourT = now;
         if(tourOn >= TOUR.length){ endTour(); return; }
+        TOUR[tourOn].start?.();
       }
       paintTour();
     }
