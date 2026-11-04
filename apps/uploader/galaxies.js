@@ -244,6 +244,18 @@ export async function canEnterSlug(slug, device, who) {
   return !!g && canEnter(g, device, who);
 }
 
+// Who flies in the shared sky (sky.js): a galaxy's owner, or a device let into a private galaxy (family and
+// whoever they let in). Anyone else gets no sky at all. The name is what hangs from their basket.
+export async function skyMember(device, who, whoName) {
+  if (who) return { name: whoName || who, slug: who };
+  if (!validDevice(device)) return null;
+  for (const g of (await load()).galaxies) {
+    const grant = (g.grants || []).find((x) => x.device && x.device === device);
+    if (grant) return { name: cleanName(grant.name) || 'someone', slug: null };
+  }
+  return null;
+}
+
 // Words left with the balloon in someone's galaxy: kept for them, read in their admin.
 export async function leaveWords(slug, device, who, text) {
   const g = (await load()).galaxies.find((x) => x.slug === slug);

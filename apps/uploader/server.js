@@ -8,6 +8,7 @@ import { saveLinks, storeLinkImage } from './links.js';
 import * as galaxies from './galaxies.js';
 import * as xibalba from './xibalba.js';
 import * as threads from './threads.js';
+import { attachSky } from './sky.js';
 import { addPhoto, addText, removeItem, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
 
 // === Config ===
@@ -758,7 +759,7 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message || 'server error' });
 });
 
-app.listen(PORT, '127.0.0.1', () => {
+const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[uploader] listening on http://127.0.0.1:${PORT}`);
   console.log(`[uploader] sets dir: ${SETS_DIR}`);
   console.log(`[uploader] originals dir: ${ORIGINALS_DIR}`);
@@ -766,3 +767,6 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`[uploader] sets json: ${SETS_JSON}`);
   console.log(`[uploader] max upload size: ${MAX_SIZE_MB}MB`);
 });
+
+// the shared sky: family balloons flying together (WebSocket at /api/sky)
+attachSky(server, UPLOAD_PASSWORD);

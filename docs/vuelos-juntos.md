@@ -17,7 +17,9 @@ Roadmap, 2026-11-04. Idea de Eze: volar con su hermano (y la familia) en el mism
 
 ---
 
-## Etapa 1 · Verse (globos compartidos)
+## Etapa 1 · Verse (globos compartidos) ✅ 2026-11-04
+
+Hecha, salvo el sonido del quemador ajeno (pendiente) y el gancho de desarrollo (se prueba con un WebSocket a mano desde la consola). Decidido al hacerla: solo se ve el globo de quien está pilotando (uno en crucero va pegado a su cámara y saltaría), y el nombre flota sobre la envoltura (debajo se perdía entre las luces).
 
 **Objetivo:** si Lucho vuela en tu galaxia, ves su globo moverse en tiempo real, con su nombre.
 
