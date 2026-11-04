@@ -32,7 +32,7 @@ import Layout from '../layouts/Layout.astro';
       @keyframes sonar { 0% { width:5px; height:5px; opacity:.8; } 100% { width:70px; height:70px; opacity:0; } }
 
       /* instrument panel */
-      #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; color: var(--ink); font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; }
+      #hud { position: fixed; inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); pointer-events: none; z-index: 10; color: var(--ink); font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; }
       #hud button, #hud a { pointer-events: auto; letter-spacing: inherit; text-transform: inherit; text-decoration: none; }
       #top { position: absolute; top: 0; left: 0; right: 0; padding: 1.1rem 1.4rem; display: flex; justify-content: space-between; gap: 1rem; }
       #brand { font-size: inherit; font-weight: 400; padding: .2rem 0; }
@@ -197,7 +197,7 @@ import Layout from '../layouts/Layout.astro';
       #t-fly, #t-zone, .t-btn, #t-base, #t-knob { display: none; }
       body.touch:not(.pilot):not(.focus):not(.aboard):not(.world) #t-fly { display: flex; }
       body.touch.pilot:not(.aboard) #t-zone, body.touch.pilot:not(.aboard) .t-btn { display: flex; }
-      #t-fly { position: fixed; right: 1rem; bottom: calc(var(--dial) + 3.4rem); z-index: 12; width: 62px; height: 62px; border-radius: 50%; align-items: center; justify-content: center; border: 1px solid rgba(110,249,245,.6); color: #6ef9f5; background: rgba(8,8,16,.45); font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; touch-action: manipulation; }
+      #t-fly { position: fixed; right: calc(1rem + env(safe-area-inset-right)); bottom: calc(var(--dial) + 3.4rem + env(safe-area-inset-bottom)); z-index: 12; width: 62px; height: 62px; border-radius: 50%; align-items: center; justify-content: center; border: 1px solid rgba(110,249,245,.6); color: #6ef9f5; background: rgba(8,8,16,.45); font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; touch-action: manipulation; }
       #t-zone { position: fixed; left: 0; top: 22vh; bottom: 0; width: 50vw; z-index: 11; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
       #t-base, #t-knob { position: fixed; left: 0; top: 0; z-index: 11; border-radius: 50%; pointer-events: none; }
       #t-base { width: 110px; height: 110px; border: 1px solid rgba(240,237,232,.3); }
@@ -205,11 +205,11 @@ import Layout from '../layouts/Layout.astro';
       body.touch.pilot #t-base.on, body.touch.pilot #t-knob.on { display: block; }
       .t-btn { position: fixed; z-index: 12; border-radius: 50%; align-items: center; justify-content: center; text-align: center; line-height: 1.3; border: 1px solid rgba(240,237,232,.4); background: rgba(8,8,16,.4); color: var(--ink); font-size: .5rem; letter-spacing: .12em; text-transform: uppercase; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: background .12s, opacity .3s; }
       .t-btn.on { background: rgba(240,237,232,.22); }
-      #t-b0 { width: 80px; height: 80px; right: 1rem; bottom: calc(var(--dial) + 3.2rem); border-color: rgba(255,159,28,.7); color: #ffd166; }
+      #t-b0 { width: 80px; height: 80px; right: calc(1rem + env(safe-area-inset-right)); bottom: calc(var(--dial) + 3.2rem + env(safe-area-inset-bottom)); border-color: rgba(255,159,28,.7); color: #ffd166; }
       #t-b0.on { background: rgba(255,159,28,.35); }
-      #t-b1 { width: 58px; height: 58px; right: 6.4rem; bottom: calc(var(--dial) + 3rem); border-color: rgba(110,249,245,.6); color: #6ef9f5; }
-      #t-b2 { width: 50px; height: 50px; right: 1.4rem; bottom: calc(var(--dial) + 9.4rem); }
-      #t-b3 { width: 50px; height: 50px; right: 5.6rem; bottom: calc(var(--dial) + 7.6rem); color: #ff6eb4; border-color: rgba(255,110,180,.5); }
+      #t-b1 { width: 58px; height: 58px; right: calc(6.4rem + env(safe-area-inset-right)); bottom: calc(var(--dial) + 3rem + env(safe-area-inset-bottom)); border-color: rgba(110,249,245,.6); color: #6ef9f5; }
+      #t-b2 { width: 50px; height: 50px; right: calc(1.4rem + env(safe-area-inset-right)); bottom: calc(var(--dial) + 9.4rem + env(safe-area-inset-bottom)); }
+      #t-b3 { width: 50px; height: 50px; right: calc(5.6rem + env(safe-area-inset-right)); bottom: calc(var(--dial) + 7.6rem + env(safe-area-inset-bottom)); color: #ff6eb4; border-color: rgba(255,110,180,.5); }
       .t-btn .choosing, .t-btn .at-piece, body.focus .t-btn .flying, body.selecting .t-btn .flying { display: none; }
       body.focus .t-btn .at-piece { display: inline; }
       body.selecting:not(.focus) .t-btn .choosing { display: inline; }
@@ -1906,7 +1906,15 @@ import Layout from '../layouts/Layout.astro';
     let flyWanted = 0;
     if(isTouch) document.body.classList.add('touch');
     window.addEventListener('pointerdown', e => { if(e.pointerType === 'touch') document.body.classList.add('touch'); }, true);
-    $('t-fly').addEventListener('click', () => { touched(); flyWanted = performance.now(); });
+    // flying on a phone wants the whole screen: Android (and iPad) give it on request; an iPhone only
+    // without the browser's bars once the site is added to the home screen (manifest, display fullscreen)
+    $('t-fly').addEventListener('click', () => {
+      touched(); flyWanted = performance.now();
+      const d = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+      if(!document.fullscreenElement && !matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches){
+        try { d.requestFullscreen ? d.requestFullscreen({ navigationUI:'hide' }).catch(() => {}) : d.webkitRequestFullscreen?.(); } catch {}
+      }
+    });
     [0,1,2,3].forEach(i => {
       const b = $('t-b'+i);
       const up = () => { tpad.held[i] = false; b.classList.remove('on'); };
