@@ -44,6 +44,15 @@ Hecha, salvo el sonido del quemador ajeno (pendiente) y el gancho de desarrollo 
 
 Tamaño: **M**.
 
+## Encuentro · el golpe y el menú ✅ 2026-11-04
+
+Pedido por Eze después de la etapa 1. Al tocarse dos globos, un golpe suave (rebote, sonido, luces que parpadean) abre en las dos pantallas un menú con el nombre del otro: **hablar** (chat en el aire, no se guarda) y **dar gas** (un galón por toque, regalo directo, solo si te quedan 2; partículas doradas de cesta a cesta). Decidido: el chat no se guarda, el gas se regala sin aceptar, la expedición es seguir al que guía.
+
+- [x] Canal uno a uno en `sky.js` (`to` → `ev`), sin guardar nada.
+- [x] Golpe: rebote (`pilot.knock`), sonido, luces, menú en los dos lados; se cierra al alejarse.
+- [x] Hablar (`c`) y dar gas (`g`, ▲, botón `gas` en el táctil).
+- [ ] **Expedición**: "vení conmigo" desde el menú; el otro acepta y va en formación detrás del que guía (piloto automático, el stick mira alrededor, el quemador lo suelta); si el que guía cruza a otra galaxia, el otro cruza con él si tiene gas.
+
 ## Etapa 2 · Encontrarse
 
 **Objetivo:** si Lucho vuela en otra galaxia, lo encontrás y vas hacia él sin salir del universo.

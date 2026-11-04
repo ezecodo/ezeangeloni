@@ -193,6 +193,29 @@ import Layout from '../layouts/Layout.astro';
       #pilot-hud .wind { display: block; margin-top: .55rem; text-align: center; color: #6ef9f5; }
       #pilot-hud .gas { display: block; margin-top: .45rem; text-align: center; color: #ffd166; }
       #pilot-hud .gas:empty { display: none; }
+      #meet { position: fixed; right: 1.6rem; top: 5.4rem; z-index: 13; width: min(330px, 80vw); padding: 1rem 1.1rem .9rem; background: rgba(8,8,16,.78); border: 1px solid rgba(240,237,232,.16); font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+      #meet[hidden] { display: none; }
+      #meet h2 { margin: .25rem 0 .8rem; font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 2.1rem; letter-spacing: 0; text-transform: none; line-height: 1; }
+      .meet-acts { display: flex; gap: .6rem; }
+      .meet-acts button { flex: 1; padding: .6rem .4rem; border: 1px solid rgba(240,237,232,.3); color: var(--ink); letter-spacing: .16em; text-transform: uppercase; font-size: .58rem; }
+      #meet-gas { border-color: rgba(255,209,102,.5); color: #ffd166; }
+      .meet-acts button:disabled { opacity: .3; }
+      body.touch .kb-only { display: none; }
+      #meet-log { list-style: none; margin: .7rem 0 0; padding: 0; max-height: 9.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: .35rem; }
+      #meet-log:empty { display: none; }
+      #meet-log li { font-family: 'Cormorant Garamond', serif; font-size: 1.05rem; letter-spacing: 0; text-transform: none; color: var(--ink); line-height: 1.25; }
+      #meet-log li b { font-family: 'DM Mono', monospace; font-weight: 400; font-size: .52rem; letter-spacing: .16em; text-transform: uppercase; margin-right: .45rem; }
+      #meet-log li.note { font-family: 'DM Mono', monospace; font-size: .55rem; letter-spacing: .14em; text-transform: uppercase; color: #ffd166; }
+      #meet-form { display: flex; gap: .5rem; margin-top: .7rem; }
+      #meet-input { flex: 1; min-width: 0; background: transparent; border: 0; border-bottom: 1px solid rgba(240,237,232,.4); color: var(--ink); font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; padding: .2rem 0; outline: none; }
+      #meet-form button { font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; }
+      .meet-hint { margin: .7rem 0 0; opacity: .7; }
+      @media (max-width: 600px) { #meet { left: 1rem; right: 1rem; width: auto; top: 5rem; } }
+      .t-btn .meeting { display: none; }
+      body.meeting:not(.focus):not(.selecting) #t-b3 .flying { display: none; }
+      body.meeting:not(.focus):not(.selecting) #t-b3 .meeting { display: inline; }
+      .sky-name .say { display: block; margin-top: .3rem; max-width: 15rem; white-space: normal; text-align: center; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.05rem; letter-spacing: 0; text-transform: none; color: var(--ink); }
+      .sky-name .say:empty { display: none; }
       #sky-names { position: fixed; inset: 0; z-index: 11; pointer-events: none; }
       .sky-name { position: absolute; left: 0; top: 0; font-size: .58rem; letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 0 10px rgba(8,8,16,.95); display: none; }
       .sky-name.show { display: block; }
@@ -381,12 +404,20 @@ import Layout from '../layouts/Layout.astro';
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <div id="meet" hidden>
+    <p class="meet-kick">you bumped into</p>
+    <h2 id="meet-name"></h2>
+    <div class="meet-acts"><button id="meet-talk">talk <span class="kb-only">· c</span></button><button id="meet-gas">give gas <span class="kb-only">· g</span></button></div>
+    <ol id="meet-log"></ol>
+    <form id="meet-form" hidden><input id="meet-input" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="say something…" /><button>send</button></form>
+    <p class="meet-hint" id="meet-hint">fly away to part</p>
+  </div>
   <button id="t-fly" aria-label="fly the balloon">fly</button>
   <div id="t-zone" aria-hidden="true"></div><div id="t-base" aria-hidden="true"></div><div id="t-knob" aria-hidden="true"></div>
   <button class="t-btn" id="t-b0" aria-hidden="true" tabindex="-1"><span class="flying">burner</span><span class="at-piece">slide<br>show</span></button>
   <button class="t-btn" id="t-b1" aria-hidden="true" tabindex="-1"><span class="flying">pause</span><span class="choosing">open</span><span class="at-piece">next</span></button>
   <button class="t-btn" id="t-b2" aria-hidden="true" tabindex="-1"><span class="flying">land</span><span class="choosing">resume</span><span class="at-piece">fly on</span></button>
-  <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="at-piece">word</span></button>
+  <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="meeting">gas</span><span class="at-piece">word</span></button>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
@@ -1893,7 +1924,7 @@ import Layout from '../layouts/Layout.astro';
     // and pieces open up as you approach them. Built for a digital 8-way stick and 4 buttons (Competition Pro).
     const pad = { x:0, y:0, px:0, py:0, held:[false,false,false,false], prev:[false,false,false,false] };
     interface Homing { t0: number; from: THREE.Vector3; ctrl: THREE.Vector3; to: THREE.Vector3; dur: number; landed: number; }
-    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null; lookYaw: number; lookPitch: number } | null = null;
+    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null; lookYaw: number; lookPitch: number; knock: THREE.Vector3 } | null = null;
     let padRepeat = 0;
     let PILOT_R = 150;
     const PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
@@ -2059,7 +2090,7 @@ import Layout from '../layouts/Layout.astro';
       if(pilot.nearGalaxy >= 0 && worlds[pilot.nearGalaxy]?.link.galaxy?.open && gas >= CROSS_COST && tap(1)){ enterGalaxy(worlds[pilot.nearGalaxy], true); return; } // at a galaxy: in you go
       if(tap(1)) startSelection();
       if(tap(2)) exitPilot();
-      if(tap(3)) board();
+      if(tap(3)){ if(meet) giveGas(); else board(); } // meeting someone, ▲ / the word button gives them a gallon
     }
     function enterPilot(){
       if(!balloon || !controls) return;
@@ -2068,7 +2099,7 @@ import Layout from '../layouts/Layout.astro';
       balloon.group.scale.setScalar(BALLOON_SCALE);
       balloon.mode = 'pilot';
       balloon.peek = 0;
-      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1, dock:-1, dockFree:false, undock:-1, nearGalaxy:-1, auto:null, lookYaw:0, lookPitch:0 };
+      pilot = { pos:balloon.group.position.clone(), vy:0, speed:0, turn:0, heading:Math.atan2(fwd.x, fwd.z), drift:new THREE.Vector3(), overview:camera.position.clone(), hudAt:0, selecting:false, sel:-1, cands:[], picked:null, home:null, drawing:-1, dock:-1, dockFree:false, undock:-1, nearGalaxy:-1, auto:null, lookYaw:0, lookPitch:0, knock:new THREE.Vector3() };
       if(windMotes) windMotes.visible = true;
       controls.enabled = false;
       hovered = -1;
@@ -2496,7 +2527,7 @@ import Layout from '../layouts/Layout.astro';
       // under the Sun, Xibalbá pulls: let go of the burner there and the balloon goes down six times faster
       // (only once you're below the Sun: at its height you can stay beside it and fill the tank)
       const pull = xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y - 90 ? 6 : 1;
-      const climb = p.selecting || moored || (withHim && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW && !inXibalba(p.pos) ? .55 : 1) : SINK*pull;
+      const climb = p.selecting || moored || ((withHim || meet) && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW && !inXibalba(p.pos) ? .55 : 1) : SINK*pull;
       p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting || moored ? 6 : 1.8)));
       p.pos.y += p.vy*dt;
       const floor = inXibalba(p.pos) || (xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260) ? xibBottom() : -PILOT_Y; // under the Sun the road goes down to Xibalbá
@@ -2507,7 +2538,8 @@ import Layout from '../layouts/Layout.astro';
       p.drift.lerp(wind.clone().multiplyScalar(p.selecting || moored ? 0 : WIND_PUSH), 1-Math.exp(-dt*(moored ? 3 : .5)));
       let f = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
       if(!p.home){
-        p.pos.addScaledVector(f, p.speed*dt).addScaledVector(p.drift, dt);
+        p.pos.addScaledVector(f, p.speed*dt).addScaledVector(p.drift, dt).addScaledVector(p.knock, dt);
+        p.knock.multiplyScalar(Math.exp(-dt*2.2)); // a bump against someone's balloon: a soft push that dies away
         const r = Math.hypot(p.pos.x, p.pos.z);
         if(r > PILOT_R){ p.pos.x *= PILOT_R/r; p.pos.z *= PILOT_R/r; } // the edge of the archive holds it back
         // near the Sun the tank fills by itself; too near, its heat holds you off
@@ -2761,6 +2793,8 @@ import Layout from '../layouts/Layout.astro';
         case 'End': touched(); focusOn(pieces.length-1); e.preventDefault(); break;
         case 'i': openIndex(); break;
         case 't': board(); break;
+        case 'c': if(meet){ openTalk(); e.preventDefault(); } break;
+        case 'g': if(meet) giveGas(); break;
         case 'm': toggleSound(); break;
         case '1': playSong(); break;
       }
@@ -2832,6 +2866,7 @@ import Layout from '../layouts/Layout.astro';
       if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded;
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
       updateSky(now, dt);
+      updateMeeting(now);
       updateGas(dt, frozen ? 0 : dt, now);
       updateWorlds(frozen ? 0 : dt);
       updateBeacons(now);
@@ -4149,7 +4184,7 @@ import Layout from '../layouts/Layout.astro';
     const SKY_DELAY = 160; // ms behind real time, to always have two states to move between
     const MODE = { hidden:0, flying:1 };
     type SkyState = { t: number; p: THREE.Vector3; q: THREE.Quaternion; pow: number; gas: number; mode: number };
-    interface Other { id: string; name: string; body: ReturnType<typeof balloonBody>; tag: HTMLElement; buf: SkyState[]; vis: number }
+    interface Other { id: string; name: string; body: ReturnType<typeof balloonBody>; tag: HTMLElement; buf: SkyState[]; vis: number; flash: number; sayUntil: number }
     const others = new Map<string, Other>();
     const skyNames = document.createElement('div');
     skyNames.id = 'sky-names';
@@ -4169,10 +4204,11 @@ import Layout from '../layouts/Layout.astro';
       scene.add(body.group);
       const tag = document.createElement('span');
       tag.className = 'sky-name';
-      tag.textContent = name;
+      tag.innerHTML = '<span class="say"></span><span class="nm"></span>';
+      tag.querySelector('.nm')!.textContent = name;
       tag.style.color = COLORS[h % COLORS.length];
       skyNames.appendChild(tag);
-      const o: Other = { id, name, body, tag, buf: [], vis: 0 };
+      const o: Other = { id, name, body, tag, buf: [], vis: 0, flash: 0, sayUntil: 0 };
       others.set(id, o);
       return o;
     }
@@ -4183,6 +4219,7 @@ import Layout from '../layouts/Layout.astro';
       o.body.group.traverse(x => { const m = x as THREE.Mesh; m.geometry?.dispose?.(); });
       o.tag.remove();
       others.delete(id);
+      if(meet?.id === id) closeMeet();
     }
     function takeState(o: Other, s: number[] | null){
       if(!s || s.length < 10) return;
@@ -4202,6 +4239,7 @@ import Layout from '../layouts/Layout.astro';
         else if(m.t === 'in') addOther(m.id, m.name);
         else if(m.t === 's'){ const o = others.get(m.id); if(o) takeState(o, m.s); }
         else if(m.t === 'out') dropOther(m.id);
+        else if(m.t === 'ev') onSkyEvent(m.from, m.e || {});
         else if(m.t === 'nope'){ skyIn = false; [...others.keys()].forEach(dropOther); }
       };
       ws.onclose = e => {
@@ -4259,7 +4297,8 @@ import Layout from '../layouts/Layout.astro';
         const tank = B.gas >= 0 ? B.gas*11 : -1;
         o.body.lamps.forEach((m, k) => {
           const c = hexRgb(COLORS[k % COLORS.length]);
-          const on = tank >= 0 ? (k < Math.floor(tank) ? 1.7 : k < tank ? .12 + 1.58*(tank-k) : .08) : .3;
+          const flick = now-o.flash < 700 ? (Math.floor(now*.02 + k) % 2 ? 2.2 : .3) : 1; // a bump: the lights blink
+          const on = (tank >= 0 ? (k < Math.floor(tank) ? 1.7 : k < tank ? .12 + 1.58*(tank-k) : .08) : .3)*flick;
           m.color.setRGB(c[0]*on, c[1]*on, c[2]*on);
           o.body.bulbs[k].userData.glow?.color.setRGB(c[0]*on*.22, c[1]*on*.22, c[2]*on*.22);
         });
@@ -4268,6 +4307,7 @@ import Layout from '../layouts/Layout.astro';
         const onScreen = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
         o.tag.classList.toggle('show', onScreen && !hideTags);
         if(onScreen && focused < 0) skyMoving = true;
+        if(o.sayUntil && now > o.sayUntil){ o.sayUntil = 0; o.tag.querySelector('.say')!.textContent = ''; }
         if(onScreen){
           const d = camera.position.distanceTo(g.position);
           o.tag.style.transform = `translate(${(v.x+1)/2*window.innerWidth}px, ${(1-v.y)/2*window.innerHeight}px) translate(-50%, -100%)`;
@@ -4275,7 +4315,157 @@ import Layout from '../layouts/Layout.astro';
         }
       }
     }
-    if(import.meta.env.DEV) (window as any).__sky = { get others(){ return others; }, get sky(){ return sky; } };
+    // ── Meeting someone in the air: a soft bump opens a little menu on both screens ──
+    // talk (words in the air, nothing kept), give them a gallon of gas (the string of lights carries it across)
+    let meet: { id: string } | null = null, lastBump = 0;
+    const meetEl = $('meet'), meetLog = $('meet-log') as HTMLOListElement, meetForm = $('meet-form') as HTMLFormElement, meetInput = $('meet-input') as HTMLInputElement;
+    const flows: { t0: number; from: () => THREE.Vector3; to: () => THREE.Vector3; pts: THREE.Points }[] = [];
+    function sendTo(id: string, e: Record<string, unknown>){ if(sky?.readyState === 1) sky.send(JSON.stringify({ t:'to', to:id, e })); }
+    function thud(){ playNote(NOTES[7]/4); setTimeout(() => playNote(NOTES[5]/2), 90); }
+    function centre(v: THREE.Vector3){ return v.clone().add(new THREE.Vector3(0, 2.2, 0)); } // the envelope's middle, not its mouth
+    function pushAway(o: Other, strength: number){
+      if(!pilot) return;
+      const n = centre(pilot.pos).sub(centre(o.body.group.position));
+      if(n.lengthSq() < .01) n.set(Math.random()-.5, 0, Math.random()-.5);
+      pilot.knock.copy(n.normalize().multiplyScalar(strength));
+      pilot.speed *= .2;
+    }
+    function openMeet(o: Other){
+      if(meet?.id !== o.id){
+        meet = { id:o.id };
+        $('meet-name').textContent = o.name;
+        meetLog.innerHTML = '';
+        meetForm.hidden = true;
+      }
+      meetEl.hidden = false;
+      document.body.classList.add('meeting');
+      syncMeet();
+    }
+    function closeMeet(){
+      meet = null;
+      meetEl.hidden = true;
+      meetForm.hidden = true;
+      meetInput.blur();
+      document.body.classList.remove('meeting');
+    }
+    function logMeet(who: string, text: string, note = false){
+      const li = document.createElement('li');
+      if(note) li.className = 'note';
+      if(who){ const b = document.createElement('b'); b.textContent = who; li.appendChild(b); }
+      li.appendChild(document.createTextNode(text));
+      meetLog.appendChild(li);
+      while(meetLog.children.length > 40) meetLog.firstChild!.remove();
+      meetLog.scrollTop = meetLog.scrollHeight;
+    }
+    function theirGas(o: Other){ const b = o.buf[o.buf.length-1]; return b ? b.gas : -1; }
+    function syncMeet(){
+      const o = meet && others.get(meet.id);
+      if(!o) return;
+      const btn = $('meet-gas') as HTMLButtonElement, theirs = theirGas(o);
+      btn.disabled = gas*11 < 3 || theirs > .93;
+      $('meet-hint').textContent = gas*11 < 3 ? 'keep two gallons for yourself · fly away to part' : theirs > .93 ? `${o.name}’s tank is full · fly away to part` : 'fly away to part';
+    }
+    function openTalk(){
+      if(!meet) return;
+      meetForm.hidden = false;
+      meetInput.focus();
+    }
+    function giveGas(){
+      const o = meet && others.get(meet.id);
+      if(!o || !pilot || gas*11 < 3 || theirGas(o) > .93) { syncMeet(); return; }
+      gas = Math.max(0, gas - 1/11);
+      sendTo(o.id, { k:'gas' });
+      flowGas(() => balloon!.group.localToWorld(new THREE.Vector3(0, -2.24, 0)), () => o.body.group.localToWorld(new THREE.Vector3(0, -2.24, 0)));
+      logMeet('', `you gave ${o.name} a gallon`, true);
+      syncMeet();
+    }
+    function flowGas(from: () => THREE.Vector3, to: () => THREE.Vector3){
+      const N = 16, geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3), 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size:.9, map:SPRITE, color:0xffd166, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
+      pts.frustumCulled = false;
+      scene.add(pts);
+      flows.push({ t0:performance.now(), from, to, pts });
+    }
+    function updateFlows(now: number){
+      for(let i = flows.length-1; i >= 0; i--){
+        const f = flows[i], a = f.from(), b = f.to(), ctrl = a.clone().add(b).multiplyScalar(.5).add(new THREE.Vector3(0, -3, 0));
+        const pos = f.pts.geometry.attributes.position as THREE.BufferAttribute;
+        let alive = false;
+        for(let k = 0; k < pos.count; k++){
+          const u = Math.max(0, Math.min(1, (now-f.t0)/1300 - k*.045)), r = 1-u;
+          if(u < 1) alive = true;
+          const v = a.clone().multiplyScalar(r*r).addScaledVector(ctrl, 2*r*u).addScaledVector(b, u*u);
+          pos.setXYZ(k, v.x, v.y, v.z);
+        }
+        pos.needsUpdate = true;
+        if(!alive){ scene.remove(f.pts); f.pts.geometry.dispose(); flows.splice(i, 1); }
+      }
+    }
+    function onSkyEvent(from: string, e: { k?: string; text?: unknown }){
+      const o = others.get(from);
+      if(!o) return;
+      if(e.k === 'bump'){
+        if(!pilot || focused >= 0) return;
+        o.flash = performance.now();
+        if(performance.now()-lastBump > 800){ lastBump = performance.now(); thud(); pushAway(o, 4); }
+        openMeet(o);
+      } else if(e.k === 'say' && typeof e.text === 'string'){
+        const text = e.text.replace(/\s+/g, ' ').trim().slice(0, 200);
+        if(!text) return;
+        if(meet?.id !== from){ // talking face to face it's in the panel; from further off it floats over their balloon
+          o.tag.querySelector('.say')!.textContent = text;
+          o.sayUntil = performance.now() + 4000 + text.length*60;
+        }
+        playNote(NOTES[2]*2);
+        if(meet?.id === from) logMeet(o.name, text);
+      } else if(e.k === 'gas'){
+        if(!pilot) return;
+        gas = Math.min(1, gas + 1/11);
+        flowGas(() => o.body.group.localToWorld(new THREE.Vector3(0, -2.24, 0)), () => balloon!.group.localToWorld(new THREE.Vector3(0, -2.24, 0)));
+        if(meet?.id === from) logMeet('', `${o.name} gave you a gallon`, true);
+        syncMeet();
+      }
+    }
+    meetForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const text = meetInput.value.replace(/\s+/g, ' ').trim().slice(0, 200);
+      if(!text || !meet) return;
+      sendTo(meet.id, { k:'say', text });
+      logMeet('you', text);
+      meetInput.value = '';
+    });
+    meetInput.addEventListener('keydown', e => { if(e.key === 'Escape'){ e.stopPropagation(); meetInput.blur(); meetForm.hidden = true; } });
+    $('meet-talk').addEventListener('click', () => { touched(); openTalk(); });
+    $('meet-gas').addEventListener('click', () => { touched(); giveGas(); });
+    // touching: the envelopes meet (each about 2.3 across at the balloon's scale, a little taller than wide)
+    function checkBump(now: number){
+      if(!pilot || focused >= 0 || pilot.selecting || pilot.home || boarded) return;
+      for(const o of others.values()){
+        if(o.vis < .8) continue;
+        const d = centre(pilot.pos).sub(centre(o.body.group.position));
+        d.y /= 1.5;
+        if(d.length() < 4.6 && now-lastBump > 2500){
+          lastBump = now;
+          o.flash = now;
+          thud();
+          pushAway(o, 6);
+          sendTo(o.id, { k:'bump' });
+          openMeet(o);
+        }
+      }
+      // parting: fly away (or land, or open a piece) and the menu closes
+      const o = meet && others.get(meet.id);
+      if(meet && (!o || o.vis < .5 || pilot.pos.distanceTo(o.body.group.position) > 28)) closeMeet();
+    }
+    let meetSyncAt = 0;
+    function updateMeeting(now: number){
+      checkBump(now);
+      if(meet && (!pilot || focused >= 0 || boarded)) closeMeet();
+      if(meet && now-meetSyncAt > 500){ meetSyncAt = now; syncMeet(); }
+      updateFlows(now);
+    }
+    if(import.meta.env.DEV) (window as any).__sky = { get others(){ return others; }, get sky(){ return sky; }, get meet(){ return meet; }, ev: onSkyEvent };
     galaxyReady.then(() => {
       linkList = GAL ? [] : DEFAULT_LINKS;
       buildSun();

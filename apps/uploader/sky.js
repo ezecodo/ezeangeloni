@@ -11,6 +11,7 @@
 //   → join {g}                        ← room {g, peers:[{id, name, s}]} · others get in {id, name}
 //                                     ← nope {g}  if the door is closed
 //   → s {s:[...]}  state              others get s {id, s}
+//   → to {to, e:{k, ...}}             that one gets ev {from, e}: bump, say {text}, gas (nothing is kept)
 //                                     ← out {id}  someone left the room
 import { WebSocketServer } from 'ws';
 import crypto from 'crypto';
@@ -77,6 +78,11 @@ export function attachSky(server, ezePassword) {
         r.add(c);
         c.room = g;
         return others(c, { t: 'in', id: c.id, name: c.name });
+      }
+      // one to one: a bump, a word, a gallon of gas, an invitation. Only to someone in the same room
+      if (m.t === 'to' && c.room && typeof m.to === 'string' && m.e && typeof m.e === 'object' && typeof m.e.k === 'string') {
+        for (const o of rooms.get(c.room) || []) if (o.id === m.to && o !== c) send(o.ws, { t: 'ev', from: c.id, e: m.e });
+        return;
       }
       if (m.t === 's' && c.room && Array.isArray(m.s) && m.s.length <= 16 && m.s.every((v) => typeof v === 'number' && Number.isFinite(v))) {
         c.state = m.s;
