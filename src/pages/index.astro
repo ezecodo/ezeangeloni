@@ -196,8 +196,13 @@ import Layout from '../layouts/Layout.astro';
       #meet { position: fixed; right: 1.6rem; top: 5.4rem; z-index: 13; width: min(330px, 80vw); padding: 1rem 1.1rem .9rem; background: rgba(8,8,16,.78); border: 1px solid rgba(240,237,232,.16); font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
       #meet[hidden] { display: none; }
       #meet h2 { margin: .25rem 0 .8rem; font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 2.1rem; letter-spacing: 0; text-transform: none; line-height: 1; }
-      .meet-acts { display: flex; gap: .6rem; }
+      .meet-acts { display: flex; gap: .5rem; }
       .meet-acts button { flex: 1; padding: .6rem .4rem; border: 1px solid rgba(240,237,232,.3); color: var(--ink); letter-spacing: .16em; text-transform: uppercase; font-size: .58rem; }
+      #meet-trip { border-color: rgba(255,110,180,.5); color: #ff6eb4; }
+      #meet-invite { margin-top: .8rem; padding-top: .7rem; border-top: 1px solid rgba(240,237,232,.14); }
+      #meet-invite p { margin: 0 0 .6rem; color: #ff6eb4; line-height: 1.6; }
+      #pilot-hud .crew { display: block; margin-top: .45rem; text-align: center; color: #ff6eb4; }
+      #pilot-hud .crew:empty { display: none; }
       #meet-gas { border-color: rgba(255,209,102,.5); color: #ffd166; }
       .meet-acts button:disabled { opacity: .3; }
       body.touch .kb-only { display: none; }
@@ -403,11 +408,12 @@ import Layout from '../layouts/Layout.astro';
   <div id="cands" aria-hidden="true"></div>
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span><span class="crew" id="crew-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
   <div id="meet" hidden>
     <p class="meet-kick">you bumped into</p>
     <h2 id="meet-name"></h2>
-    <div class="meet-acts"><button id="meet-talk">talk <span class="kb-only">· c</span></button><button id="meet-gas">give gas <span class="kb-only">· g</span></button></div>
+    <div class="meet-acts"><button id="meet-talk">talk <span class="kb-only">· c</span></button><button id="meet-gas">give gas <span class="kb-only">· g</span></button><button id="meet-trip">expedition <span class="kb-only">· x</span></button></div>
+    <div id="meet-invite" hidden><p id="meet-invite-txt"></p><div class="meet-acts"><button id="meet-yes">go along <span class="kb-only">· x</span></button><button id="meet-no">not now</button></div></div>
     <ol id="meet-log"></ol>
     <form id="meet-form" hidden><input id="meet-input" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="say something…" /><button>send</button></form>
     <p class="meet-hint" id="meet-hint">fly away to part</p>
@@ -2111,6 +2117,7 @@ import Layout from '../layouts/Layout.astro';
       if(!pilot || !balloon) return;
       endSelection();
       pilot.picked = null;
+      if(follow) stopFollow('');
       const to = pilot.overview;
       if(pilot.home) gas = 1; // landed on the way home: you're home
       pilot = null;
@@ -2470,7 +2477,8 @@ import Layout from '../layouts/Layout.astro';
       const wants = !!(pad.x || pad.y || pad.held[0]);
       // sailing on its own, the stick looks around (the balloon keeps its course); the burner takes the helm back
       if(p.auto && (pad.held[0] || !worlds[p.auto.k]?.link.galaxy?.open)) p.auto = null;
-      if(p.auto && (pad.x || pad.y)){
+      if(follow && pad.held[0] && !pad.prev[0]) stopFollow('you fly on your own'); // the burner takes the helm back
+      if((p.auto || follow) && (pad.x || pad.y)){
         p.lookYaw = Math.max(-Math.PI, Math.min(Math.PI, p.lookYaw - pad.x*dt*1.7));
         p.lookPitch = Math.max(-.5, Math.min(1.1, p.lookPitch - pad.y*dt*1.1));
       } else { p.lookYaw *= Math.exp(-dt*.8); p.lookPitch *= Math.exp(-dt*.8); } // let go: back behind the balloon, slowly
@@ -2510,6 +2518,8 @@ import Layout from '../layouts/Layout.astro';
         held = goal.y > p.pos.y + 6;
         if(there && gas > .98) p.auto.sun = false; // full: on to the galaxy
       }
+      const leader = follow && free ? others.get(follow.id) : null;
+      if(leader){ sx = 0; sy = 0; held = false; } // towed: the stick looks around, only the pilot flame burns
       // the tank: the burner and the pilot flame spend it; low, the flame coughs
       const voidK = inVoid(p.pos);
       if(free) gas = Math.max(0, gas - dt*(GAS_IDLE*(voidK ? VOID_IDLE : 1) + (held ? GAS_BURN*(voidK ? VOID_BURN : 1) : 0)));
@@ -2527,7 +2537,7 @@ import Layout from '../layouts/Layout.astro';
       // under the Sun, Xibalbá pulls: let go of the burner there and the balloon goes down six times faster
       // (only once you're below the Sun: at its height you can stay beside it and fill the tank)
       const pull = xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y - 90 ? 6 : 1;
-      const climb = p.selecting || moored || ((withHim || meet) && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW && !inXibalba(p.pos) ? .55 : 1) : SINK*pull;
+      const climb = p.selecting || moored || ((withHim || meet || follow) && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW && !inXibalba(p.pos) ? .55 : 1) : SINK*pull;
       p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting || moored ? 6 : 1.8)));
       p.pos.y += p.vy*dt;
       const floor = inXibalba(p.pos) || (xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260) ? xibBottom() : -PILOT_Y; // under the Sun the road goes down to Xibalbá
@@ -2540,6 +2550,18 @@ import Layout from '../layouts/Layout.astro';
       if(!p.home){
         p.pos.addScaledVector(f, p.speed*dt).addScaledVector(p.drift, dt).addScaledVector(p.knock, dt);
         p.knock.multiplyScalar(Math.exp(-dt*2.2)); // a bump against someone's balloon: a soft push that dies away
+        if(leader){
+          // in formation: a little behind and to the side of whoever leads, at their height, facing where they go
+          const L = leader.body.group.position, d = leader.dir;
+          const spot = L.clone().addScaledVector(d, -10).add(new THREE.Vector3(d.z, 0, -d.x).multiplyScalar(5));
+          spot.y = L.y + 1;
+          p.pos.addScaledVector(leader.vel, dt); // keep their pace, then ease into the spot
+          p.pos.lerp(spot.addScaledVector(leader.vel, SKY_DELAY/1000), 1-Math.exp(-dt*1.1));
+          const far = p.pos.distanceTo(spot) > 14, aim = far ? spot.clone().sub(p.pos) : d;
+          const want = Math.atan2(aim.x, aim.z), diff = Math.atan2(Math.sin(want - p.heading), Math.cos(want - p.heading));
+          p.heading += diff*(1-Math.exp(-dt*2));
+          p.turn = Math.max(-1, Math.min(1, diff*1.5));
+        }
         const r = Math.hypot(p.pos.x, p.pos.z);
         if(r > PILOT_R){ p.pos.x *= PILOT_R/r; p.pos.z *= PILOT_R/r; } // the edge of the archive holds it back
         // near the Sun the tank fills by itself; too near, its heat holds you off
@@ -2795,6 +2817,7 @@ import Layout from '../layouts/Layout.astro';
         case 't': board(); break;
         case 'c': if(meet){ openTalk(); e.preventDefault(); } break;
         case 'g': if(meet) giveGas(); break;
+        case 'x': if(meet){ if(invitedBy) acceptTrip(); else inviteTrip(); } break;
         case 'm': toggleSound(); break;
         case '1': playSong(); break;
       }
@@ -3972,6 +3995,11 @@ import Layout from '../layouts/Layout.astro';
     function enterGalaxy(w: World, flying = false){
       if(!w.link.galaxy?.open || crossing) return;
       crossing = true;
+      // on an expedition, whoever follows crosses too
+      if(crew.size){
+        for(const id of crew) sendTo(id, { k:'cross', g:w.link.galaxy.slug });
+        try { sessionStorage.setItem('cv-lead', JSON.stringify({ names:[...crew].map(id => others.get(id)?.name).filter(Boolean), t:Date.now() })); } catch {}
+      }
       // arriving still in the balloon, at the edge you came in from, with the gas you had
       if(flying || pilot){ try { sessionStorage.setItem('cv-arrive', JSON.stringify({ from: GAL, gas: gas - CROSS_COST, t: Date.now() })); } catch {} }
       $('warp').classList.add('on');
@@ -4184,7 +4212,7 @@ import Layout from '../layouts/Layout.astro';
     const SKY_DELAY = 160; // ms behind real time, to always have two states to move between
     const MODE = { hidden:0, flying:1 };
     type SkyState = { t: number; p: THREE.Vector3; q: THREE.Quaternion; pow: number; gas: number; mode: number };
-    interface Other { id: string; name: string; body: ReturnType<typeof balloonBody>; tag: HTMLElement; buf: SkyState[]; vis: number; flash: number; sayUntil: number }
+    interface Other { id: string; name: string; body: ReturnType<typeof balloonBody>; tag: HTMLElement; buf: SkyState[]; vis: number; flash: number; sayUntil: number; dir: THREE.Vector3; vel: THREE.Vector3 }
     const others = new Map<string, Other>();
     const skyNames = document.createElement('div');
     skyNames.id = 'sky-names';
@@ -4208,7 +4236,7 @@ import Layout from '../layouts/Layout.astro';
       tag.querySelector('.nm')!.textContent = name;
       tag.style.color = COLORS[h % COLORS.length];
       skyNames.appendChild(tag);
-      const o: Other = { id, name, body, tag, buf: [], vis: 0, flash: 0, sayUntil: 0 };
+      const o: Other = { id, name, body, tag, buf: [], vis: 0, flash: 0, sayUntil: 0, dir: new THREE.Vector3(0, 0, 1), vel: new THREE.Vector3() };
       others.set(id, o);
       return o;
     }
@@ -4220,6 +4248,8 @@ import Layout from '../layouts/Layout.astro';
       o.tag.remove();
       others.delete(id);
       if(meet?.id === id) closeMeet();
+      if(crew.delete(id)) paintCrew();
+      if(follow?.id === id){ follow = null; flashCrew(`${o.name} is gone`); }
     }
     function takeState(o: Other, s: number[] | null){
       if(!s || s.length < 10) return;
@@ -4235,8 +4265,8 @@ import Layout from '../layouts/Layout.astro';
         let m: any;
         try { m = JSON.parse(e.data); } catch { return; }
         if(m.t === 'welcome'){ skyBackoff = 2000; ws.send(JSON.stringify({ t:'join', g:skyRoom })); }
-        else if(m.t === 'room'){ skyIn = true; skyLastMode = -1; for(const p of m.peers || []) takeState(addOther(p.id, p.name), p.s); }
-        else if(m.t === 'in') addOther(m.id, m.name);
+        else if(m.t === 'room'){ skyIn = true; skyLastMode = -1; for(const p of m.peers || []){ const o = addOther(p.id, p.name); takeState(o, p.s); setTimeout(() => rejoin(o), 1500); } }
+        else if(m.t === 'in'){ const o = addOther(m.id, m.name); setTimeout(() => rejoin(o), 1500); }
         else if(m.t === 's'){ const o = others.get(m.id); if(o) takeState(o, m.s); }
         else if(m.t === 'out') dropOther(m.id);
         else if(m.t === 'ev') onSkyEvent(m.from, m.e || {});
@@ -4287,6 +4317,9 @@ import Layout from '../layouts/Layout.astro';
         const f = B.t > A.t ? Math.max(0, Math.min(1.5, (at-A.t)/(B.t-A.t))) : 1; // a little past the last one if late
         g.position.lerpVectors(A.p, B.p, f);
         g.quaternion.slerpQuaternions(A.q, B.q, Math.min(1, f));
+        // which way they're going, for flying in formation behind them
+        if(B.t > A.t) o.vel.lerp(B.p.clone().sub(A.p).multiplyScalar(1000/(B.t-A.t)), .25);
+        if(B.t > A.t){ const v = B.p.clone().sub(A.p).setY(0); if(v.lengthSq() > .0004*(B.t-A.t)) o.dir.lerp(v.normalize(), .2).normalize(); }
         g.scale.setScalar(BALLOON_SCALE*(.2 + .8*o.vis));
         // their burner, their envelope lit from inside, their tank in the lights: as I see mine
         const power = A.pow + (B.pow-A.pow)*Math.min(1, f), heat = Math.max(0, Math.min(1, (power-.5)/3));
@@ -4342,6 +4375,7 @@ import Layout from '../layouts/Layout.astro';
       syncMeet();
     }
     function closeMeet(){
+      if(invitedBy) hideInvite();
       meet = null;
       meetEl.hidden = true;
       meetForm.hidden = true;
@@ -4363,6 +4397,7 @@ import Layout from '../layouts/Layout.astro';
       if(!o) return;
       const btn = $('meet-gas') as HTMLButtonElement, theirs = theirGas(o);
       btn.disabled = gas*11 < 3 || theirs > .93;
+      ($('meet-trip') as HTMLButtonElement).disabled = !!follow || crew.has(o.id);
       $('meet-hint').textContent = gas*11 < 3 ? 'keep two gallons for yourself · fly away to part' : theirs > .93 ? `${o.name}’s tank is full · fly away to part` : 'fly away to part';
     }
     function openTalk(){
@@ -4402,9 +4437,10 @@ import Layout from '../layouts/Layout.astro';
         if(!alive){ scene.remove(f.pts); f.pts.geometry.dispose(); flows.splice(i, 1); }
       }
     }
-    function onSkyEvent(from: string, e: { k?: string; text?: unknown }){
+    function onSkyEvent(from: string, e: { k?: string; text?: unknown; g?: unknown }){
       const o = others.get(from);
       if(!o) return;
+      if(['invite', 'decline', 'join', 'leave', 'cross'].includes(e.k || '')) return onTripEvent(o, e.k!, e);
       if(e.k === 'bump'){
         if(!pilot || focused >= 0) return;
         o.flash = performance.now();
@@ -4427,6 +4463,91 @@ import Layout from '../layouts/Layout.astro';
         syncMeet();
       }
     }
+    // ── Expedition: one invites from the menu, the other goes along in formation behind them ──
+    let follow: { id: string } | null = null, invitedBy = '', invited = '';
+    const crew = new Set<string>(); // who follows me
+    const crewMsg = $('crew-msg');
+    function paintCrew(){
+      const f = follow && others.get(follow.id);
+      crewMsg.textContent = f ? `following ${f.name} · ${document.body.classList.contains('kb') ? 'arrows look around · space' : 'stick looks around · burner'} flies on your own`
+        : crew.size ? `${[...crew].map(id => others.get(id)?.name || '').filter(Boolean).join(', ')} ${crew.size > 1 ? 'follow' : 'follows'} you` : '';
+    }
+    function inviteTrip(){
+      if(!meet || follow) return;
+      invited = meet.id;
+      sendTo(meet.id, { k:'invite' });
+      logMeet('', `you asked ${others.get(meet.id)?.name || ''} to come along…`, true);
+    }
+    function showInvite(o: Other){
+      invitedBy = o.id;
+      $('meet-invite-txt').textContent = `${o.name} asks you to come along on an expedition: you'd fly behind them.`;
+      $('meet-invite').hidden = false;
+    }
+    function hideInvite(){ invitedBy = ''; $('meet-invite').hidden = true; }
+    function acceptTrip(){
+      const o = invitedBy && others.get(invitedBy);
+      if(!o || !pilot) return;
+      hideInvite();
+      sendTo(o.id, { k:'join' });
+      startFollow(o);
+    }
+    function startFollow(o: Other){
+      if(!pilot) return;
+      follow = { id:o.id };
+      pilot.auto = null; pilot.dock = -1;
+      closeMeet();
+      playNote(NOTES[4]); setTimeout(() => playNote(NOTES[2]*2), 140);
+      paintCrew();
+    }
+    function stopFollow(why: string){
+      if(!follow) return;
+      const o = others.get(follow.id);
+      if(o) sendTo(o.id, { k:'leave' });
+      follow = null;
+      if(why) flashCrew(why); else paintCrew();
+    }
+    let crewFlashT = 0;
+    function flashCrew(text: string){
+      crewMsg.textContent = text;
+      clearTimeout(crewFlashT);
+      crewFlashT = window.setTimeout(paintCrew, 3500);
+    }
+    function onTripEvent(o: Other, k: string, e: { g?: unknown }){
+      if(k === 'invite'){ if(pilot && !follow){ openMeet(o); showInvite(o); playNote(NOTES[6]); } }
+      else if(k === 'decline'){ if(meet?.id === o.id) logMeet('', `${o.name} can't come now`, true); if(invited === o.id) invited = ''; }
+      else if(k === 'join'){
+        let wanted = invited === o.id;
+        try { const l = JSON.parse(sessionStorage.getItem('cv-lead') || 'null'); if(l && Date.now()-l.t < 60000 && l.names.includes(o.name)) wanted = true; } catch {}
+        if(!wanted || !pilot) return sendTo(o.id, { k:'leave' });
+        invited = '';
+        crew.add(o.id);
+        if(meet?.id === o.id) closeMeet();
+        playNote(NOTES[4]); setTimeout(() => playNote(NOTES[2]*2), 140);
+        paintCrew();
+      }
+      else if(k === 'leave'){
+        if(crew.delete(o.id)) flashCrew(`${o.name} flies on their own`);
+        if(follow?.id === o.id){ follow = null; flashCrew(`${o.name} let you go`); }
+      }
+      else if(k === 'cross' && follow?.id === o.id){
+        const w = worlds.find(x => x.link.galaxy && x.link.galaxy.slug === String(e.g ?? ''));
+        if(!w?.link.galaxy?.open){ stopFollow(`${o.name} crossed into a galaxy you can't enter`); return; }
+        if(gas < CROSS_COST){ stopFollow(`${o.name} crossed over · you need ${Math.round(CROSS_COST*11)} gallons to follow`); return; }
+        try { sessionStorage.setItem('cv-follow', JSON.stringify({ name:o.name, t:Date.now() })); } catch {}
+        enterGalaxy(w, true);
+      }
+    }
+    // after crossing together: find each other again on the other side
+    function rejoin(o: Other){
+      try {
+        const f = JSON.parse(sessionStorage.getItem('cv-follow') || 'null');
+        if(!f || Date.now()-f.t > 60000 || f.name !== o.name || follow || !pilot) return;
+        sessionStorage.removeItem('cv-follow');
+        sendTo(o.id, { k:'join' });
+        startFollow(o);
+      } catch {}
+    }
+    setInterval(() => { if(!follow) return; const o = others.get(follow.id); if(!o || o.vis < .3) stopFollow(o ? `${o.name} landed` : ''); }, 1000);
     meetForm.addEventListener('submit', e => {
       e.preventDefault();
       const text = meetInput.value.replace(/\s+/g, ' ').trim().slice(0, 200);
@@ -4438,11 +4559,14 @@ import Layout from '../layouts/Layout.astro';
     meetInput.addEventListener('keydown', e => { if(e.key === 'Escape'){ e.stopPropagation(); meetInput.blur(); meetForm.hidden = true; } });
     $('meet-talk').addEventListener('click', () => { touched(); openTalk(); });
     $('meet-gas').addEventListener('click', () => { touched(); giveGas(); });
+    $('meet-trip').addEventListener('click', () => { touched(); inviteTrip(); });
+    $('meet-yes').addEventListener('click', () => { touched(); acceptTrip(); });
+    $('meet-no').addEventListener('click', () => { touched(); if(invitedBy) sendTo(invitedBy, { k:'decline' }); hideInvite(); });
     // touching: the envelopes meet (each about 2.3 across at the balloon's scale, a little taller than wide)
     function checkBump(now: number){
       if(!pilot || focused >= 0 || pilot.selecting || pilot.home || boarded) return;
       for(const o of others.values()){
-        if(o.vis < .8) continue;
+        if(o.vis < .8 || follow?.id === o.id || crew.has(o.id)) continue; // flying together: no bumping
         const d = centre(pilot.pos).sub(centre(o.body.group.position));
         d.y /= 1.5;
         if(d.length() < 4.6 && now-lastBump > 2500){

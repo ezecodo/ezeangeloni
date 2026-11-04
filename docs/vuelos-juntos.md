@@ -51,7 +51,7 @@ Pedido por Eze después de la etapa 1. Al tocarse dos globos, un golpe suave (re
 - [x] Canal uno a uno en `sky.js` (`to` → `ev`), sin guardar nada.
 - [x] Golpe: rebote (`pilot.knock`), sonido, luces, menú en los dos lados; se cierra al alejarse.
 - [x] Hablar (`c`) y dar gas (`g`, ▲, botón `gas` en el táctil).
-- [ ] **Expedición**: "vení conmigo" desde el menú; el otro acepta y va en formación detrás del que guía (piloto automático, el stick mira alrededor, el quemador lo suelta); si el que guía cruza a otra galaxia, el otro cruza con él si tiene gas.
+- [x] **Expedición** (2026-11-04; el cruce juntos entre galaxias falta probarlo con dos personas reales): "vení conmigo" desde el menú; el otro acepta y va en formación detrás del que guía (piloto automático, el stick mira alrededor, el quemador lo suelta); si el que guía cruza a otra galaxia, el otro cruza con él si tiene gas.
 
 ## Etapa 2 · Encontrarse
 
