@@ -2751,7 +2751,7 @@ import Layout from '../layouts/Layout.astro';
         setNdc(e);
         const w = pickWorld();
         if(w >= 0 && worlds[w].link.galaxy?.open){ voyage(w); return; }
-        if(e.pointerType === 'mouse') exitPilot(); // a finger lands with its own button
+        if(e.pointerType === 'mouse' && performance.now()-focusAt > 500) exitPilot(); // a finger lands with its own button; a click that only focuses the window doesn't land
         return;
       }
       press = { x:e.clientX, y:e.clientY, t:performance.now() };
@@ -2838,7 +2838,8 @@ import Layout from '../layouts/Layout.astro';
     window.addEventListener('resize', resize);
 
     let lastFrame = 0, calm = 0, slowAvg = 1/60, lowPower = false, focusedWindow = document.hasFocus(), lastMove = 0;
-    window.addEventListener('focus', () => { focusedWindow = true; });
+    let focusAt = 0; // the click that brings the window to the front isn't meant for the universe
+    window.addEventListener('focus', () => { focusedWindow = true; focusAt = performance.now(); });
     window.addEventListener('blur', () => { focusedWindow = false; });
     // Frame budget: full rate (capped at 60, even on 120Hz screens) while something moves;
     // fewer frames when the picture is still, so the machine can rest.
@@ -4315,6 +4316,7 @@ import Layout from '../layouts/Layout.astro';
         g.visible = o.vis > .01;
         if(!g.visible || !A || !B){ o.tag.classList.remove('show'); continue; }
         const f = B.t > A.t ? Math.max(0, Math.min(1.5, (at-A.t)/(B.t-A.t))) : 1; // a little past the last one if late
+        if(A.mode === MODE.hidden || B.mode === MODE.hidden){ o.vel.set(0, 0, 0); g.scale.setScalar(BALLOON_SCALE*(.2 + .8*o.vis)); o.tag.classList.remove('show'); continue; } // landed: it stays where it was last seen flying
         g.position.lerpVectors(A.p, B.p, f);
         g.quaternion.slerpQuaternions(A.q, B.q, Math.min(1, f));
         // which way they're going, for flying in formation behind them
@@ -4464,7 +4466,7 @@ import Layout from '../layouts/Layout.astro';
       }
     }
     // ── Expedition: one invites from the menu, the other goes along in formation behind them ──
-    let follow: { id: string } | null = null, invitedBy = '', invited = '';
+    let follow: { id: string; waiting?: number } | null = null, invitedBy = '', invited = '';
     const crew = new Set<string>(); // who follows me
     const crewMsg = $('crew-msg');
     function paintCrew(){
@@ -4547,7 +4549,16 @@ import Layout from '../layouts/Layout.astro';
         startFollow(o);
       } catch {}
     }
-    setInterval(() => { if(!follow) return; const o = others.get(follow.id); if(!o || o.vis < .3) stopFollow(o ? `${o.name} landed` : ''); }, 1000);
+    // whoever leads lands for a moment (or the window loses them): you hover where they were and wait a minute
+    setInterval(() => {
+      if(!follow) return;
+      const o = others.get(follow.id), now = performance.now();
+      if(!o){ stopFollow(''); return; }
+      if(o.vis < .3){
+        if(!follow.waiting){ follow.waiting = now; crewMsg.textContent = `waiting for ${o.name} to fly again · burner flies on your own`; }
+        else if(now-follow.waiting > 60000) stopFollow(`${o.name} landed`);
+      } else if(follow.waiting){ follow.waiting = 0; paintCrew(); }
+    }, 1000);
     meetForm.addEventListener('submit', e => {
       e.preventDefault();
       const text = meetInput.value.replace(/\s+/g, ' ').trim().slice(0, 200);
