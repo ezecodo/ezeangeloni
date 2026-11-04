@@ -275,6 +275,22 @@ import Layout from '../layouts/Layout.astro';
       body.aboard #tour { display: none; }
       #how-to-fly { margin-top: 2.6rem; }
       #how-to-fly button { font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; }
+      body.teaser #hud, body.teaser #sky-marks, body.teaser #balloon-tag, body.teaser #t-fly, body.teaser #tour, body.teaser #cursor, body.teaser #sky-names { display: none !important; }
+      body.teaser, body.teaser button { cursor: auto; }
+      #teaser[hidden] { display: none; }
+      #teaser .t-title { position: fixed; left: 0; right: 0; bottom: calc(2.6rem + env(safe-area-inset-bottom)); z-index: 30; text-align: center; pointer-events: none; text-shadow: 0 0 20px rgba(8,8,16,.95); animation: tIn 3s ease 2.4s both; }
+      #teaser h1 { margin: 0; font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: clamp(2.6rem, 6vw, 4.4rem); line-height: 1; color: var(--ink); }
+      #teaser .t-sub { margin: .5rem 0 1.4rem; font-family: 'DM Mono', monospace; font-size: .6rem; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); }
+      #teaser .t-date { margin: 0; font-family: 'DM Mono', monospace; font-size: .9rem; letter-spacing: .32em; color: #ff6eb4; }
+      #teaser .t-count { margin: .5rem 0 0; font-family: 'DM Mono', monospace; font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+      #teaser .t-door { position: fixed; right: calc(1.4rem + env(safe-area-inset-right)); bottom: calc(1.1rem + env(safe-area-inset-bottom)); z-index: 31; display: flex; flex-direction: column; align-items: flex-end; gap: .4rem; font-size: .56rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+      #teaser-key { opacity: .45; }
+      #teaser-key:hover { opacity: 1; }
+      #teaser-signin { display: flex; gap: .7rem; align-items: baseline; }
+      #teaser-signin[hidden] { display: none; }
+      #teaser-pass { width: 11rem; background: transparent; border: 0; border-bottom: 1px solid rgba(240,237,232,.4); color: var(--ink); font-family: 'DM Mono', monospace; font-size: .8rem; padding: .2rem 0; outline: none; }
+      #teaser-signin button { color: #ff6eb4; }
+      @keyframes tIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
       #sky-names { position: fixed; inset: 0; z-index: 11; pointer-events: none; }
       .sky-name { position: absolute; left: 0; top: 0; font-size: .58rem; letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 0 10px rgba(8,8,16,.95); display: none; }
       .sky-name.show { display: block; }
@@ -467,6 +483,10 @@ import Layout from '../layouts/Layout.astro';
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span><span class="crew" id="crew-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <div id="teaser" hidden>
+    <div class="t-title"><h1>Cronovisor</h1><p class="t-sub">pasado observado</p><p class="t-date">01 · 12 · 2026</p><p class="t-count" id="teaser-count"></p></div>
+    <div class="t-door"><button id="teaser-key">sign in</button><form id="teaser-signin" hidden><input id="teaser-pass" type="password" name="password" autocomplete="current-password" placeholder="password" /><button>enter</button></form><span id="teaser-msg"></span></div>
+  </div>
   <div id="sun-glow" aria-hidden="true"></div>
   <div id="sun-words" hidden aria-live="polite">
     <h2>Cronovisor</h2>
@@ -715,6 +735,23 @@ import Layout from '../layouts/Layout.astro';
     const store = { get: (k: string) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } }, set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} } };
     const DEVICE = store.get('cv-device') || (() => { const d = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join(''); store.set('cv-device', d); return d; })();
     const ownerPass = store.get('eze-upload-pass'); // logged into an admin here: this device belongs to a galaxy's owner
+    // ── Before the release (1 Dec 2026, midnight in Barcelona) ──
+    // The page stays up and the universe is there, seen from far away, turning slowly, the Wiphala balloon in front,
+    // but nothing answers: no dragging, zooming, opening, flying. Only someone signed in (a galaxy's owner) gets in.
+    // It opens by itself on the day. (A curtain in the browser: the files on the server are as public as ever.)
+    const RELEASE = Date.parse('2026-12-01T00:00:00+01:00');
+    let teaser = Date.now() < RELEASE;
+    if(teaser) document.body.classList.add('teaser');
+    const teaserGate: Promise<boolean> = !teaser ? Promise.resolve(false)
+      : ownerPass ? fetch('/api/frases/whoami', { headers: { 'X-Auth': ownerPass } }).then(r => !r.ok).catch(() => true)
+      : Promise.resolve(true);
+    if(teaser && RELEASE - Date.now() < 2**31 - 1) setTimeout(() => location.reload(), RELEASE - Date.now() + 1500); // the moment it opens
+    const swallow = (e: Event) => {
+      if(!teaser || (e.target as HTMLElement)?.closest?.('#teaser')) return;
+      e.stopImmediatePropagation(); // nothing in the universe hears it
+    };
+    for(const t of ['pointerdown', 'pointerup', 'pointermove', 'click', 'dblclick', 'wheel', 'keydown', 'keyup', 'touchstart', 'touchmove', 'contextmenu'])
+      window.addEventListener(t, swallow, { capture:true, passive:true });
     const doorHeaders = (): Record<string, string> => ({ 'Content-Type': 'application/json', ...(ownerPass ? { 'X-Auth': ownerPass } : {}) });
     let doors: Record<string, Door> = {};
     let BASE = '', galaxyName = 'Eze', locked = false;
@@ -2170,6 +2207,7 @@ import Layout from '../layouts/Layout.astro';
     }
     const tap = (i: number) => pad.held[i] && !pad.prev[i];
     function pollPad(now: number){
+      if(teaser) return; // not yet
       if(locked || !readPad()) return; // at a closed galaxy's gate nothing flies
       if(flyWanted){ // the touch "fly" button: take off as soon as the balloon is free
         if(pilot || now-flyWanted > 4000) flyWanted = 0;
@@ -3450,8 +3488,12 @@ import Layout from '../layouts/Layout.astro';
         .then(r => { if(!r.ok) throw new Error(); return r.json(); }).catch(() => { if(GAL) locked = true; return { frases: [] }; })),
       GAL ? Promise.resolve({ sets: [] }) : fetch('/sets.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ sets: [] })),
       fontsReady,
-    ]).then(([frasesData, setsData]) => {
-      if(locked) showLocked();
+      teaserGate,
+    ]).then(([frasesData, setsData, , closed]) => {
+      teaser = !!closed;
+      if(teaser) showTeaser(); else document.body.classList.remove('teaser');
+      if(teaser && !renderer) return; // no WebGL: the contact sheet would show everything
+      if(locked && !teaser) showLocked();
       buildStations(frasesData.frases || [], setsData.sets || []);
       buildIndex();
       if(!renderer){ // no WebGL: the contact sheet is the whole site
@@ -3463,7 +3505,7 @@ import Layout from '../layouts/Layout.astro';
       buildSpace();
       resize(); // after the layout: the overview stands back as far as the galaxy reaches
       loadThreads();
-      openArrivedPiece();
+      if(!teaser) openArrivedPiece();
       showMeta(0);
       if(controls){
         controls.enableDamping = true; controls.dampingFactor = .06;
@@ -3481,7 +3523,15 @@ import Layout from '../layouts/Layout.astro';
       let arrival: { from: string; gas: number; t: number } | null = null;
       try { arrival = JSON.parse(sessionStorage.getItem('cv-arrive') || 'null'); sessionStorage.removeItem('cv-arrive'); } catch {}
       if(arrival && Date.now() - arrival.t > 20000) arrival = null;
-      if(arrival && !locked && arriveFlying(arrival)){
+      if(teaser){
+        // from far away, the whole of it turning
+        const far = home.clone().multiplyScalar(1.7);
+        camera.position.copy(far).multiplyScalar(1.5); // in from deep space: never near enough to see a photo
+        look.copy(CENTER);
+        camera.lookAt(look);
+        hint.hidden = true;
+        flyTo(far, CENTER.clone(), 5200, () => { if(controls){ controls.target.copy(CENTER); controls.maxDistance = Infinity; controls.autoRotateSpeed = .16; controls.enabled = true; } });
+      } else if(arrival && !locked && arriveFlying(arrival)){
         overviewPos.copy(home);
         hint.hidden = true;
       } else if(i > 0){
@@ -4259,7 +4309,7 @@ import Layout from '../layouts/Layout.astro';
       setTimeout(() => { if(tourOn < 0) tourEl.hidden = true; }, 500);
     }
     function inviteTour(){
-      if(tourOn >= 0 || store.get('cv-tour') || locked || !renderer || pilot || focused >= 0 || boarded) return;
+      if(teaser || tourOn >= 0 || store.get('cv-tour') || locked || !renderer || pilot || focused >= 0 || boarded) return;
       try { localStorage.setItem('cv-tour', 'seen'); } catch {} // offered once
       tourLine.textContent = 'first time here?';
       tourStep.textContent = '';
@@ -4297,6 +4347,22 @@ import Layout from '../layouts/Layout.astro';
       }
       paintTour();
     }
+
+    function showTeaser(){
+      const days = Math.ceil((RELEASE - Date.now())/864e5);
+      $('teaser-count').textContent = days <= 1 ? 'tomorrow' : `in ${days} days`;
+      $('teaser').hidden = false;
+    }
+    $('teaser-key').addEventListener('click', () => { $('teaser-key').hidden = true; $('teaser-signin').hidden = false; ($('teaser-pass') as HTMLInputElement).focus(); });
+    ($('teaser-signin') as HTMLFormElement).addEventListener('submit', async e => {
+      e.preventDefault();
+      const pass = ($('teaser-pass') as HTMLInputElement).value.trim(), msg = $('teaser-msg');
+      if(!pass) return;
+      msg.textContent = '…';
+      const r = await fetch('/api/frases/whoami', { headers: { 'X-Auth': pass } }).catch(() => null);
+      if(r?.ok){ store.set('eze-upload-pass', pass); msg.textContent = 'welcome'; setTimeout(() => location.reload(), 400); }
+      else msg.textContent = r?.status === 429 ? 'too many tries · wait a few minutes' : r ? 'that’s not it' : 'no connection';
+    });
 
     // ── Signing in from the universe: no need to type the admin's address ──
     // The same session as the admin (the password kept in this browser): once in, your name sits in the top bar
@@ -4639,7 +4705,7 @@ import Layout from '../layouts/Layout.astro';
     galaxyReady.then(() => {
       if(locked || !renderer) return;
       skyWanted = !!ownerPass || registry.some(g => !g.public && doors[g.slug]?.status === 'open');
-      if(skyWanted) skyConnect();
+      if(skyWanted) teaserGate.then(t => { if(!t) skyConnect(); });
     });
     const _p = new THREE.Vector3(), _q = new THREE.Quaternion();
     function updateSky(now: number, dt: number){
