@@ -2015,6 +2015,7 @@ import Layout from '../layouts/Layout.astro';
     let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null; lookYaw: number; lookPitch: number; knock: THREE.Vector3 } | null = null;
     let padRepeat = 0;
     let PILOT_R = 150;
+    const SUN_HEAT = 105; // inside this the Sun's heat pushes the balloon away
     const PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
     // The keyboard drives the same virtual pad, so everything below works the same without a joystick:
     // WASD always (that's how you take off); arrows, space, E/Enter, Q/Backspace only once you're flying,
@@ -2550,7 +2551,7 @@ import Layout from '../layouts/Layout.astro';
       pilot.speed = 0;
       playNote(NOTES[0]/2);
     }
-    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get pieces(){ return pieces; }, get xib(){ return xib; }, visit: (k: number) => visitWorld(k) };
+    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, visit: (k: number) => visitWorld(k) };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
       const p = pilot;
@@ -2650,6 +2651,15 @@ import Layout from '../layouts/Layout.astro';
         if(sun){
           const ds = p.pos.distanceTo(sun.position);
           if(ds < 210) gas = Math.min(1, gas + dt*.13);
+          // its heat pushes you back softly and turns you aside (it used to be a wall: pressed against it, blinded
+          // by the light, the balloon felt trapped); the wall stays only as a last edge
+          if(ds < SUN_HEAT){
+            const out = p.pos.clone().sub(sun.position).normalize(), k = 1 - ds/SUN_HEAT;
+            p.pos.addScaledVector(out, k*k*40*dt);
+            const away = Math.atan2(out.x, out.z), diff = Math.atan2(Math.sin(away - p.heading), Math.cos(away - p.heading));
+            if(Math.abs(diff) > Math.PI/2) p.heading += Math.sign(diff)*k*1.6*dt; // facing it: it turns you aside
+            if(Math.cos(diff) < 0) p.speed *= Math.exp(-dt*3*k);                    // and won't let you push on into it
+          }
           if(ds < 70){ p.pos.copy(sun.position).add(p.pos.clone().sub(sun.position).normalize().multiplyScalar(70)); p.speed = Math.min(p.speed, 0); }
         }
         // into a galaxy's heart: open, you cross over (still flying); closed, it holds you off at its edge
@@ -2745,6 +2755,7 @@ import Layout from '../layouts/Layout.astro';
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
           : gas < GAS_LOW ? 'low gas · nebulae lie in the past'
+          : sun && p.pos.distanceTo(sun.position) < SUN_HEAT ? 'too hot · the Sun pushes you back'
           : sun && p.pos.distanceTo(sun.position) < 210 ? (gas < .99 ? 'the Sun · it fills your tank' : 'the Sun · tank full · turn away to leave')
           : inVoid(p.pos) ? 'between galaxies · gas burns fast out here' : '';
       }
@@ -2981,6 +2992,10 @@ import Layout from '../layouts/Layout.astro';
       updateGas(dt, frozen ? 0 : dt, now);
       updateWorlds(frozen ? 0 : dt);
       updateBeacons(now);
+      if(sun){ // up close the glow would flood the whole view: it eases off so you can see your way out
+        const near = Math.max(.22, Math.min(1, (camera.position.distanceTo(sun.position) - 70)/200));
+        sun.children.forEach((c, i) => { if(i < 2) ((c as THREE.Sprite).material as THREE.SpriteMaterial).opacity = c.userData.base*near; });
+      }
       updateXibalba(now);
       manageThumbs(now);
       if(pointerFresh && balloon && focused < 0 && !flight && !boarded){
@@ -3711,6 +3726,7 @@ import Layout from '../layouts/Layout.astro';
         const sp = new THREE.Sprite(m); sp.scale.setScalar(size); if(fixed) sp.renderOrder = 5; return sp;
       };
       sun.add(sprite(0xff8a2a, 300, .4), sprite(0xffd28a, 120, .8), sprite(0xfff6e4, 55, 1), sprite(0xffe4a8, .05, .9, true));
+      sun.children.forEach(c => { c.userData.base = ((c as THREE.Sprite).material as THREE.SpriteMaterial).opacity; });
       sun.position.copy(sunAt());
       scene.add(sun);
       sunMark = document.createElement('div');
