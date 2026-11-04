@@ -274,5 +274,6 @@ Edited from the admin's **links** tab (add, edit, reorder, remove, upload a logo
 Fábrica de trapos used to live here as `/tu-trapo`; since 2026-07-22 it's its own project (`ezecodo/trapos`, `trapos.xyz`, notes in `~/Desktop/dev/trapos/CLAUDE.md`).
 
 ## Future
+- **Flying together** (shared balloons + spatial voice, family only): roadmap in `docs/vuelos-juntos.md`, decided with Eze 2026-11-04. WebSocket in the uploader for positions, WebRTC + self-hosted coturn for voice.
 - Telegram bot integration (n8n workflow) calling `POST /api/sets` from the existing bot, so sets can be uploaded via Telegram like frases.
 - Optional nginx tuning: dedicated `location /sets/` with `Cache-Control: public, max-age=31536000, immutable` for cleaner audio caching.
