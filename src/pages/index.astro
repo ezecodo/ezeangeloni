@@ -1315,7 +1315,7 @@ import Layout from '../layouts/Layout.astro';
         group.add(new THREE.LineSegments(geo, mat));
       };
       // twelve inflated gores cut in panels, each panel a Wiphala colour, stepping one colour per gore so they run in diagonals
-      const P = ENVELOPE.length, skin: Balloon['skin'] = [];
+      const P = ENVELOPE.length, skin: Balloon['skin'] = [], gores: THREE.BufferGeometry[] = [];
       for(let g = 0; g < GORES; g++){
         const lathe = new THREE.LatheGeometry(ENVELOPE.map(([r,y]) => new THREE.Vector2(r, y)), GORE_SEGS, g*Math.PI*2/GORES, Math.PI*2/GORES);
         const lp = lathe.attributes.position as THREE.BufferAttribute;
@@ -1325,12 +1325,8 @@ import Layout from '../layouts/Layout.astro';
         }
         const geo = lathe.toNonIndexed(); // faces come in pairs per panel row: (segment, row) -> 2 triangles
         lathe.dispose();
-        const cols = new Float32Array(geo.attributes.position.count*3);
-        for(let f = 0; f < cols.length/9; f++){
-          const row = Math.floor(f/2) % (P-1), W = WIPHALA.length, c = hexRgb(WIPHALA[((g*twist + row) % W + W) % W]);
-          for(let v = 0; v < 3; v++) cols.set(c, f*9 + v*3);
-        }
-        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count*3), 3));
+        gores.push(geo);
         const base = new THREE.Color(.55, .55, .55); // under the bloom threshold even at full burn
         const m = new THREE.MeshBasicMaterial({ color:base.clone(), vertexColors:true, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1 });
         skin.push({ m, base });
@@ -1350,7 +1346,8 @@ import Layout from '../layouts/Layout.astro';
       // skirt below the mouth, the burner, and a wicker basket with a rim
       const skirt = new THREE.CylinderGeometry(.6, .46, .55, GORES, 1, true);
       skirt.translate(0, -.47, 0);
-      group.add(new THREE.Mesh(skirt, new THREE.MeshBasicMaterial({ color:new THREE.Color(WIPHALA[0]).multiplyScalar(.5), side:THREE.DoubleSide })));
+      const skirtMat = new THREE.MeshBasicMaterial({ color:new THREE.Color(WIPHALA[0]).multiplyScalar(.5), side:THREE.DoubleSide });
+      group.add(new THREE.Mesh(skirt, skirtMat));
       group.add(new THREE.LineSegments(new THREE.EdgesGeometry(skirt, 20), faint));
       const burner = new THREE.CylinderGeometry(.16, .2, .22, 8);
       burner.translate(0, -1.32, 0);
@@ -1393,10 +1390,38 @@ import Layout from '../layouts/Layout.astro';
       engine.position.y = -1.05;
       group.add(engine);
       group.scale.setScalar(BALLOON_SCALE);
-      return { group, engine, lamps, bulbs, home, thread, skin };
+      const body = { group, engine, lamps, bulbs, home, thread, skin, gores, skirtMat };
+      paintBody(body, null, twist);
+      return body;
     }
+    // The envelope's colours: each owner designs theirs in the admin (balloon tab), stored with their galaxy.
+    // No design: the Wiphala in diagonals, `twist` stepping it differently for each of the family in the shared sky.
+    type Look = { palette: string[]; pattern: 'diagonal' | 'gores' | 'bands' | 'checker' };
+    function lookIndex(pattern: Look['pattern'], g: number, row: number, n: number, twist: number){
+      if(pattern === 'gores') return g % n;
+      if(pattern === 'bands') return row % n;
+      if(pattern === 'checker') return (Math.floor(row/2) % Math.ceil(n/2)*2 + (g + row) % 2) % n;
+      return ((g*twist + row) % n + n) % n;
+    }
+    function paintBody(body: { gores: THREE.BufferGeometry[]; skirtMat: THREE.MeshBasicMaterial }, look: Look | null, twist = 1){
+      const palette = look?.palette?.length ? look.palette : WIPHALA, pattern = look ? look.pattern : 'diagonal', n = palette.length, P = ENVELOPE.length;
+      const rgb = palette.map(hexRgb);
+      body.gores.forEach((geo, g) => {
+        const cols = geo.attributes.color as THREE.BufferAttribute, arr = cols.array as Float32Array;
+        for(let f = 0; f < arr.length/9; f++){
+          const c = rgb[lookIndex(pattern, g, Math.floor(f/2) % (P-1), n, look ? 1 : twist)];
+          for(let v = 0; v < 3; v++) arr.set(c, f*9 + v*3);
+        }
+        cols.needsUpdate = true;
+      });
+      body.skirtMat.color.set(palette[0]).multiplyScalar(.5);
+    }
+    let mainLook: Look | null = null, houseLook: Look | null = null, myLook: Look | null = null, myBody: ReturnType<typeof balloonBody> | null = null;
     function buildBalloon(){
-      const { group, engine, lamps, bulbs, home, thread, skin } = balloonBody();
+      const body = balloonBody();
+      const { group, engine, lamps, bulbs, home, thread, skin } = body;
+      myBody = body;
+      paintBody(body, myLook || houseLook);
       rig.add(group);
 
       // what the logo gives back on arrival: a shockwave and the colours of the eleven lights
@@ -1420,6 +1445,7 @@ import Layout from '../layouts/Layout.astro';
       balloon = { group, engine, lamps, bulbs, home, thread, skin, drops:[], tau:rnd(0, 400), peek:0, peekFrom:0, mode:'cruise', spawn:0, t0:0, p0:new THREE.Vector3(), dir:new THREE.Vector3(0,0,1), lit:0, over:false, sx:0, sy:0, onScreen:false };
       placeBalloon();
       buildBasketView();
+      paintCanopy(myLook || houseLook);
     }
     // ── From the basket ──
     // Opening a piece while flying, you look at it from inside the basket. A camera-glued set (in `rig`, drawn
@@ -1465,6 +1491,19 @@ import Layout from '../layouts/Layout.astro';
       }
       geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
       return geo;
+    }
+    const canopyShade: { geo: THREE.BufferGeometry; k: Float32Array; gi: number; rows: number }[] = [];
+    // the underside seen from the basket wears the same design as the envelope
+    function paintCanopy(look: Look | null){
+      const palette = look?.palette?.length ? look.palette : WIPHALA, pattern = look ? look.pattern : 'diagonal', rgb = palette.map(hexRgb);
+      for(const { geo, k, gi, rows } of canopyShade){
+        const cols = geo.attributes.color as THREE.BufferAttribute, arr = cols.array as Float32Array;
+        for(let f = 0; f < k.length/3; f++){
+          const base = rgb[lookIndex(pattern, gi, Math.floor(f/2) % rows, rgb.length, 1)];
+          for(let v = 0; v < 3; v++){ const q = k[f*3+v]; arr[(f*3+v)*3] = base[0]*q; arr[(f*3+v)*3+1] = base[1]*q; arr[(f*3+v)*3+2] = base[2]*q; }
+        }
+        cols.needsUpdate = true;
+      }
     }
     function buildBasketView(){
       if(!balloon) return;
@@ -1555,18 +1594,16 @@ import Layout from '../layouts/Layout.astro';
           lp.setY(v, lp.getY(v) - Math.sin(Math.PI*i/SEGS)*.06*(1 + j*.4));
         }
         const geo = lathe.toNonIndexed(); lathe.dispose();
-        const pos = geo.attributes.position as THREE.BufferAttribute, cols = new Float32Array(pos.count*3);
-        for(let f = 0; f < pos.count/3; f++){
-          const row = Math.floor(f/2) % ROWS, base = hexRgb(WIPHALA[(gi + row) % WIPHALA.length]);
-          for(let v = 0; v < 3; v++){
-            const x = pos.getX(f*3+v), z = pos.getZ(f*3+v), r = Math.hypot(x, z);
-            const a = ((Math.atan2(x, z) - gi*span)/span % 1 + 1) % 1, jr = ((r - 2)/1.3) % 1;
-            const quilt = (.5 + .5*Math.pow(Math.sin(Math.PI*a), .6))*(.72 + .28*Math.sin(Math.PI*Math.min(1, jr + .001)));
-            const lit = 1.15 - .55*(r - 2)/(ROWS*1.3); // the burner lights it from below, near the middle
-            cols.set(base.map(c => c*quilt*lit), (f*3+v)*3);
-          }
+        const pos = geo.attributes.position as THREE.BufferAttribute, shadeK = new Float32Array(pos.count);
+        for(let f = 0; f < pos.count/3; f++) for(let v = 0; v < 3; v++){
+          const x = pos.getX(f*3+v), z = pos.getZ(f*3+v), r = Math.hypot(x, z);
+          const a = ((Math.atan2(x, z) - gi*span)/span % 1 + 1) % 1, jr = ((r - 2)/1.3) % 1;
+          const quilt = (.5 + .5*Math.pow(Math.sin(Math.PI*a), .6))*(.72 + .28*Math.sin(Math.PI*Math.min(1, jr + .001)));
+          const lit = 1.15 - .55*(r - 2)/(ROWS*1.3); // the burner lights it from below, near the middle
+          shadeK[f*3+v] = quilt*lit;
         }
-        geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count*3), 3));
+        canopyShade.push({ geo, k:shadeK, gi, rows:ROWS });
         const m = keep(new THREE.MeshBasicMaterial({ vertexColors:true, color:new THREE.Color(.5, .47, .43), side:THREE.DoubleSide }));
         canopyMats.push(m);
         put(high, new THREE.Mesh(geo, m), 20);
@@ -3283,6 +3320,8 @@ import Layout from '../layouts/Layout.astro';
     const galaxyReady = fetch('/galaxies.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null).then(d => {
       registry = Array.isArray(d?.galaxies) ? d.galaxies : [];
       mainKin = d?.main?.kin || null;
+      mainLook = d?.main?.balloon || null;
+      houseLook = (GAL ? (registry.find(x => x.slug === GAL) as any)?.balloon : mainLook) || null; // the balloon of whoever's galaxy this is
       if(!GAL) return;
       const g = registry.find(x => x.slug === GAL);
       if(!g){ locked = true; return; }
@@ -4032,6 +4071,8 @@ import Layout from '../layouts/Layout.astro';
       whoAmI = w ? (w.owner ? 'Eze' : w.name) : '';
       mine = !!w && (GAL ? w.slug === GAL : !!w.owner);
       mySlug = w ? (w.owner ? 'eze' : w.slug) : ''; myDir = w?.dir || '';
+      // an owner flies their own balloon wherever they are
+      if(w) galaxyReady.then(() => { myLook = (w.owner ? mainLook : (registry.find(x => x.slug === w.slug) as any)?.balloon) || null; if(myLook && myBody){ paintBody(myBody, myLook); paintCanopy(myLook); } });
     }).catch(() => {});
     function paintKnock(form: HTMLFormElement, slug: string, owner: string){
       const door = doors[slug]?.status || 'closed', input = form.querySelector('input')!, msg = form.querySelector('.knock-msg')!;
@@ -4233,10 +4274,11 @@ import Layout from '../layouts/Layout.astro';
     let lookSent = '';
     let sky: WebSocket | null = null, skyIn = false, skyBackoff = 2000, skySentAt = 0, skyLastMode = -1;
     const skyRoom = GAL || 'eze';
-    function addOther(id: string, name: string){
+    function addOther(id: string, name: string, look: Look | null = null){
       if(others.has(id)) return others.get(id)!;
       const h = parseInt(hash36(id), 36);
       const body = balloonBody([-1, 2, 3, -2, -3, 4][h % 6]);
+      if(look?.palette) paintBody(body, look); // as they designed it
       body.group.visible = false;
       // the string of lights hangs still under someone else's basket
       const pos = body.thread.geometry.attributes.position as THREE.BufferAttribute;
@@ -4280,8 +4322,8 @@ import Layout from '../layouts/Layout.astro';
         let m: any;
         try { m = JSON.parse(e.data); } catch { return; }
         if(m.t === 'welcome'){ skyBackoff = 2000; ws.send(JSON.stringify({ t:'join', g:skyRoom })); }
-        else if(m.t === 'room'){ skyIn = true; skyLastMode = -1; for(const p of m.peers || []){ const o = addOther(p.id, p.name); takeState(o, p.s); } }
-        else if(m.t === 'in'){ addOther(m.id, m.name); }
+        else if(m.t === 'room'){ skyIn = true; skyLastMode = -1; for(const p of m.peers || []){ const o = addOther(p.id, p.name, p.look); takeState(o, p.s); } }
+        else if(m.t === 'in'){ addOther(m.id, m.name, m.look); }
         else if(m.t === 's'){ const o = others.get(m.id); if(o) takeState(o, m.s); }
         else if(m.t === 'out') dropOther(m.id);
         else if(m.t === 'ev') onSkyEvent(m.from, m.e || {});

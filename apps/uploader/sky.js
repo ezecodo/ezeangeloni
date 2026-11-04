@@ -42,7 +42,7 @@ export function attachSky(server, ezePassword) {
 
   wss.on('connection', (ws, req) => {
     const ip = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-    const c = { ws, id: crypto.randomBytes(5).toString('base64url'), name: '', who: null, device: '', room: null, state: null, n: 0, sec: 0, alive: true };
+    const c = { ws, id: crypto.randomBytes(5).toString('base64url'), name: '', look: null, who: null, device: '', room: null, state: null, n: 0, sec: 0, alive: true };
     const late = setTimeout(() => { if (!c.name) ws.close(4401, 'who are you'); }, HELLO_MS);
     ws.on('pong', () => { c.alive = true; });
 
@@ -62,8 +62,9 @@ export function attachSky(server, ezePassword) {
         const member = await galaxies.skyMember(String(m.device || ''), owner?.slug, owner?.name).catch(() => null);
         if (!member) return ws.close(4401, 'no sky for you');
         clearTimeout(late);
-        Object.assign(c, { name: member.name, who: owner?.slug || null, device: String(m.device || '') });
-        return send(ws, { t: 'welcome', id: c.id, name: c.name });
+        const look = member.slug ? await galaxies.balloonOf(member.slug).catch(() => null) : null; // their balloon as they designed it
+        Object.assign(c, { name: member.name, look, who: owner?.slug || null, device: String(m.device || '') });
+        return send(ws, { t: 'welcome', id: c.id, name: c.name, look });
       }
       if (!c.name) return;
 
@@ -75,10 +76,10 @@ export function attachSky(server, ezePassword) {
         if (!(await galaxies.canEnterSlug(g, c.device, c.who).catch(() => false))) return send(ws, { t: 'nope', g });
         if (!rooms.has(g)) rooms.set(g, new Set());
         const r = rooms.get(g);
-        send(ws, { t: 'room', g, peers: [...r].map((o) => ({ id: o.id, name: o.name, s: o.state })) });
+        send(ws, { t: 'room', g, peers: [...r].map((o) => ({ id: o.id, name: o.name, look: o.look, s: o.state })) });
         r.add(c);
         c.room = g;
-        return others(c, { t: 'in', id: c.id, name: c.name });
+        return others(c, { t: 'in', id: c.id, name: c.name, look: c.look });
       }
       // one to one: a bump, a word, a gallon of gas, an invitation. Only to someone in the same room
       if (m.t === 'to' && c.room && typeof m.to === 'string' && m.e && typeof m.e === 'object' && typeof m.e.k === 'string') {

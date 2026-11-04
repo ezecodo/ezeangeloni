@@ -695,6 +695,10 @@ app.delete('/api/frases/guests/:id', checkWho, galaxyRoute(async (req) => {
   return galaxies.turnAway(req.who.slug, req.params.id);
 }));
 
+// your balloon's colours and pattern (the admin's balloon tab); public through galaxies.json and the shared sky
+app.get('/api/frases/balloon', checkWho, galaxyRoute(async (req) => ({ balloon: await galaxies.balloonOf(req.who.owner ? galaxies.MAIN : req.who.slug) })));
+app.put('/api/frases/balloon', express.json({ limit: '4kb' }), checkWho, galaxyRoute(async (req) => galaxies.setBalloon(req.who.owner ? galaxies.MAIN : req.who.slug, req.body?.balloon ?? null)));
+
 // voice on an expedition: where to find the relay (only for whoever flies in the shared sky)
 app.post('/api/frases/sky-turn', express.json({ limit: '4kb' }), galaxyRoute(async (req) => {
   doorLimit(req);

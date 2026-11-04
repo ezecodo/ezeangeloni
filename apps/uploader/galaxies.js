@@ -41,8 +41,8 @@ async function save(data) {
   await fs.rename(tmp, GALAXIES_JSON);
   // what the site is allowed to know: never a birth date, only the kin it gives
   const pub = {
-    main: { kin: kinOf(data.main?.born) },
-    galaxies: data.galaxies.map((g) => ({ slug: g.slug, name: g.name, public: !!g.public, kin: kinOf(g.born), ...(g.public ? { dir: dirName(g) } : {}) })),
+    main: { kin: kinOf(data.main?.born), ...(data.main?.balloon ? { balloon: data.main.balloon } : {}) },
+    galaxies: data.galaxies.map((g) => ({ slug: g.slug, name: g.name, public: !!g.public, kin: kinOf(g.born), ...(g.public ? { dir: dirName(g) } : {}), ...(g.balloon ? { balloon: g.balloon } : {}) })),
   };
   await fs.writeFile(PUBLIC_JSON + '.tmp', JSON.stringify(pub, null, 2) + '\n');
   await fs.rename(PUBLIC_JSON + '.tmp', PUBLIC_JSON);
@@ -106,6 +106,33 @@ export function update(slug, { public: isPublic, born }) {
     if (born !== undefined) g.born = born || '';
     await save(data);
     return view(g);
+  });
+}
+
+// Each owner's balloon: the colours of its envelope and how the panels are laid out. Public (it's how they fly).
+const PATTERNS = ['diagonal', 'gores', 'bands', 'checker'];
+export function cleanBalloon(b) {
+  if (!b || typeof b !== 'object') return null;
+  const palette = (Array.isArray(b.palette) ? b.palette : []).filter((c) => /^#[0-9a-f]{6}$/i.test(String(c))).slice(0, 7).map((c) => c.toLowerCase());
+  if (palette.length < 2) return null;
+  return { palette, pattern: PATTERNS.includes(b.pattern) ? b.pattern : 'diagonal' };
+}
+export async function balloonOf(slug) {
+  const d = await load();
+  return (slug === MAIN ? d.main?.balloon : d.galaxies.find((x) => x.slug === slug)?.balloon) || null;
+}
+export function setBalloon(slug, b) {
+  return locked(async () => {
+    const data = await load(), look = b === null ? null : cleanBalloon(b);
+    if (b !== null && !look) throw bad('two to seven colours, please');
+    if (slug === MAIN) { data.main = { ...(data.main || {}) }; if (look) data.main.balloon = look; else delete data.main.balloon; }
+    else {
+      const g = data.galaxies.find((x) => x.slug === slug);
+      if (!g) throw bad('no such galaxy', 404);
+      if (look) g.balloon = look; else delete g.balloon;
+    }
+    await save(data);
+    return { balloon: look };
   });
 }
 
