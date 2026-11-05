@@ -3080,6 +3080,10 @@ import Layout from '../layouts/Layout.astro';
         controls.update();
         look.copy(controls.target);
       }
+      // the teaser on a phone held upright: the camera rolls a quarter turn so the galaxy stands up and fills the
+      // screen (the balloon, glued to the camera, stays upright on screen); undone after drawing
+      const rolled = teaser && window.innerHeight > window.innerWidth;
+      if(rolled) camera.rotateZ(Math.PI/2);
       if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded && !sunScene; // still air for the words at the Sun
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
       updateSky(now, dt);
@@ -3182,6 +3186,7 @@ import Layout from '../layouts/Layout.astro';
         lens.uniforms.uTime.value = now*.001;
         composer.render();
       }
+      if(rolled) camera.rotateZ(-Math.PI/2);
     }
 
     // ── Sheets ────────────────────────────────────────────
@@ -3525,7 +3530,9 @@ import Layout from '../layouts/Layout.astro';
       if(arrival && Date.now() - arrival.t > 20000) arrival = null;
       if(teaser){
         // from far away, the whole of it turning
-        const far = home.clone().multiplyScalar(1.7);
+        // upright on a phone the galaxy is turned to stand along the screen, so it needn't stand back for the width
+        const upright = window.innerHeight > window.innerWidth, pf = Math.max(1, Math.pow(1.2/camera.aspect, .8));
+        const far = home.clone().multiplyScalar(upright ? 2.5/pf : 1.7);
         camera.position.copy(far).multiplyScalar(1.5); // in from deep space: never near enough to see a photo
         look.copy(CENTER);
         camera.lookAt(look);
