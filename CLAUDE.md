@@ -1,7 +1,7 @@
 # Eze Angeloni Landing — Project Notes
 
 ## Stack
-Astro 5 static site, single page (`src/pages/index.astro`). The whole UX is the **Cronovisor**, a 3D constellation of the archive (the name and "pasado observado" come from Eze's own frases of 2026-08-07). Built on Three.js, the only runtime dependency besides Astro: it's bundled by the build and served from the VPS, so it doesn't break the self-hosted positioning.
+Astro 5 static site, single page (`src/pages/index.astro`). The whole UX is the **Cronovisor**, a 3D constellation of the archive (the name and "pasado observado" come from Eze's own frases of 2026-08-07; "· futuro soberano" added 2026-11-06, shown wherever the tagline is: bottom line, teaser, Sun statement, meta description; the contact sheet keeps "Pasado observado" as its title). Built on Three.js, the only runtime dependency besides Astro: it's bundled by the build and served from the VPS, so it doesn't break the self-hosted positioning.
 
 `astro dev` proxies `/frases.json`, `/sets.json`, `/images` and `/sets/` to production (see `astro.config.mjs`), so local shows the real content. It does not affect the build.
 

@@ -4,7 +4,7 @@ import Layout from '../layouts/Layout.astro';
 
 <Layout title="Eze Angeloni — Cronovisor">
   <Fragment slot="head">
-    <meta name="description" content="Cronovisor: pasado observado. Fotos, frases y sets de Eze Angeloni, en sistema propio." />
+    <meta name="description" content="Cronovisor: pasado observado, futuro soberano. Fotos, frases y sets de Eze Angeloni, en sistema propio." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital@0;1&family=Cormorant+Garamond:ital,wght@0,300;1,300;1,400&display=swap" rel="stylesheet" />
     <style is:global>
@@ -484,13 +484,13 @@ import Layout from '../layouts/Layout.astro';
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span><span class="crew" id="crew-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
   <div id="teaser" hidden>
-    <div class="t-title"><h1>Cronovisor</h1><p class="t-sub">pasado observado</p><p class="t-date">01 · 12 · 2026</p><p class="t-count" id="teaser-count"></p></div>
+    <div class="t-title"><h1>Cronovisor</h1><p class="t-sub">pasado observado · futuro soberano</p><p class="t-date">01 · 12 · 2026</p><p class="t-count" id="teaser-count"></p></div>
     <div class="t-door"><button id="teaser-key">sign in</button><form id="teaser-signin" hidden><input id="teaser-pass" type="password" name="password" autocomplete="current-password" placeholder="password" /><button>enter</button></form><span id="teaser-msg"></span></div>
   </div>
   <div id="sun-glow" aria-hidden="true"></div>
   <div id="sun-words" hidden aria-live="polite">
     <h2>Cronovisor</h2>
-    <p class="sub">pasado observado</p>
+    <p class="sub">pasado observado · futuro soberano</p>
     <p>This is not a feed. Nothing here is ranked, sold or sped up.</p>
     <p>It is an archive that behaves like a sky. Every photo and every phrase is a light placed by its date: the further you travel from the centre, the further back in time you go. Memories age the way stars do (born bright, burning steady, turning red and pale), while the original underneath is never touched.</p>
     <p>It runs on a server I own, with code I wrote. No platform decides who sees it, no algorithm decides what matters, nothing is sold in between.</p>
@@ -2981,7 +2981,7 @@ import Layout from '../layouts/Layout.astro';
       metaId.textContent = home
         ? `${total} señales`
         : `Nº ${String(st.n).padStart(3,'0')}/${total} · ${st.date.replaceAll('-','·')} · ${pieces[i]?.stage || ''}`;
-      metaCap.textContent = home ? 'pasado observado' : (st.kind === 'text' || st.flood) && focused === i ? '' : st.text;
+      metaCap.textContent = home ? 'pasado observado · futuro soberano' : (st.kind === 'text' || st.flood) && focused === i ? '' : st.text;
       act.hidden = !(st.kind === 'set' && focused === i);
       nowEl.textContent = home ? 'Eze Angeloni, Cronovisor' : `${st.date}: ${st.text || 'foto sin título'}`;
     }
@@ -3172,7 +3172,7 @@ import Layout from '../layouts/Layout.astro';
         if(near !== hoverBalloon){
           hoverBalloon = near;
           balloonTag.classList.toggle('hot', near);
-          metaCap.textContent = near ? 'leave a word' : 'pasado observado';
+          metaCap.textContent = near ? 'leave a word' : 'pasado observado · futuro soberano';
           if(near) playNote(NOTES[4]);
         }
       }
