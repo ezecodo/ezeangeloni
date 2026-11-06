@@ -152,7 +152,12 @@ import Layout from '../layouts/Layout.astro';
       #sun-words .go { margin-top: 1.6rem; font-family: 'DM Mono', monospace; font-size: .58rem; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
       body.sunscene #pilot-hud, body.sunscene #tour, body.sunscene #sky-marks { opacity: 0 !important; }
       @media (max-width: 760px) { #sun-words { right: 1rem; left: 1rem; width: auto; top: auto; bottom: 1.4rem; transform: none; max-height: 58vh; } }
-      #warp { position: fixed; inset: 0; z-index: 40; pointer-events: none; background: #f0ede8; opacity: 0; transition: opacity .9s ease-in; }
+      #warp { position: fixed; inset: 0; z-index: 40; pointer-events: none; background: #080810; opacity: 0; transition: opacity .9s ease-in; } /* only when the crossing can't be drawn (reduced motion, its stars not loaded) */
+      /* crossing into another galaxy: the last frame of the one you leave covers the next page while it loads, then
+         melts into it; the interface steps out of the way and comes back after */
+      #handoff { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 39; pointer-events: none; transition: opacity .45s ease-out; }
+      body.crossing > *:not(#screen):not(#handoff):not(#warp):not(#arrival), body.arriving > *:not(#screen):not(#handoff):not(#warp):not(#arrival) { opacity: 0 !important; transition: opacity .9s ease !important; pointer-events: none !important; }
+      body.arrived > *:not(#screen):not(#handoff):not(#arrival) { transition: opacity 1.6s ease !important; }
       #warp.on { opacity: 1; }
       /* a world (a piece of Eze's other work): what it is, beside the planet, and the only way out to it */
       #world-info { position: fixed; right: 2.4rem; top: 50%; transform: translateY(-46%); z-index: 12; width: min(400px, 38vw); opacity: 0; pointer-events: none; transition: opacity .45s, transform .45s; text-shadow: 0 0 18px rgba(8,8,16,.9); }
@@ -399,6 +404,19 @@ import Layout from '../layouts/Layout.astro';
 
   <div id="cursor"></div>
   <canvas id="screen" aria-hidden="true"></canvas>
+  <script is:inline>
+    // arriving from another galaxy: its last frame, shown before anything else, until this one is drawn beneath it
+    try {
+      var shot = sessionStorage.getItem('cv-shot');
+      if (shot) {
+        sessionStorage.removeItem('cv-shot');
+        document.body.classList.add('arriving');
+        var im = new Image(); im.id = 'handoff'; im.alt = ''; im.src = shot;
+        document.body.appendChild(im);
+        setTimeout(function () { var h = document.getElementById('handoff'); if (h) { h.style.opacity = '0'; setTimeout(function () { h.remove(); }, 1300); } document.body.classList.remove('arriving'); }, 12000); // never stuck
+      }
+    } catch (e) {}
+  </script>
 
   <div id="hud">
     <header id="top">
@@ -740,14 +758,26 @@ import Layout from '../layouts/Layout.astro';
     // but nothing answers: no dragging, zooming, opening, flying. Only someone signed in (a galaxy's owner) gets in.
     // It opens by itself on the day. (A curtain in the browser: the files on the server are as public as ever.)
     const RELEASE = Date.parse('2026-12-01T00:00:00+01:00');
-    let teaser = Date.now() < RELEASE && !(import.meta.env.DEV && /[?&](fake|stats)\b/.test(location.search)); // dev load tests see it all
+    if(import.meta.env.DEV && /[?&](fake|stats|doors)\b/.test(location.search)) sessionStorage.setItem('cv-dev-open', '1');
+    if(import.meta.env.DEV && /[?&]doors\b/.test(location.search)) sessionStorage.setItem('cv-dev-doors', new URLSearchParams(location.search).get('doors') || '1');
+    // Crossing in from another galaxy, that page hands over what it already knew (the registry, which doors are open
+    // to you, this galaxy's frases and sets, that you were in), so arriving doesn't wait on the network: ~0.8 s less
+    // of the frozen last frame. Only the next page reads it, within a few seconds.
+    const PASS: { t: number; galaxies: any; doors: Record<string, Door>; frases?: Frase[]; sets?: SetMeta[]; open: boolean; g: string } | null = (() => {
+      try {
+        const p = JSON.parse(sessionStorage.getItem('cv-pass') || 'null');
+        sessionStorage.removeItem('cv-pass');
+        return p && Date.now() - p.t < 30000 && p.g === (new URLSearchParams(location.search).get('g') || '') ? p : null;
+      } catch { return null; }
+    })();
+    let teaser = Date.now() < RELEASE && !(import.meta.env.DEV && sessionStorage.getItem('cv-dev-open')) && !(PASS?.open && ownerPass); // dev load tests see it all, also after crossing
     if(teaser) document.body.classList.add('teaser');
     const teaserGate: Promise<boolean> = !teaser ? Promise.resolve(false)
       : ownerPass ? fetch('/api/frases/whoami', { headers: { 'X-Auth': ownerPass } }).then(r => !r.ok).catch(() => true)
       : Promise.resolve(true);
     if(teaser && RELEASE - Date.now() < 2**31 - 1) setTimeout(() => location.reload(), RELEASE - Date.now() + 1500); // the moment it opens
     const swallow = (e: Event) => {
-      if(!teaser || (e.target as HTMLElement)?.closest?.('#teaser')) return;
+      if((!teaser && !crossAnim) || (teaser && (e.target as HTMLElement)?.closest?.('#teaser'))) return;
       e.stopImmediatePropagation(); // nothing in the universe hears it
     };
     for(const t of ['pointerdown', 'pointerup', 'pointermove', 'click', 'dblclick', 'wheel', 'keydown', 'keyup', 'touchstart', 'touchmove', 'contextmenu'])
@@ -759,7 +789,11 @@ import Layout from '../layouts/Layout.astro';
       if(!slugs.length) return;
       const d = await fetch('/api/frases/doors', { method: 'POST', headers: doorHeaders(), body: JSON.stringify({ device: DEVICE, galaxies: slugs }) }).then(r => r.ok ? r.json() : null).catch(() => null);
       if(d?.doors) doors = { ...doors, ...d.doors };
+      // dev only (`?doors` once, kept for the session): every private galaxy opens, filled with this archive, to
+      // test flying into a neighbour without a password (Vite strips it from the build)
+      if(import.meta.env.DEV && sessionStorage.getItem('cv-dev-doors')) for(const k of slugs) doors[k] = { status: 'open', dir: '.dev' } as Door;
     }
+    const dirBase = (dir: string) => import.meta.env.DEV && dir === '.dev' ? '' : `/galaxies/${dir}`;
     let registry: GalaxyEntry[] = [];
     type Frase = {texto?: string, imagen?: string, caption?: string, fecha?: string, subida?: string};
     function hash36(s: string){
@@ -782,6 +816,13 @@ import Layout from '../layouts/Layout.astro';
     }
     function buildStations(frases: Frase[], sets: SetMeta[]){
       if(DEV_FAKE) frases = [...frases, ...fakeFrases(frases, DEV_FAKE)];
+      const out = stationsOf(frases, sets, BASE);
+      total = out.length;
+      stations = [stations[0], ...out]; // newest at the centre: distance is time
+    }
+    // A galaxy's pieces from its frases and sets, newest first, with no side effects: this galaxy's, and a
+    // neighbour's, so it can be drawn from afar exactly as it will be when you get there.
+    function stationsOf(frases: Frase[], sets: SetMeta[], base: string): Station[] {
       const merged = [
         ...frases.filter(f => f.imagen || f.texto).map(f => ({ date: f.fecha || '', f, s: null as SetMeta | null })),
         ...sets.map(s => ({ date: s.date || '', f: null, s })),
@@ -794,11 +835,10 @@ import Layout from '../layouts/Layout.astro';
         const back = !!(m.f?.subida && m.f.subida > m.date);
         const old = back ? undefined : ++legacy;
         if(m.s) return { kind:'set', n, id:'s-'+m.s.slug, legacy:old, date:m.date, text:m.s.title, src:m.s.artwork, set:m.s, tint:'#ff6eb4', flood:!m.s.artwork };
-        if(m.f!.imagen) return { kind:'photo', n, id:m.f!.imagen.split('/').pop()!.replace(/\.\w+$/, ''), legacy:old, date:m.date, text:m.f!.caption || '', src:BASE + m.f!.imagen, tint, flood:false };
+        if(m.f!.imagen) return { kind:'photo', n, id:m.f!.imagen.split('/').pop()!.replace(/\.\w+$/, ''), legacy:old, date:m.date, text:m.f!.caption || '', src:base + m.f!.imagen, tint, flood:false };
         return { kind:'text', n, id:'t'+hash36(m.date+m.f!.texto), legacy:old, date:m.date, text:m.f!.texto!, tint, flood: n % 3 === 0 };
       });
-      total = out.length;
-      stations = [stations[0], ...out.reverse()]; // newest at the centre: distance is time
+      return out.reverse();
     }
 
     // ── Cards ─────────────────────────────────────────────
@@ -961,15 +1001,18 @@ import Layout from '../layouts/Layout.astro';
       attribute vec4 aShape;  // core, cloud, spike, ring
       attribute vec4 aStatic; // size, seed, beat, phase
       attribute float aBright, aOpacity;
-      uniform float uTime, uPulse;
+      uniform float uTime, uPulse, uScale, uMinPx, uViewH, uFade, uBoost;
       varying vec2 vUv; varying vec3 vColor, vTint; varying vec4 vShape; varying float vSeed, vGain;
       void main(){
-        if(aOpacity < .004){ gl_Position = vec4(2., 2., 2., 1.); return; } // not seen: no pixels at all
+        if(aOpacity*uFade < .004){ gl_Position = vec4(2., 2., 2., 1.); return; } // not seen: no pixels at all
         vUv = uv; vColor = aColor; vTint = aTint; vShape = aShape; vSeed = aStatic.y;
-        vGain = aBright*(1. + uPulse*.28*sin(uTime*aStatic.z*6.28318530718 + aStatic.w))*aOpacity;
         vec4 mv = modelViewMatrix*vec4(aPos, 1.);
-        mv.xy += position.xy*aStatic.x;
-        mv.z += .6; // a hair in front of its own plate, so a plate that hides what's behind it doesn't hide its own star
+        // a neighbouring galaxy is this same field shrunk (uScale): far away its stars keep a few pixels, dimmer
+        float size = aStatic.x*uScale*uBoost, px = size*uViewH*.5*projectionMatrix[1][1]/max(.001, -mv.z);
+        float grow = uMinPx > 0. ? max(1., uMinPx/max(px, .0001)) : 1.;
+        vGain = aBright*(1. + uPulse*.28*sin(uTime*aStatic.z*6.28318530718 + aStatic.w))*aOpacity*uFade/sqrt(grow);
+        mv.xy += position.xy*size*grow;
+        mv.z += .6*uScale; // a hair in front of its own plate, so a plate that hides what's behind it doesn't hide its own star
         gl_Position = projectionMatrix*mv;
       }`;
     const STAR_FRAG = `precision highp float;
@@ -989,23 +1032,31 @@ import Layout from '../layouts/Layout.astro';
         col *= smoothstep(1.,.86,d)*vGain;
         gl_FragColor = vec4(col, 1.);
       }`;
-    let starField: { mesh: THREE.Mesh, mat: THREE.ShaderMaterial, opacity: THREE.InstancedBufferAttribute } | null = null;
+    type StarField = { mesh: THREE.Mesh, mat: THREE.ShaderMaterial, opacity: THREE.InstancedBufferAttribute };
+    let starField: StarField | null = null;
     function buildStarField(){
-      const n = pieces.length, geo = new THREE.InstancedBufferGeometry();
+      starField = makeStarField(pieces.map(p => p.st), pieces.map(p => p.mesh.position));
+      pieces.forEach(p => { if(p.st.kind !== 'home'){ const s = stellar(p.st); p.stage = s.name; p.beat = s.beat; p.bright = s.bright; } });
+      scene.add(starField.mesh);
+    }
+    // the stars of a galaxy (this one, or a neighbour seen from afar: `neighbour`, all lit, a few pixels at least)
+    function makeStarField(sts: Station[], at: THREE.Vector3[], neighbour = false): StarField {
+      const n = sts.length, geo = new THREE.InstancedBufferGeometry();
       geo.index = plane.index;
       geo.setAttribute('position', plane.getAttribute('position'));
       geo.setAttribute('uv', plane.getAttribute('uv'));
       const pos = new Float32Array(n*3), color = new Float32Array(n*3), tint = new Float32Array(n*3), shape = new Float32Array(n*4), stat = new Float32Array(n*4), bright = new Float32Array(n);
-      pieces.forEach((p, i) => {
-        pos.set([p.mesh.position.x, p.mesh.position.y, p.mesh.position.z], i*3);
-        if(p.st.kind === 'home') return; // the logo has no star: its opacity stays 0
-        const s = stellar(p.st);
-        p.stage = s.name; p.beat = s.beat; p.bright = s.bright;
+      const lit = new Float32Array(n);
+      sts.forEach((st, i) => {
+        pos.set([at[i].x, at[i].y, at[i].z], i*3);
+        if(st.kind === 'home') return; // the logo has no star: its opacity stays 0
+        const s = stellar(st);
         color.set(s.color, i*3);
-        tint.set(hexRgb(p.st.tint), i*3);
+        tint.set(hexRgb(st.tint), i*3);
         shape.set([s.core, s.cloud, s.spike, s.ring], i*4);
-        stat.set([s.size, p.st.n*1.7, s.beat, p.st.n], i*4);
+        stat.set([s.size, st.n*1.7, s.beat, st.n], i*4);
         bright[i] = s.bright;
+        if(neighbour) lit[i] = 1;
       });
       const inst = (a: Float32Array, k: number) => new THREE.InstancedBufferAttribute(a, k);
       geo.setAttribute('aPos', inst(pos, 3));
@@ -1014,20 +1065,19 @@ import Layout from '../layouts/Layout.astro';
       geo.setAttribute('aShape', inst(shape, 4));
       geo.setAttribute('aStatic', inst(stat, 4));
       geo.setAttribute('aBright', inst(bright, 1));
-      const opacity = inst(new Float32Array(n), 1);
+      const opacity = inst(lit, 1);
       opacity.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aOpacity', opacity);
       geo.instanceCount = n;
       const mat = new THREE.ShaderMaterial({
         vertexShader:STAR_VERT, fragmentShader:STAR_FRAG, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
-        uniforms:{ uTime:{value:0}, uPulse:{value:reduced ? 0 : 1} },
+        uniforms:{ uTime:{value:0}, uPulse:{value:reduced ? 0 : 1}, uScale:{value:1}, uMinPx:{value:neighbour ? 2.6 : 0}, uViewH:{value:window.innerHeight}, uFade:{value:1}, uBoost:{value:1} },
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false; // one object spread over the whole galaxy
       mesh.renderOrder = 1; // after the pieces' planes, as each star used to be drawn right after its own plane (the open piece, 10, still covers them);
                             // a plate solid enough to be seen writes depth, so the stars behind it stay hidden, as when each was sorted on its own
-      scene.add(mesh);
-      starField = { mesh, mat, opacity };
+      return { mesh, mat, opacity };
     }
 
     function makeRng(seed: number){
@@ -1063,7 +1113,9 @@ import Layout from '../layouts/Layout.astro';
       return { a: t + .6, r: 34 + 4.8*t };
     }
     let galaxyR = 92; // how far the oldest barrio lies; the overview, the pilot's reach and the worlds follow it
-    function layout(){
+    // Where every piece of a galaxy sits (stations[0] is the logo, at the origin). Pure, so a neighbouring galaxy is
+    // laid out from afar exactly as it will be laid out when you arrive.
+    function layoutOf(stations: Station[]){
       const months = [...new Set(stations.slice(1).map(s => s.date.slice(0,7)))].sort().reverse();
       const spots = new Map<string, THREE.Vector3>();
       months.forEach((m, k) => {
@@ -1103,9 +1155,13 @@ import Layout from '../layouts/Layout.astro';
           if(len < 19) out[a].multiplyScalar(19/len);
         }
       }
+      return { out, months, spots, count, R: spiral(Math.max(0, months.length-1)).r };
+    }
+    function layout(){
+      const { out, months, spots, count, R } = layoutOf(stations);
       // Gas for the balloon: a nebula at each turn of the year, where one time gives way to an older one,
       // and the biggest beyond the oldest month. To keep flying you travel into the past.
-      galaxyR = spiral(Math.max(0, months.length-1)).r;
+      galaxyR = R;
       PILOT_R = Math.max(150, galaxyR + 45);
       const along = (k: number, out: number) => {
         const { a, r } = spiral(k);
@@ -2153,7 +2209,7 @@ import Layout from '../layouts/Layout.astro';
     // and pieces open up as you approach them. Built for a digital 8-way stick and 4 buttons (Competition Pro).
     const pad = { x:0, y:0, px:0, py:0, held:[false,false,false,false], prev:[false,false,false,false] };
     interface Homing { t0: number; from: THREE.Vector3; ctrl: THREE.Vector3; to: THREE.Vector3; dur: number; landed: number; }
-    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null; lookYaw: number; lookPitch: number; knock: THREE.Vector3 } | null = null;
+    let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null; lookYaw: number; lookPitch: number; knock: THREE.Vector3; still?: boolean } | null = null; // still: just arrived from another galaxy, hovering until you fly
     let padRepeat = 0;
     let PILOT_R = 150;
     const SUN_HEAT = 105; // inside this the Sun's heat pushes the balloon away
@@ -2548,7 +2604,7 @@ import Layout from '../layouts/Layout.astro';
     // between galaxies there's nothing to drift on: out past the barrios the pilot flame burns five times faster and
     // the burner twice, and crossing into another galaxy takes two gallons of the eleven
     const VOID_IDLE = 5, VOID_BURN = 2, CROSS_COST = 2/11;
-    const inVoid = (p: THREE.Vector3) => Math.hypot(p.x, p.z) > galaxyR + 30;
+    const inVoid = (p: THREE.Vector3) => Math.hypot(p.x, p.z) > Math.max(galaxyR + 30, arrivalOut() + 20); // where you arrive (and its gate nebula) is still home: the void starts beyond
     const GAS_COLORS = ['#c77dff', '#6ef9f5', '#ff6eb4', '#38bdf8', '#b8f75b', '#ffd166'];
     interface GasCloud { pos: THREE.Vector3; r: number; color: THREE.Color; reserve: number; group?: THREE.Group; mats?: THREE.Material[]; }
     let gasClouds: GasCloud[] = [];
@@ -2774,7 +2830,8 @@ import Layout from '../layouts/Layout.astro';
       // under the Sun, Xibalbá pulls: let go of the burner there and the balloon goes down six times faster
       // (only once you're below the Sun: at its height you can stay beside it and fill the tank)
       const pull = xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y - 90 ? 6 : 1;
-      const climb = p.selecting || moored || ((withHim || meet || follow) && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW && !inXibalba(p.pos) ? .55 : 1) : SINK*pull;
+      if(p.still && (pad.x || pad.y || pad.held[0])) p.still = false; // arrived from another galaxy: it hovers where it came out until you fly
+      const climb = p.selecting || moored || p.still || ((withHim || meet || follow) && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW && !inXibalba(p.pos) ? .55 : 1) : SINK*pull;
       p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting || moored ? 6 : 1.8)));
       p.pos.y += p.vy*dt;
       const floor = inXibalba(p.pos) || (xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260) ? xibBottom() : -PILOT_Y; // under the Sun the road goes down to Xibalbá
@@ -3133,7 +3190,9 @@ import Layout from '../layouts/Layout.astro';
         composer?.setPixelRatio(1);
       }
       let flightEnergy = 0;
-      if(flight){
+      if(crossAnim){
+        flightEnergy = updateCross(now);
+      } else if(flight){
         const t = Math.min(1, (now-flight.t0)/flight.dur);
         const k = t < .5 ? 4*t*t*t : 1-Math.pow(-2*t+2, 3)/2;
         camera.position.lerpVectors(flight.fromP, flight.toP, k);
@@ -3214,6 +3273,8 @@ import Layout from '../layouts/Layout.astro';
         else if(boarded) opacityT = home && delivering ? 1 : .28;
         else if(pilot?.selecting) opacityT = isHov || pilot.cands.includes(p.i) ? 1 : .22; // the chosen few stay lit
         else if(hovered > 0 && !isHov) opacityT = .4;
+        if(crossAnim) opacityT *= 1 - crossFade;            // the galaxy you leave goes out
+        if(home && arriveFade) opacityT *= 1 - arriveFade; // the one you reach: its heart comes in after its stars
         p.reveal += (revealT-p.reveal)*ease;
         p.opacity += (opacityT-p.opacity)*ease;
         p.grow += ((isHov && !home ? (pilot?.selecting ? 1.35 : 2.1) : 1)-p.grow)*ease;
@@ -3222,7 +3283,7 @@ import Layout from '../layouts/Layout.astro';
         p.starMix += (starT-p.starMix)*ease;
         p.mesh.scale.set(p.w*p.grow, p.h*p.grow, 1);
         p.mat.uniforms.uReveal.value = p.reveal;
-        p.mat.uniforms.uOpacity.value = p.opacity*(1-p.starMix);
+        p.mat.uniforms.uOpacity.value = p.opacity*(1-p.starMix)*(1 - arriveFade);
         // what can't be seen isn't drawn: far away a piece is only its star, at a piece the others are only faint
         // planes. (Hidden meshes still answer the raycaster, so hovering and clicking a star works as before.)
         if(!p.gone){
@@ -3239,15 +3300,20 @@ import Layout from '../layouts/Layout.astro';
         }
       }
       if(starField){ starField.opacity.needsUpdate = true; starField.mat.uniforms.uTime.value = sim*.001; }
+      if(arriveFadeAt){ const u = Math.min(1, (now - arriveFadeAt)/2800); arriveFade = 1 - u*u*(3-2*u); if(u >= 1){ arriveFadeAt = 0; arriveFade = 0; } }
       calm += ((focused >= 0 ? 1 : 0)-calm)*ease; // 1 = at a piece, nothing may touch it
       const dim = 1-calm*.72;
       if(thread){
         const u = (thread.material as THREE.ShaderMaterial).uniforms;
         u.uTime.value = sim*.001;
-        u.uDim.value = 1-calm*.9;
+        u.uDim.value = (1-calm*.9)*(1 - Math.max(crossFade, arriveFade));
       }
       if(dust) (dust.material as THREE.PointsMaterial).opacity = .8*(1-calm*.85);
-      (nebula.material as THREE.ShaderMaterial).uniforms.uDim.value = dim;
+      (nebula.material as THREE.ShaderMaterial).uniforms.uDim.value = dim*(1 - Math.max(crossFade, arriveFade));
+      for(const w of worlds) if(w.field) w.field.mat.uniforms.uFade.value = crossAnim?.w === w ? 1 : 1 - Math.max(crossFade, arriveFade);
+      const fadeNow = Math.max(crossFade, arriveFade);
+      if(fadeNow > 0) dimScene(fadeNow, [pilot && balloon ? balloon.group : null, crossAnim?.w.field?.mesh]);
+      else if(faded.size) undimScene();
       if(!reduced && !frozen){ stars.rotation.y += dt*.004; nebula.rotation.y += dt*.0015; }
       placeSelector();
       if(composer && bloom && lens){
@@ -3257,6 +3323,16 @@ import Layout from '../layouts/Layout.astro';
         lens.uniforms.uGrain.value = 1-calm;
         lens.uniforms.uTime.value = now*.001;
         composer.render();
+        // the last frame of a crossing goes with you, to cover the next page while it loads
+        if(crossAnim?.done && !crossAnim.shot){
+          crossAnim.shot = true;
+          try { sessionStorage.setItem('cv-shot', renderer.domElement.toDataURL('image/jpeg', .9)); } catch {}
+          location.href = crossAnim.w.link.url;
+        }
+        if(arriveFrames >= 0 && ++arriveFrames === 2){ // drawn beneath it: let it melt
+          if(import.meta.env.DEV && sessionStorage.getItem('cv-dev-hold')) (window as any).__release = releaseHandoff; // dev: hold it, to compare the two
+          else releaseHandoff();
+        }
       }
       if(rolled) camera.rotateZ(-Math.PI/2);
       if(devStats){
@@ -3558,7 +3634,10 @@ import Layout from '../layouts/Layout.astro';
       document.fonts.load("10px 'DM Mono'"),
     ]).catch(() => {});
 
-    const galaxyReady = fetch('/galaxies.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null).then(d => {
+    let galaxiesRaw: any = null;
+    const galaxyReady = (PASS ? Promise.resolve(PASS.galaxies) : fetch('/galaxies.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)).then(d => {
+      galaxiesRaw = d;
+      if(PASS) doors = { ...PASS.doors };
       registry = Array.isArray(d?.galaxies) ? d.galaxies : [];
       mainKin = d?.main?.kin || null;
       mainLook = d?.main?.balloon || null;
@@ -3569,16 +3648,17 @@ import Layout from '../layouts/Layout.astro';
       galaxyName = g.name;
       document.title = `${g.name} — Cronovisor`;
       if(g.public && g.dir){ BASE = `/galaxies/${g.dir}`; return; }
+      if(PASS && doors[GAL]?.status === 'open' && doors[GAL].dir){ BASE = dirBase(doors[GAL].dir!); return; }
       return askDoors([GAL]).then(() => {
         const door = doors[GAL];
-        if(door?.status === 'open' && door.dir) BASE = `/galaxies/${door.dir}`;
+        if(door?.status === 'open' && door.dir) BASE = dirBase(door.dir);
         else locked = true;
       });
-    }).then(() => askDoors(registry.filter(g => !g.public && g.slug !== GAL).map(g => g.slug)));
+    }).then(() => PASS ? undefined : askDoors(registry.filter(g => !g.public && g.slug !== GAL).map(g => g.slug)));
     Promise.all([
-      galaxyReady.then(() => locked ? { frases: [] } : fetch(BASE + '/frases.json', { cache: 'no-cache' })
+      galaxyReady.then(() => locked ? { frases: [] } : PASS?.frases ? { frases: PASS.frases } : fetch(BASE + '/frases.json', { cache: 'no-cache' })
         .then(r => { if(!r.ok) throw new Error(); return r.json(); }).catch(() => { if(GAL) locked = true; return { frases: [] }; })),
-      GAL ? Promise.resolve({ sets: [] }) : fetch('/sets.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ sets: [] })),
+      GAL ? Promise.resolve({ sets: [] }) : PASS?.sets ? Promise.resolve({ sets: PASS.sets }) : fetch('/sets.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => ({ sets: [] })),
       fontsReady,
       teaserGate,
     ]).then(([frasesData, setsData, , closed]) => {
@@ -3596,6 +3676,7 @@ import Layout from '../layouts/Layout.astro';
       }
       const builtAt = performance.now();
       buildSpace();
+      setTimeout(() => { if(document.getElementById('handoff') && arriveFrames < 0 && !arriveFadeAt) arriveFrames = 0; }, 0); // crossed in but not arriving here (a door closed meanwhile): just melt it
       if(DEV_Q?.has('stats')) console.log(`[cv] ${pieces.length} pieces, space built in ${Math.round(performance.now()-builtAt)} ms`);
       resize(); // after the layout: the overview stands back as far as the galaxy reaches
       loadThreads();
@@ -3614,7 +3695,7 @@ import Layout from '../layouts/Layout.astro';
         : /^\d{1,4}$/.test(tag)
           ? stations.findIndex(s => s.legacy === parseInt(tag, 10))
           : tag ? stations.findIndex(s => s.id === tag && s.kind !== 'home') : -1;
-      let arrival: { from: string; gas: number; t: number } | null = null;
+      let arrival: { from: string; gas: number; t: number; fly?: boolean } | null = null;
       try { arrival = JSON.parse(sessionStorage.getItem('cv-arrive') || 'null'); sessionStorage.removeItem('cv-arrive'); } catch {}
       if(arrival && Date.now() - arrival.t > 20000) arrival = null;
       if(teaser){
@@ -3664,7 +3745,8 @@ import Layout from '../layouts/Layout.astro';
         tags: ['Next.js', 'Prisma', 'MySQL', 'DeepL', 'DE · ES'] },
     ];
     interface World { link: SiteLink; mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; home: THREE.Vector3 | null; phase: number; seed: number; size: number;
-      beacon?: THREE.Sprite; mark?: HTMLElement; period?: number; }
+      beacon?: THREE.Sprite; mark?: HTMLElement; period?: number;
+      field?: StarField; R?: number; boost?: number; } // an open galaxy: its real stars, laid out as they'll be when you arrive, shrunk; R its radius
     let linkList: SiteLink[] = [];
     let worlds: World[] = [];
     let worldAt = -1, hoverWorld = -1, worldShown = -1;
@@ -3805,7 +3887,7 @@ import Layout from '../layouts/Layout.astro';
     function buildWorlds(){
       if(!renderer) return;
       if(worldAt >= 0) leaveWorld();
-      worlds.forEach(w => { scene.remove(w.mesh); w.mat.map?.dispose(); w.mat.dispose(); const k = billboards.indexOf(w.mesh); if(k >= 0) billboards.splice(k, 1); if(w.beacon){ scene.remove(w.beacon); w.beacon.material.dispose(); } });
+      worlds.forEach(w => { dropField(w); scene.remove(w.mesh); w.mat.map?.dispose(); w.mat.dispose(); const k = billboards.indexOf(w.mesh); if(k >= 0) billboards.splice(k, 1); if(w.beacon){ scene.remove(w.beacon); w.beacon.material.dispose(); } });
       $('sky-marks').replaceChildren(...(sunMark ? [sunMark] : []));
       const ok = [...linkList.filter(l => l && /^https?:\/\//.test(l.url) && (l.label || l.image)).slice(0, 12), ...neighbours()];
       worlds = ok.map((link, k) => {
@@ -3827,7 +3909,7 @@ import Layout from '../layouts/Layout.astro';
           paint();
         }
         const w: World = { link, mesh, mat, home: null, phase: 0, seed, size };
-        if(link.galaxy) addBeacon(w);
+        if(link.galaxy){ addBeacon(w); attachField(w); }
         return w;
       });
       worlds.forEach(w => { const sh = w.link.galaxy && shapes.get(w.link.galaxy.slug || 'eze'); if(sh) w.size = galaxySize(sh); });
@@ -4117,6 +4199,22 @@ import Layout from '../layouts/Layout.astro';
     const galaxySize = (sh: Shape) => 40*Math.max(.85, Math.min(1.7, sh.R/110));
     // the data of every galaxy we're allowed to see, to draw its shape (once per page)
     const shapesAsked = new Set<string>();
+    const fieldData = new Map<string, { sts: Station[]; out: THREE.Vector3[]; R: number; frases: Frase[]; sets: SetMeta[] }>();
+    function attachField(w: World){ // the flat card stays, unseen, for clicks and hovering
+      const d = renderer && w.link.galaxy?.open && fieldData.get(w.link.galaxy.slug || 'eze');
+      if(!d) return;
+      dropField(w);
+      w.field = makeStarField(d.sts, d.out, true);
+      w.R = d.R;
+      w.boost = Math.max(1, Math.min(3, 10/Math.sqrt(d.sts.length))); // a young galaxy: few lights, bigger from afar (as its card drew them)
+      scene.add(w.field.mesh);
+      w.mat.visible = false;
+    }
+    function dropField(w: World){
+      if(!w.field) return;
+      scene.remove(w.field.mesh); w.field.mat.dispose(); // (not the geometry: it shares the plane's buffers)
+      w.field = undefined; w.mat.visible = true;
+    }
     function loadShapes(){
       for(const w of worlds){
         const g = w.link.galaxy;
@@ -4126,11 +4224,13 @@ import Layout from '../layouts/Layout.astro';
         const dir = g.home ? '' : registry.find(x => x.slug === g.slug)?.dir || doors[g.slug]?.dir;
         if(!g.home && !dir) continue;
         shapesAsked.add(key);
-        const base = g.home ? '' : `/galaxies/${dir}`;
+        const base = g.home ? '' : dirBase(dir);
         Promise.all([
           fetch(base + '/frases.json').then(r => r.ok ? r.json() : { frases: [] }).catch(() => ({ frases: [] })),
           g.home ? fetch('/sets.json').then(r => r.ok ? r.json() : { sets: [] }).catch(() => ({ sets: [] })) : Promise.resolve({ sets: [] }),
         ]).then(([f, st]) => {
+          const devN = import.meta.env.DEV && dir === '.dev' ? Number(sessionStorage.getItem('cv-dev-doors')) : 0;
+          if(devN > 1) f.frases = (f.frases || []).slice(-devN); // dev: `?doors=30`, a young neighbour (its own page stays full)
           const sh = shapeOf(f.frases || [], st.sets || []);
           shapes.set(key, sh);
           const x = worlds.find(q => q.link.galaxy && (q.link.galaxy.slug || 'eze') === key);
@@ -4139,6 +4239,11 @@ import Layout from '../layouts/Layout.astro';
           x.mat.map = galaxyCard(x.link.label, true, x.seed, sh);
           x.mat.needsUpdate = true;
           x.size = galaxySize(sh);
+          // its real stars, where they'll be when you get there
+          const sts = [stations[0], ...stationsOf(f.frases || [], st.sets || [], base)];
+          const L = layoutOf(sts);
+          fieldData.set(key, { sts, out: L.out, R: L.R, frases: f.frases || [], sets: st.sets || [] });
+          attachField(x);
         });
       }
     }
@@ -4289,6 +4394,11 @@ import Layout from '../layouts/Layout.astro';
         if(k !== worldAt) w.phase += dt*Math.PI*2/90;
         w.mesh.position.set(w.home.x + Math.cos(w.phase)*2.4, w.home.y + Math.sin(w.phase*2)*.8, w.home.z + Math.sin(w.phase)*2.4);
         w.mesh.scale.setScalar(w.size*(k === hoverWorld || k === worldAt ? 1.08 : 1));
+        if(w.field && w.R && crossAnim?.w !== w){ // (the card drew radius R+22 at 228/512 of its width)
+          w.field.mesh.position.copy(w.mesh.position);
+          w.field.mesh.scale.setScalar(w.size*(k === hoverWorld || k === worldAt ? 1.08 : 1)*.445/(w.R + 22));
+        }
+        if(w.field && crossAnim?.w !== w){ const u = w.field.mat.uniforms; u.uTime.value = sim*.001; u.uViewH.value = window.innerHeight; u.uScale.value = w.field.mesh.scale.x; u.uBoost.value = w.boost || 1; }
         if(w.link.galaxy && !reduced && w.mat.map){ w.mat.map.center.set(.5, .5); w.mat.map.rotation += dt*.02; } // a galaxy turns, slowly
       });
       if(pilot && focused < 0 && pilot.dock >= 0) open = pilot.dock;
@@ -4301,30 +4411,43 @@ import Layout from '../layouts/Layout.astro';
     // Crossing into another galaxy: everything goes to light, then the other universe loads.
     // Coming in from another galaxy in the balloon: you arrive facing this one's heart and its name, on the axis
     // from the galaxy you came from, close enough to read it, the balloon still; fly on from there.
-    function arriveFlying(a: { from: string; gas: number }){
+    function arriveFlying(a: { from: string; gas: number; fly?: boolean }){
       const k = worlds.findIndex(w => w.link.galaxy && (a.from ? w.link.galaxy.slug === a.from : w.link.galaxy.home));
       if(k < 0 || !worlds[k].home || !balloon || !controls) return false;
       const gate = worlds[k].home!.clone(), inward = gate.clone().multiplyScalar(-1).setY(0).normalize();
-      enterPilot();
-      if(!pilot) return false;
+      const fly = a.fly !== false;
       // out from the heart on the side you came from: close to a young galaxy's name, but outside a big one's barrios,
       // its heart ahead and far, a little higher, so you arrive into the whole of it rather than its thick
-      const out = arrivalOut();
-      pilot.pos.copy(inward).multiplyScalar(-out).setY(2 + Math.max(0, out - 58)*.12);
-      pilot.heading = Math.atan2(inward.x, inward.z);
-      pilot.speed = 0;
-      gas = Math.max(0, Math.min(1, a.gas)); // what's left after crossing
-      balloon.group.position.copy(pilot.pos);
-      camera.position.copy(pilot.pos).addScaledVector(inward, -22).add(new THREE.Vector3(0, 6, 0));
-      look.copy(CENTER);
+      const { pilotAt, eye, aim } = arrivalPose(galaxyR, inward, fly);
+      if(fly){
+        enterPilot();
+        if(!pilot) return false;
+        pilot.pos.copy(pilotAt);
+        pilot.heading = Math.atan2(inward.x, inward.z);
+        pilot.speed = 0;
+        pilot.still = true;
+        // what's left after crossing, but never less than one light: arriving empty, the wind used to take the helm at
+        // once and carry you to the heart (Eze sat there unable to fly); one gallon reaches the gate nebula beside you
+        gas = Math.max(1/11, Math.min(1, a.gas));
+        balloon.group.position.copy(pilot.pos);
+        balloon.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), pilot.heading);
+      } else {
+        controls.target.copy(CENTER);
+        controls.enabled = true;
+      }
+      camera.position.copy(eye);
+      look.copy(aim);
       camera.lookAt(look);
-      // its name, as you come out of the light
-      const title = $('arrival');
-      title.querySelector('p')!.textContent = GAL ? 'you have arrived at' : 'back where it all began';
-      title.querySelector('h2')!.textContent = `${galaxyName}’s galaxy`;
-      setTimeout(() => title.classList.add('show'), 900);
-      setTimeout(() => title.classList.remove('show'), 7000);
-      // out of the light you crossed in
+      if(!fly) controls.update();
+      const handoff = document.getElementById('handoff');
+      if(handoff){
+        // the last frame of the crossing covers us: its stars are ours, from the same place; the rest comes in after
+        pieces.forEach(p => { if(p.st.kind !== 'home'){ p.opacity = 1; p.starMix = 1; } });
+        arriveFade = 1; arriveFrames = 0; arriveTitle = true;
+        return true;
+      }
+      showArrivalTitle();
+      // out of the night you crossed in (no drawn crossing: its stars weren't there to draw)
       const warp = $('warp');
       warp.style.transition = 'none'; warp.style.opacity = '1';
       void warp.offsetWidth;
@@ -4333,6 +4456,68 @@ import Layout from '../layouts/Layout.astro';
       return true;
     }
     let crossing = false;
+    // Crossing into another galaxy is one movement, without a cut (Eze, 2026-11-06: no white flash, everything in its
+    // own time). The galaxy you fly into is drawn from afar with its real stars, laid out exactly as they'll be once
+    // you're there, only shrunk (`w.field`). Crossing, it grows around you to its true size while you're carried to
+    // the place where you arrive and the galaxy you leave goes out; the last frame is kept (`cv-shot`) and the next
+    // page shows it at once and melts it into itself, which by then is drawing the same stars from the same place.
+    type V3 = THREE.Vector3;
+    let crossAnim: null | { w: World; t0: number; dur: number; s0: number; H: V3; fly: boolean; camL0: V3; camL1: V3;
+      lookL0: V3; lookL1: V3; off0: V3; off1: V3; head0: number; head1: number; done: boolean; shot: boolean } = null;
+    let crossFade = 0, arriveFade = 0, arriveFadeAt = 0, arriveFrames = -1, arriveTitle = false;
+    // Where you arrive in a galaxy of radius R, coming from the direction `inward` (horizontal, towards its heart):
+    // the same numbers on both sides of the crossing, so its last frame is the next page's first.
+    function arrivalPose(R: number, inward: V3, fly: boolean){
+      const out = R > 90 ? R + 35 : 58;
+      const pilotAt = inward.clone().multiplyScalar(-out).setY(2 + Math.max(0, out - 58)*.12);
+      const eye = pilotAt.clone().addScaledVector(inward, -22).add(new THREE.Vector3(0, 6, 0));
+      const aim = fly ? pilotAt.clone().addScaledVector(inward, 12).add(new THREE.Vector3(0, 2.5, 0)) : new THREE.Vector3();
+      return { pilotAt, eye, aim };
+    }
+    // Everything drawn with a plain material (sprites, points, lines, labels, nebulae, the sun's glow) can be dimmed
+    // together: its own opacity is kept and given back once the crossing or the arrival is over. Shaders have their own.
+    const faded = new Map<THREE.Material, { o: number; t: boolean }>();
+    function dimScene(f: number, keep: (THREE.Object3D | null | undefined)[]){
+      const walk = (o: THREE.Object3D) => {
+        if(keep.includes(o)) return;
+        const ms = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        if(ms) for(const m of Array.isArray(ms) ? ms : [ms]){
+          if((m as THREE.ShaderMaterial).isShaderMaterial) continue;
+          let b = faded.get(m);
+          if(!b){ b = { o: m.opacity, t: m.transparent }; faded.set(m, b); if(!m.transparent){ m.transparent = true; m.needsUpdate = true; } }
+          m.opacity = b.o*(1 - f);
+        }
+        for(const c of o.children) walk(c);
+      };
+      walk(scene);
+    }
+    function undimScene(){
+      for(const [m, b] of faded){ m.opacity = b.o; if(m.transparent !== b.t){ m.transparent = b.t; m.needsUpdate = true; } }
+      faded.clear();
+    }
+    function updateCross(now: number){
+      const c = crossAnim!, u = Math.min(1, (now - c.t0)/c.dur);
+      const e = u*u*u*(u*(u*6 - 15) + 10);  // eased in and out
+      const s = c.s0*Math.pow(1/c.s0, e);   // grows at a steady pace to the eye: exponentially
+      camera.position.copy(c.H).addScaledVector(c.camL0.clone().lerp(c.camL1, e), s);
+      look.copy(c.H).addScaledVector(c.lookL0.clone().lerp(c.lookL1, e), s);
+      camera.lookAt(look);
+      const f = c.w.field!;
+      f.mesh.position.copy(c.H); f.mesh.scale.setScalar(s);
+      f.mat.uniforms.uScale.value = s; f.mat.uniforms.uViewH.value = window.innerHeight;
+      f.mat.uniforms.uBoost.value = 1 + ((c.w.boost || 1) - 1)*(1 - e); // its lights take their true size as you arrive
+      if(c.fly && pilot && balloon){ // the balloon keeps its place in front of you, turning to face the heart
+        pilot.pos.copy(camera.position).add(c.off0.clone().lerp(c.off1, e));
+        pilot.heading = c.head0 + Math.atan2(Math.sin(c.head1 - c.head0), Math.cos(c.head1 - c.head0))*e;
+        pilot.speed = 0; pilot.turn = 0; pilot.vy = 0;
+        const g = balloon.group;
+        g.position.copy(pilot.pos);
+        g.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), pilot.heading);
+      }
+      crossFade = Math.min(1, u/.62); // the galaxy you leave is gone a little after halfway
+      if(u >= 1) c.done = true;
+      return Math.sin(Math.PI*u)*.45;  // the lens breathes with the movement, still again at the end
+    }
     function enterGalaxy(w: World, flying = false){
       if(!w.link.galaxy?.open || crossing) return;
       crossing = true;
@@ -4341,11 +4526,49 @@ import Layout from '../layouts/Layout.astro';
         for(const id of crew) sendTo(id, { k:'cross', g:w.link.galaxy.slug });
         try { sessionStorage.setItem('cv-lead', JSON.stringify({ names:[...crew].map(id => others.get(id)?.name).filter(Boolean), t:Date.now() })); } catch {}
       }
-      // arriving still in the balloon, at the edge you came in from, with the gas you had
-      if(flying || pilot){ try { sessionStorage.setItem('cv-arrive', JSON.stringify({ from: GAL, gas: gas - (follow ? 0 : CROSS_COST), t: Date.now() })); } catch {} }
-      $('warp').classList.add('on');
+      const fly = !!(flying || pilot);
+      // arriving where the crossing leaves you: still in the balloon, with the gas you had, or looking on
+      try { sessionStorage.setItem('cv-arrive', JSON.stringify({ from: GAL, gas: fly ? gas - (follow ? 0 : CROSS_COST) : gas, t: Date.now(), fly })); } catch {}
+      const fd = fieldData.get(w.link.galaxy.slug || 'eze');
+      try { sessionStorage.setItem('cv-pass', JSON.stringify({ t: Date.now(), g: w.link.galaxy.slug || '', galaxies: galaxiesRaw, doors, frases: fd?.frases, sets: w.link.galaxy.home ? fd?.sets : undefined, open: !teaser })); } catch {}
       if(audioCtx) burnerBreath(1.2, .5);
-      setTimeout(() => { location.href = w.link.url; }, 900);
+      if(!w.field || !w.R || !renderer || reduced){ // its stars aren't here (or no movement wanted): a fade to the night
+        $('warp').classList.add('on');
+        setTimeout(() => { location.href = w.link.url; }, 900);
+        return;
+      }
+      if(worldAt >= 0){ worldAt = -1; btnBack.hidden = true; }
+      flight = null;
+      if(controls) controls.enabled = false;
+      const H = w.mesh.position.clone(), s0 = w.field.mesh.scale.x;
+      const inward = (w.home || H).clone().setY(0).normalize();
+      const { pilotAt, eye, aim } = arrivalPose(w.R, inward, !!pilot);
+      crossAnim = {
+        w, t0: performance.now(), dur: 4600, s0, H, fly: !!pilot,
+        camL0: camera.position.clone().sub(H).divideScalar(s0), camL1: eye,
+        lookL0: look.clone().sub(H).divideScalar(s0), lookL1: aim,
+        off0: pilot ? pilot.pos.clone().sub(camera.position) : new THREE.Vector3(), off1: pilotAt.clone().sub(eye),
+        head0: pilot?.heading || 0, head1: Math.atan2(inward.x, inward.z), done: false, shot: false,
+      };
+      document.body.classList.add('crossing');
+    }
+    // the next page is drawn beneath the last frame: the frame melts, the rest of the galaxy comes in after its stars
+    function releaseHandoff(){
+      arriveFrames = -1;
+      const h = document.getElementById('handoff');
+      if(h){ h.style.opacity = '0'; setTimeout(() => h.remove(), 600); }
+      arriveFadeAt = performance.now();
+      document.body.classList.remove('arriving');
+      document.body.classList.add('arrived');
+      setTimeout(() => document.body.classList.remove('arrived'), 1800);
+      if(arriveTitle){ arriveTitle = false; showArrivalTitle(); }
+    }
+    function showArrivalTitle(){
+      const title = $('arrival');
+      title.querySelector('p')!.textContent = GAL ? 'you have arrived at' : 'back where it all began';
+      title.querySelector('h2')!.textContent = `${galaxyName}’s galaxy`;
+      setTimeout(() => title.classList.add('show'), 900);
+      setTimeout(() => title.classList.remove('show'), 7000);
     }
     visitEl.addEventListener('click', e => {
       const w = worlds.find(x => x.link.url === visitEl.getAttribute('href') && x.link.galaxy);
