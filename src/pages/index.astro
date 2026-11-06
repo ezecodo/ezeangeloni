@@ -740,7 +740,7 @@ import Layout from '../layouts/Layout.astro';
     // but nothing answers: no dragging, zooming, opening, flying. Only someone signed in (a galaxy's owner) gets in.
     // It opens by itself on the day. (A curtain in the browser: the files on the server are as public as ever.)
     const RELEASE = Date.parse('2026-12-01T00:00:00+01:00');
-    let teaser = Date.now() < RELEASE;
+    let teaser = Date.now() < RELEASE && !(import.meta.env.DEV && /[?&](fake|stats)\b/.test(location.search)); // dev load tests see it all
     if(teaser) document.body.classList.add('teaser');
     const teaserGate: Promise<boolean> = !teaser ? Promise.resolve(false)
       : ownerPass ? fetch('/api/frases/whoami', { headers: { 'X-Auth': ownerPass } }).then(r => !r.ok).catch(() => true)
@@ -767,7 +767,21 @@ import Layout from '../layouts/Layout.astro';
       for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
       return (h >>> 0).toString(36);
     }
+    // Dev only (stripped from the build): `?fake=3600` adds that many photos (reusing real images, dated in clumps
+    // over 2004–2021 like an imported archive) and `?stats` shows draw calls and frame time, to test a big archive.
+    const DEV_Q = import.meta.env.DEV ? new URLSearchParams(location.search) : null;
+    const DEV_FAKE = DEV_Q ? Number(DEV_Q.get('fake')) || 0 : 0;
+    function fakeFrases(real: Frase[], n: number): Frase[] {
+      const imgs = real.filter(f => f.imagen).map(f => f.imagen!), rng = makeRng(99);
+      if(!imgs.length) return [];
+      const months = Array.from({ length: 150 }, () => `${2004 + Math.floor(rng()*18)}-${String(1 + Math.floor(rng()*12)).padStart(2, '0')}`);
+      return Array.from({ length: n }, (_, i) => {
+        const m = months[Math.floor(Math.pow(rng(), 2.2)*months.length)]; // a few big barrios, many small ones
+        return { imagen: imgs[i % imgs.length], fecha: `${m}-${String(1 + Math.floor(rng()*28)).padStart(2, '0')}`, caption: 'fake ' + i };
+      });
+    }
     function buildStations(frases: Frase[], sets: SetMeta[]){
+      if(DEV_FAKE) frases = [...frases, ...fakeFrases(frases, DEV_FAKE)];
       const merged = [
         ...frases.filter(f => f.imagen || f.texto).map(f => ({ date: f.fecha || '', f, s: null as SetMeta | null })),
         ...sets.map(s => ({ date: s.date || '', f: null, s })),
@@ -867,7 +881,7 @@ import Layout from '../layouts/Layout.astro';
 
     // ── Space ─────────────────────────────────────────────
     interface Piece {
-      star?: THREE.Mesh; starMat?: THREE.ShaderMaterial; stage?: string; beat: number; bright: number; starMix: number;
+      stage?: string; beat: number; bright: number; starMix: number; gone?: boolean;
       st: Station; i: number; mesh: THREE.Mesh; mat: THREE.ShaderMaterial;
       w: number; h: number; lo?: THREE.Texture; hi?: THREE.Texture; hiBusy?: boolean; loBusy?: boolean;
       opacity: number; reveal: number; grow: number; halo?: THREE.Mesh;
@@ -938,12 +952,32 @@ import Layout from '../layouts/Layout.astro';
       }
       return s;
     }
-    const STAR_VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`;
-    const STAR_FRAG = `precision highp float;
-      varying vec2 vUv;
-      uniform vec3 uColor, uTint;
-      uniform float uTime, uBright, uCore, uCloud, uSpike, uRing, uOpacity, uSeed;
+    // Every star is drawn in one go: one plane, instanced once per piece, its look in per-star attributes (colour,
+    // tint, stage shape, size, seed, beat) and only the opacity changing per frame. Until 2026-11 each star was its
+    // own mesh and material, ~3500 draw calls a frame once the Facebook archive came in. Billboarded in view space,
+    // as the meshes were by copying the camera's rotation; additive, so drawing them together changes nothing.
+    const STAR_VERT = `precision highp float;
+      attribute vec3 aPos, aColor, aTint;
+      attribute vec4 aShape;  // core, cloud, spike, ring
+      attribute vec4 aStatic; // size, seed, beat, phase
+      attribute float aBright, aOpacity;
+      uniform float uTime, uPulse;
+      varying vec2 vUv; varying vec3 vColor, vTint; varying vec4 vShape; varying float vSeed, vGain;
       void main(){
+        if(aOpacity < .004){ gl_Position = vec4(2., 2., 2., 1.); return; } // not seen: no pixels at all
+        vUv = uv; vColor = aColor; vTint = aTint; vShape = aShape; vSeed = aStatic.y;
+        vGain = aBright*(1. + uPulse*.28*sin(uTime*aStatic.z*6.28318530718 + aStatic.w))*aOpacity;
+        vec4 mv = modelViewMatrix*vec4(aPos, 1.);
+        mv.xy += position.xy*aStatic.x;
+        mv.z += .6; // a hair in front of its own plate, so a plate that hides what's behind it doesn't hide its own star
+        gl_Position = projectionMatrix*mv;
+      }`;
+    const STAR_FRAG = `precision highp float;
+      varying vec2 vUv; varying vec3 vColor, vTint; varying vec4 vShape; varying float vSeed, vGain;
+      uniform float uTime;
+      void main(){
+        vec3 uColor = vColor, uTint = vTint;
+        float uCore = vShape.x, uCloud = vShape.y, uSpike = vShape.z, uRing = vShape.w, uSeed = vSeed;
         vec2 p = (vUv-.5)*2.;
         float d = length(p), a = atan(p.y, p.x);
         float rough = .5+.5*sin(a*3.+uSeed+uTime*.3)*sin(a*5.-uTime*.2+d*7.);
@@ -952,27 +986,48 @@ import Layout from '../layouts/Layout.astro';
         col += uColor*uSpike*1.2*(exp(-abs(p.y)*60.)*pow(max(0.,1.-abs(p.x)),4.) + exp(-abs(p.x)*60.)*pow(max(0.,1.-abs(p.y)),4.));
         col += uTint*uCloud*.7*pow(max(0.,1.-d),1.6)*(.45+.55*rough);
         col += uTint*uRing*.6*exp(-pow((d-.62)/.07,2.))*(.6+.4*rough);
-        col *= uBright*smoothstep(1.,.86,d)*uOpacity;
+        col *= smoothstep(1.,.86,d)*vGain;
         gl_FragColor = vec4(col, 1.);
       }`;
-    function buildStar(p: Piece){
-      const s = stellar(p.st);
-      p.stage = s.name;
-      p.beat = s.beat;
-      p.bright = s.bright;
-      p.starMat = new THREE.ShaderMaterial({
-        vertexShader:STAR_VERT, fragmentShader:STAR_FRAG, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
-        uniforms:{
-          uColor:{value:new THREE.Vector3(...s.color)}, uTint:{value:new THREE.Vector3(...hexRgb(p.st.tint))},
-          uTime:{value:0}, uBright:{value:s.bright}, uCore:{value:s.core}, uCloud:{value:s.cloud}, uSpike:{value:s.spike}, uRing:{value:s.ring},
-          uOpacity:{value:0}, uSeed:{value:p.st.n*1.7},
-        },
+    let starField: { mesh: THREE.Mesh, mat: THREE.ShaderMaterial, opacity: THREE.InstancedBufferAttribute } | null = null;
+    function buildStarField(){
+      const n = pieces.length, geo = new THREE.InstancedBufferGeometry();
+      geo.index = plane.index;
+      geo.setAttribute('position', plane.getAttribute('position'));
+      geo.setAttribute('uv', plane.getAttribute('uv'));
+      const pos = new Float32Array(n*3), color = new Float32Array(n*3), tint = new Float32Array(n*3), shape = new Float32Array(n*4), stat = new Float32Array(n*4), bright = new Float32Array(n);
+      pieces.forEach((p, i) => {
+        pos.set([p.mesh.position.x, p.mesh.position.y, p.mesh.position.z], i*3);
+        if(p.st.kind === 'home') return; // the logo has no star: its opacity stays 0
+        const s = stellar(p.st);
+        p.stage = s.name; p.beat = s.beat; p.bright = s.bright;
+        color.set(s.color, i*3);
+        tint.set(hexRgb(p.st.tint), i*3);
+        shape.set([s.core, s.cloud, s.spike, s.ring], i*4);
+        stat.set([s.size, p.st.n*1.7, s.beat, p.st.n], i*4);
+        bright[i] = s.bright;
       });
-      p.star = new THREE.Mesh(plane, p.starMat);
-      p.star.position.copy(p.mesh.position);
-      p.star.scale.set(s.size, s.size, 1);
-      scene.add(p.star);
-      billboards.push(p.star);
+      const inst = (a: Float32Array, k: number) => new THREE.InstancedBufferAttribute(a, k);
+      geo.setAttribute('aPos', inst(pos, 3));
+      geo.setAttribute('aColor', inst(color, 3));
+      geo.setAttribute('aTint', inst(tint, 3));
+      geo.setAttribute('aShape', inst(shape, 4));
+      geo.setAttribute('aStatic', inst(stat, 4));
+      geo.setAttribute('aBright', inst(bright, 1));
+      const opacity = inst(new Float32Array(n), 1);
+      opacity.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('aOpacity', opacity);
+      geo.instanceCount = n;
+      const mat = new THREE.ShaderMaterial({
+        vertexShader:STAR_VERT, fragmentShader:STAR_FRAG, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+        uniforms:{ uTime:{value:0}, uPulse:{value:reduced ? 0 : 1} },
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.frustumCulled = false; // one object spread over the whole galaxy
+      mesh.renderOrder = 1; // after the pieces' planes, as each star used to be drawn right after its own plane (the open piece, 10, still covers them);
+                            // a plate solid enough to be seen writes depth, so the stars behind it stay hidden, as when each was sorted on its own
+      scene.add(mesh);
+      starField = { mesh, mat, opacity };
     }
 
     function makeRng(seed: number){
@@ -1026,10 +1081,22 @@ import Layout from '../layouts/Layout.astro';
         return spots.get(m)!.clone().add(new THREE.Vector3(Math.sin(v)*Math.cos(u)*r, Math.cos(v)*r, Math.sin(v)*Math.sin(u)*r));
       });
       // a few relaxation passes so plates don't sit on top of each other
+      // (each piece only looks at its neighbours in a grid of 8.5 cells, rebuilt every pass: all pairs was fine for
+      // 600 pieces, almost a second for 4000)
+      const GAP = 8.5, d = new THREE.Vector3(), key = (v: THREE.Vector3) => `${Math.floor(v.x/GAP)},${Math.floor(v.y/GAP)},${Math.floor(v.z/GAP)}`;
       for(let pass = 0; pass < 24; pass++){
-        for(let a = 1; a < out.length; a++) for(let b = a+1; b < out.length; b++){
-          const d = out[a].clone().sub(out[b]), len = d.length();
-          if(len < 8.5 && len > 1e-3) { d.multiplyScalar((8.5-len)/len*.5); out[a].add(d); out[b].sub(d); }
+        const grid = new Map<string, number[]>();
+        for(let a = 1; a < out.length; a++){ const k = key(out[a]); const c = grid.get(k); if(c) c.push(a); else grid.set(k, [a]); }
+        for(let a = 1; a < out.length; a++){
+          const cx = Math.floor(out[a].x/GAP), cy = Math.floor(out[a].y/GAP), cz = Math.floor(out[a].z/GAP), near: number[] = [];
+          for(let x = -1; x <= 1; x++) for(let y = -1; y <= 1; y++) for(let z = -1; z <= 1; z++)
+            for(const b of grid.get(`${cx+x},${cy+y},${cz+z}`) || []) if(b > a) near.push(b);
+          near.sort((x, y) => x - y);
+          for(const b of near){
+            d.subVectors(out[a], out[b]);
+            const len = d.length();
+            if(len < GAP && len > 1e-3) { d.multiplyScalar((GAP-len)/len*.5); out[a].add(d); out[b].sub(d); }
+          }
         }
         for(let a = 1; a < out.length; a++){ // keep the logo clear
           const len = out[a].length();
@@ -1085,7 +1152,6 @@ import Layout from '../layouts/Layout.astro';
         billboards.push(mesh);
         const p: Piece = { st, i, mesh, mat, w:4, h:4, opacity:0, reveal:0, grow:1, beat:0, bright:1, starMix:1 };
         setSize(p, st.src ? .75 : 1);
-        if(st.kind !== 'home') buildStar(p);
         if(st.kind === 'set'){
           p.halo = new THREE.Mesh(new THREE.RingGeometry(.98, 1, 96), new THREE.MeshBasicMaterial({ color:0xff6eb4, transparent:true, opacity:.7, depthWrite:false }));
           p.halo.position.copy(mesh.position);
@@ -1094,6 +1160,7 @@ import Layout from '../layouts/Layout.astro';
         }
         return p;
       });
+      buildStarField();
       buildThread();
       buildDust();
       buildNebulae();
@@ -2627,7 +2694,7 @@ import Layout from '../layouts/Layout.astro';
       pilot.speed = 0;
       playNote(NOTES[0]/2);
     }
-    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, visit: (k: number) => visitWorld(k) };
+    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get controls(){ return controls; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, visit: (k: number) => visitWorld(k) };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
       const p = pilot;
@@ -3054,6 +3121,8 @@ import Layout from '../layouts/Layout.astro';
       const dt = Math.min(now-lastFrame, 100)/1000;
       lastFrame = now;
       const ease = 1-Math.exp(-dt*6);
+      const workAt = performance.now();
+      if(devStats) renderer.info.reset();
       const frozen = !!pilot?.selecting;
       if(!frozen) sim += dt*1000;
       // slow device: drop bloom and resolution rather than the frame rate
@@ -3154,12 +3223,14 @@ import Layout from '../layouts/Layout.astro';
         p.mesh.scale.set(p.w*p.grow, p.h*p.grow, 1);
         p.mat.uniforms.uReveal.value = p.reveal;
         p.mat.uniforms.uOpacity.value = p.opacity*(1-p.starMix);
-        if(p.starMat){
-          const u = p.starMat.uniforms;
-          u.uTime.value = sim*.001;
-          u.uOpacity.value = p.opacity*p.starMix;
-          u.uBright.value = p.bright*(1 + (reduced ? 0 : .28*Math.sin(sim*.001*p.beat*Math.PI*2 + p.st.n)));
+        // what can't be seen isn't drawn: far away a piece is only its star, at a piece the others are only faint
+        // planes. (Hidden meshes still answer the raycaster, so hovering and clicking a star works as before.)
+        if(!p.gone){
+          p.mesh.visible = home || p.mat.uniforms.uOpacity.value > .004;
+          p.mat.depthWrite = !home && p.mat.uniforms.uOpacity.value > .5; // (not the logo: its soft glow would cut holes in the light behind it)
+          if(p.halo) p.halo.visible = p.opacity > .004;
         }
+        if(starField) starField.opacity.array[p.i] = p.gone || home ? 0 : p.opacity*p.starMix;
         p.mat.uniforms.uGain.value = home ? 1 + logoPulse*1.8 : isOn || isHov ? 1 : .74;
         if(p.halo){
           const s = Math.max(p.w, p.h)*(.85 + .05*Math.sin(sim*.0016));
@@ -3167,6 +3238,7 @@ import Layout from '../layouts/Layout.astro';
           (p.halo.material as THREE.MeshBasicMaterial).opacity = p.opacity*.7;
         }
       }
+      if(starField){ starField.opacity.needsUpdate = true; starField.mat.uniforms.uTime.value = sim*.001; }
       calm += ((focused >= 0 ? 1 : 0)-calm)*ease; // 1 = at a piece, nothing may touch it
       const dim = 1-calm*.72;
       if(thread){
@@ -3187,7 +3259,22 @@ import Layout from '../layouts/Layout.astro';
         composer.render();
       }
       if(rolled) camera.rotateZ(-Math.PI/2);
+      if(devStats){
+        const ms = performance.now()-workAt, st = devStats;
+        st.work = st.work*.95 + ms*.05; st.gap = st.gap*.95 + dt*1000*.05;
+        if(now-st.at > 500){
+          st.at = now;
+          st.el.textContent = `${pieces.length} pieces · ${renderer.info.render.calls} draw calls · ${Math.round(renderer.info.render.triangles/1000)}k tris · cpu ${st.work.toFixed(1)} ms/frame · ${Math.round(1000/st.gap)} fps (budget ${Math.round(1000/frameBudget(now))})`;
+        }
+      }
     }
+    const devStats = DEV_Q?.has('stats') ? (() => {
+      renderer && (renderer.info.autoReset = false); // the composer renders several passes: count them all
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:9999;font:11px DM Mono,monospace;color:#6ef9f5;background:rgba(8,8,16,.8);padding:4px 7px;pointer-events:none';
+      document.body.appendChild(el);
+      return { el, at: 0, work: 0, gap: 16 };
+    })() : null;
 
     // ── Sheets ────────────────────────────────────────────
     const sheets = { index:$('index-sheet'), about:$('about-sheet'), set:$('set-sheet') };
@@ -3507,7 +3594,9 @@ import Layout from '../layouts/Layout.astro';
         openIndex();
         return;
       }
+      const builtAt = performance.now();
       buildSpace();
+      if(DEV_Q?.has('stats')) console.log(`[cv] ${pieces.length} pieces, space built in ${Math.round(performance.now()-builtAt)} ms`);
       resize(); // after the layout: the overview stands back as far as the galaxy reaches
       loadThreads();
       if(!teaser) openArrivedPiece();
@@ -4578,7 +4667,7 @@ import Layout from '../layouts/Layout.astro';
       if(!r?.ok){ alert('could not remove it'); return; }
       const p = pieces[focused];
       backOut();
-      if(p){ p.mesh.visible = false; p.mesh.layers.set(31); if(p.star) p.star.visible = false; if(p.halo) p.halo.visible = false; } // layer 31: not drawn, not hit by a click // gone; the map closes over it on the next visit
+      if(p){ p.gone = true; p.mesh.visible = false; p.mesh.layers.set(31); if(p.halo) p.halo.visible = false; } // layer 31: not drawn, not hit by a click // gone; the map closes over it on the next visit
       document.querySelector(`#index-grid .cell[data-i="${p?.i}"]`)?.remove(); // and from the index
     });
     // ...and give one of their photos its words right there, flying (describing from a phone at upload is fiddly).

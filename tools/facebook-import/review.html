@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>facebook → cronovisor</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --bg: #080810; --text: #f0ede8; --muted: rgba(240,237,232,.45); --line: rgba(240,237,232,.12); --cyan: #6ef9f5; --gold: #ffd166; --green: #b8f75b; --red: #ff3f3f; --pink: #ff6eb4; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; }
+  header { position: sticky; top: 0; z-index: 5; background: rgba(8,8,16,.94); border-bottom: 1px solid var(--line); padding: 14px 22px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  h1 { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 26px; margin-right: 10px; }
+  .muted { color: var(--muted); }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 1px solid var(--line); padding: 7px 11px; cursor: pointer; letter-spacing: .12em; text-transform: uppercase; font-size: 10px; }
+  button:hover { border-color: rgba(240,237,232,.4); }
+  button.go { border-color: var(--cyan); color: var(--cyan); }
+  button:disabled { opacity: .35; cursor: default; }
+  input[type=password], input[type=text], input[type=date] { background: rgba(240,237,232,.05); border: 1px solid var(--line); padding: 6px 8px; outline: none; }
+  #status { flex-basis: 100%; color: var(--muted); }
+  #index { flex-basis: 100%; display: flex; gap: 4px 10px; flex-wrap: wrap; max-height: 64px; overflow: auto; font-size: 10px; }
+  #index a { color: var(--muted); text-decoration: none; }
+  #index a:hover { color: var(--text); }
+  #index a.off { opacity: .35; text-decoration: line-through; }
+  main { padding: 10px 22px 80px; }
+  section { margin-top: 40px; }
+  section.off .grid { opacity: .5; }
+  .ah { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 10px; }
+  .ah h2 { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 34px; }
+  .ah label { display: flex; gap: 6px; align-items: center; cursor: pointer; letter-spacing: .12em; text-transform: uppercase; font-size: 10px; }
+  .ah input { accent-color: var(--cyan); width: 16px; height: 16px; }
+  .ah .desc { flex-basis: 100%; font-family: 'Cormorant Garamond', serif; font-size: 15px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .card { border: 1px solid var(--line); position: relative; transition: opacity .2s; }
+  .card.off { opacity: .3; }
+  .card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #11111f; cursor: pointer; }
+  .card .f { padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+  .card input[type=text], .card input[type=date] { width: 100%; font-size: 11px; }
+  .card .pick { position: absolute; top: 7px; left: 7px; width: 18px; height: 18px; accent-color: var(--cyan); }
+  .tags { display: flex; gap: 5px; flex-wrap: wrap; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+  .tags span { padding: 2px 5px; border: 1px solid var(--line); color: var(--muted); }
+  .tags .camera { color: var(--green); border-color: rgba(184,247,91,.4); }
+  .tags .album { color: var(--gold); border-color: rgba(255,209,102,.4); }
+  .tags .yours { color: var(--text); border-color: rgba(240,237,232,.5); }
+  .ah .adate { font-size: 11px; }
+  .tags .dup { color: var(--pink); border-color: rgba(255,110,180,.4); }
+  .state { position: absolute; top: 6px; right: 8px; font-size: 18px; }
+  .card.done { opacity: .5; }
+  .card.done .state::after { content: '✓'; color: var(--green); }
+  .card.busy .state::after { content: '…'; }
+  .card.fail { border-color: var(--red); }
+  .card .err { color: var(--red); font-size: 10px; }
+  .full { font-family: 'Cormorant Garamond', serif; font-size: 14px; line-height: 1.3; color: var(--muted); max-height: 0; overflow: hidden; transition: max-height .3s; white-space: pre-wrap; }
+  .card.open .full { max-height: 400px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>facebook → cronovisor</h1>
+  <span id="count" class="muted"></span>
+  <button id="all">all</button><button id="none">none</button><span id="saved" class="muted"></span>
+  <span style="flex:1"></span>
+  <input type="password" id="pass" placeholder="admin password" autocomplete="off">
+  <button class="go" id="upload" disabled>upload</button>
+  <div id="index"></div>
+  <div id="status">date: <span style="color:var(--green)">green</span> camera · <span style="color:var(--gold)">gold</span> from the album's name (check it) · grey the day it went up to Facebook · <span style="color:var(--pink)">pink</span> duplicates, unticked · white your own · click a photo to read its text · "date the album" dates every photo in it without a camera date · everything is kept as you go</div>
+</header>
+<main id="main"></main>
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  const { items, done, target } = await fetch('/items.json').then((r) => r.json());
+  const today = new Date().toISOString().slice(0, 10);
+  items.forEach((it) => { it.on = done[it.id] ? false : typeof it.on === 'boolean' ? it.on : !it.dup; it.state = done[it.id] ? 'done' : ''; });
+  // every change goes to disk (.cronovisor-review.json in the export folder), so reloading loses nothing
+  let pending = {}, saveTimer = 0;
+  function keep(it, change){
+    Object.assign(pending[it.id] ||= {}, change);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const body = pending; pending = {};
+      try { const r = await fetch('/review', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); if (!r.ok) throw 0; $('saved').textContent = 'saved'; }
+      catch { pending = { ...body, ...pending }; $('saved').textContent = 'not saved, is the importer still running?'; }
+    }, 400);
+    $('saved').textContent = '…';
+  }
+  // albums in the order of their first photo
+  const albums = [];
+  for (const it of items) {
+    let a = albums.find((x) => x.name === it.album);
+    if (!a) albums.push(a = { name: it.album, list: [] });
+    a.list.push(it);
+  }
+
+  function render() {
+    const main = $('main');
+    main.replaceChildren();
+    albums.forEach((a, k) => {
+      const s = document.createElement('section'); s.id = 'a' + k;
+      const yrs = [...new Set(a.list.map((i) => i.fecha.slice(0, 4)))];
+      s.innerHTML = `<div class="ah"><h2></h2><span class="muted"></span><label><input type="checkbox" class="whole"> whole album</label><input type="date" class="adate" title="date for every photo here without a camera date"><button class="aset">date the album</button></div><div class="grid"></div>`;
+      s.querySelector('h2').textContent = a.name;
+      s.querySelector('.ah span').textContent = `${a.list.length} · ${yrs[0]}${yrs.length > 1 ? '–' + yrs[yrs.length - 1] : ''}`;
+      const box = s.querySelector('.ah .whole');
+      const adate = s.querySelector('.adate'); adate.max = today;
+      s.querySelector('.aset').title = `sets this date on the ${a.list.filter((i) => i.how !== 'camera' && i.state !== 'done').length} photos without a camera date`;
+      s.querySelector('.aset').addEventListener('click', () => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(adate.value)) return adate.focus();
+        a.list.forEach((i) => { if (i.how !== 'camera' && i.state !== 'done') { i.fecha = adate.value; i.how = 'yours'; keep(i, { fecha: i.fecha }); } });
+        s.querySelector('.grid').replaceChildren(...a.list.map(card));
+        tally();
+      });
+      a.box = box; a.sec = s;
+      box.addEventListener('change', () => { a.list.forEach((i) => { if (i.state !== 'done' && (box.checked ? !i.dup : true)) { i.on = box.checked; keep(i, { on: i.on }); } i.el && i.el.classList.toggle('off', !i.on); i.el && (i.el.querySelector('.pick').checked = i.on); }); tally(); });
+      s.querySelector('.grid').append(...a.list.map(card));
+      main.append(s);
+    });
+    tally();
+  }
+  function card(it) {
+    const el = document.createElement('div');
+    el.className = 'card' + (it.on ? '' : ' off') + (it.state ? ' ' + it.state : '');
+    el.innerHTML = `<img loading="lazy" alt=""><input type="checkbox" class="pick"><span class="state"></span>
+      <div class="f"><input type="date"><input type="text" maxlength="300" placeholder="title"><div class="tags"></div><div class="full"></div><div class="err"></div></div>`;
+    el.querySelector('img').src = '/img?id=' + encodeURIComponent(it.id);
+    const [date, cap] = el.querySelectorAll('.f input');
+    const pick = el.querySelector('.pick');
+    date.value = it.fecha; date.max = today; cap.value = it.caption; pick.checked = it.on; pick.disabled = date.disabled = cap.disabled = it.state === 'done';
+    const tags = [];
+    if (it.how === 'camera') tags.push('<span class="camera">camera</span>');
+    if (it.how === 'album') tags.push(`<span class="album">from album · up ${it.uploaded}</span>`);
+    if (it.how === 'uploaded') tags.push('<span>upload day</span>');
+    if (it.how === 'yours') tags.push(`<span class="yours">your date · up ${it.uploaded}</span>`);
+    if (it.dup) tags.push(`<span class="dup"></span>`);
+    el.querySelector('.tags').innerHTML = tags.join('');
+    if (it.dup) el.querySelector('.dup').textContent = it.dup;
+    el.querySelector('.full').textContent = it.full;
+    pick.addEventListener('change', () => { it.on = pick.checked; keep(it, { on: it.on }); el.classList.toggle('off', !it.on); tally(); });
+    date.addEventListener('change', () => { it.fecha = date.value; if (/^\d{4}-\d{2}-\d{2}$/.test(date.value)) { it.how = 'yours'; keep(it, { fecha: it.fecha }); } tally(); });
+    cap.addEventListener('input', () => { it.caption = cap.value; keep(it, { caption: it.caption }); });
+    el.querySelector('img').addEventListener('click', () => el.classList.toggle('open'));
+    it.el = el;
+    return el;
+  }
+  function tally() {
+    const todo = items.filter((i) => i.on && i.state !== 'done');
+    const months = new Set(todo.map((i) => i.fecha.slice(0, 7)));
+    $('count').textContent = `${items.length} photos · ${todo.length} chosen · ${months.size} barrios · ${items.filter((i) => i.state === 'done').length} uploaded`;
+    $('upload').disabled = !todo.length || !$('pass').value || todo.some((i) => !/^\d{4}-\d{2}-\d{2}$/.test(i.fecha));
+    albums.forEach((a) => { const on = a.list.filter((i) => i.on).length; a.box.checked = on > 0; a.box.indeterminate = on > 0 && on < a.list.filter((i) => !i.dup).length; a.sec.classList.toggle('off', !on); });
+    $('index').innerHTML = albums.map((a, k) => `<a href="#a${k}" class="${a.list.some((i) => i.on) ? '' : 'off'}"></a>`).join('');
+    [...$('index').children].forEach((el, k) => { el.textContent = `${albums[k].name} (${albums[k].list.filter((i) => i.on).length})`; });
+  }
+  $('pass').addEventListener('input', tally);
+  $('all').addEventListener('click', () => { items.forEach((i) => { if (i.state !== 'done' && !i.dup) { i.on = true; keep(i, { on: true }); } }); render(); });
+  $('none').addEventListener('click', () => { items.forEach((i) => { if (i.state !== 'done') { i.on = false; keep(i, { on: false }); } }); render(); });
+  $('upload').addEventListener('click', async () => {
+    const todo = items.filter((i) => i.on && i.state !== 'done').sort((a, b) => a.fecha.localeCompare(b.fecha));
+    $('upload').disabled = true;
+    let ok = 0, failed = 0;
+    for (const [k, it] of todo.entries()) {
+      it.el.className = 'card busy';
+      $('status').textContent = `uploading ${k + 1} / ${todo.length} → ${target}`;
+      try {
+        const r = await fetch('/upload', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Auth': $('pass').value }, body: JSON.stringify({ id: it.id, fecha: it.fecha, caption: it.caption }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || r.status);
+        it.state = 'done'; it.el.className = 'card done'; ok++;
+      } catch (e) {
+        it.el.className = 'card fail'; it.el.querySelector('.err').textContent = e.message; failed++;
+        if (/unauthorized|rate limited/.test(e.message)) { $('status').textContent = `stopped: ${e.message}`; break; }
+      }
+    }
+    if (!/stopped/.test($('status').textContent)) $('status').textContent = `${ok} uploaded${failed ? ` · ${failed} failed (red), upload again to retry` : ''} · open ezeangeloni.xyz to see the barrios`;
+    tally();
+  });
+  render();
+</script>
+</body>
+</html>
