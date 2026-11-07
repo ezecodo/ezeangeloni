@@ -319,7 +319,13 @@ import Layout from '../layouts/Layout.astro';
       .t-btn .choosing, .t-btn .at-piece, body.focus .t-btn .flying, body.selecting .t-btn .flying { display: none; }
       body.focus .t-btn .at-piece { display: inline; }
       body.selecting:not(.focus) .t-btn .choosing { display: inline; }
-      body.selecting:not(.focus) #t-b0, body.selecting:not(.focus) #t-b3 { opacity: .15; pointer-events: none; }
+      body.selecting:not(.focus) #t-b0 { opacity: .15; pointer-events: none; }
+      /* still: everything holds, the picture is left alone (any input goes on) */
+      body.still #hud, body.still #pilot-hud, body.still #sky-marks, body.still #sky-names, body.still #cands, body.still #selector, body.still #balloon-tag, body.still .t-btn, body.still #t-zone, body.still #t-base, body.still #t-knob, body.still #mic, body.still #tour, body.still #arrival { opacity: 0 !important; pointer-events: none !important; transition: opacity .6s; }
+      #still-msg { position: fixed; left: 0; right: 0; bottom: calc(2.4rem + env(safe-area-inset-bottom)); z-index: 13; text-align: center; pointer-events: none; font-size: .6rem; letter-spacing: .3em; text-transform: uppercase; color: var(--muted); text-shadow: 0 0 14px rgba(8,8,16,.9); opacity: 0; }
+      body.still #still-msg { animation: still-msg 3.2s ease forwards; }
+      @keyframes still-msg { 0% { opacity: 0; } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+      body.kb #still-msg .pad, body:not(.kb) #still-msg .kb, body.touch #still-msg .pad, body.touch #still-msg .kb, body:not(.touch) #still-msg .tch { display: none; }
       body.touch #pilot-hud .pad, body.touch #pilot-hud .kb, body:not(.touch) #pilot-hud .tch { display: none; }
       #wind-arrow { display: inline-block; margin-right: .7em; font-weight: 400; transition: transform .4s; }
       #selector { position: fixed; left: 0; top: 0; z-index: 11; pointer-events: none; opacity: 0; transition: opacity .25s, transform .22s ease-out, width .22s ease-out, height .22s ease-out; }
@@ -500,7 +506,8 @@ import Layout from '../layouts/Layout.astro';
   <div id="cands" aria-hidden="true"></div>
   <div id="blast-light" aria-hidden="true"></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span><span class="crew" id="crew-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume</span><span class="kb">universe paused · arrows choose · E open · Q resume</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
+  <p id="still-msg" aria-live="polite">still · <span class="kb">any key</span><span class="pad">any button</span><span class="tch">tap</span> goes on</p>
+  <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · P still · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span><span class="crew" id="crew-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose · still holds the picture</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume · ▲ still</span><span class="kb">universe paused · arrows choose · E open · Q resume · P still</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
   <div id="teaser" hidden>
     <div class="t-title"><h1>Cronovisor</h1><p class="t-sub">pasado observado · futuro soberano</p><p class="t-date">01 · 12 · 2026</p><p class="t-count" id="teaser-count"></p></div>
     <div class="t-door"><button id="teaser-key">sign in</button><form id="teaser-signin" hidden><input id="teaser-pass" type="password" name="password" autocomplete="current-password" placeholder="password" /><button>enter</button></form><span id="teaser-msg"></span></div>
@@ -536,7 +543,7 @@ import Layout from '../layouts/Layout.astro';
   <button class="t-btn" id="t-b0" aria-hidden="true" tabindex="-1"><span class="flying">burner</span><span class="letgo">let<br>go</span><span class="at-piece">slide<br>show</span></button>
   <button class="t-btn" id="t-b1" aria-hidden="true" tabindex="-1"><span class="flying">pause</span><span class="choosing">open</span><span class="at-piece">next</span></button>
   <button class="t-btn" id="t-b2" aria-hidden="true" tabindex="-1"><span class="flying">land</span><span class="choosing">resume</span><span class="at-piece">fly on</span></button>
-  <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="meeting">gas</span><span class="at-piece">word</span></button>
+  <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="meeting">gas</span><span class="choosing">still</span><span class="at-piece">word</span></button>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
@@ -2211,11 +2218,13 @@ import Layout from '../layouts/Layout.astro';
     interface Homing { t0: number; from: THREE.Vector3; ctrl: THREE.Vector3; to: THREE.Vector3; dur: number; landed: number; }
     let pilot: { pos: THREE.Vector3; vy: number; speed: number; turn: number; heading: number; drift: THREE.Vector3; overview: THREE.Vector3; hudAt: number; selecting: boolean; sel: number; cands: number[]; picked: number[] | null; home: Homing | null; drawing: number; dock: number; dockFree: boolean; undock: number; nearGalaxy: number; auto: { k: number; sun: boolean } | null; lookYaw: number; lookPitch: number; knock: THREE.Vector3; still?: boolean } | null = null; // still: just arrived from another galaxy, hovering until you fly
     let padRepeat = 0;
+    // still: the picture holds (nothing moves, nothing is drawn, the interface steps aside) until any input
+    let still: { choosing: boolean; drawn: boolean } | null = null; // drawn: its last frame (no wind streaks, no blur) is on the canvas
     let PILOT_R = 150;
     const SUN_HEAT = 105; // inside this the Sun's heat pushes the balloon away
     const PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
     // The keyboard drives the same virtual pad, so everything below works the same without a joystick:
-    // WASD always (that's how you take off); arrows, space, E/Enter, Q/Backspace only once you're flying,
+    // WASD always (that's how you take off, and ↑ too from the overview); arrows, space, E/Enter, Q/Backspace only once you're flying,
     // so before that they keep browsing the archive as always. T (leave a word) and Esc have their own keys.
     const keys = new Set<string>();
     const KB_ALWAYS = ['w','a','s','d'], KB_PILOT = ['arrowup','arrowdown','arrowleft','arrowright',' ','e','enter','q','backspace'];
@@ -2224,7 +2233,9 @@ import Layout from '../layouts/Layout.astro';
       const t = (e.target as HTMLElement).tagName;
       if(t === 'INPUT' || t === 'TEXTAREA') return;
       const k = e.key.toLowerCase();
-      if(KB_ALWAYS.includes(k) || (pilot && KB_PILOT.includes(k))){ keys.add(k); if(pilot) e.preventDefault(); }
+      // ↑ from the overview takes off like W (←/→ still browse the archive)
+      const upTakeOff = k === 'arrowup' && !pilot && focused < 0;
+      if(KB_ALWAYS.includes(k) || (pilot && KB_PILOT.includes(k)) || upTakeOff){ keys.add(k); if(pilot || upTakeOff) e.preventDefault(); }
     });
     window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => keys.clear());
@@ -2337,6 +2348,10 @@ import Layout from '../layouts/Layout.astro';
         else if(balloon?.mode === 'cruise' && !flight && focused < 0 && worldAt < 0 && !boarded){ flyWanted = 0; enterPilot(); }
       }
       const dir = pad.x || pad.y;
+      if(still){ // any new push or press goes on; it's spent on that, so nothing else happens this frame
+        if(pad.held.some((h, i) => h && !pad.prev[i]) || (pad.x !== pad.px || pad.y !== pad.py) && !!dir) leaveStill(now);
+        return;
+      }
       if(!dir) padRepeat = 0;
       if(!dir && !pad.held.some(Boolean)) return;
       // holding still counts as presence, but only a new press or push interrupts the slideshow
@@ -2371,6 +2386,7 @@ import Layout from '../layouts/Layout.astro';
         if(tap(1) && pilot.sel === 0) board();
         else if(tap(1) && pilot.sel > 0){ const i = pilot.sel, group = pilot.cands; endSelection(); pilot.picked = group; focusOn(i, 1300); }
         if(tap(2)) endSelection();
+        else if(tap(3)) enterStill();
         return;
       }
       if(pilot.home){ if(tap(2)) exitPilot(); return; } // the wind has the balloon now
@@ -2517,6 +2533,23 @@ import Layout from '../layouts/Layout.astro';
       hovered = -1;
       document.body.classList.remove('selecting');
       showMeta(0);
+    }
+    // still: for a composition worth looking at. The last frame stays on the canvas and nothing is drawn
+    // (the machine rests too); the interface fades away. Not on an expedition: the others would lose you
+    function enterStill(){
+      if(still || !pilot || focused >= 0 || flight || boarded || pilot.home || follow || crew.size) return;
+      still = { choosing: pilot.selecting, drawn: false };
+      document.body.classList.add('still');
+      if(staticGain && audioCtx) staticGain.gain.setTargetAtTime(0, audioCtx.currentTime, .08);
+      burnerOn = false;
+      playNote(NOTES[0]/4);
+    }
+    function leaveStill(now = performance.now()){
+      if(!still) return;
+      still = null;
+      document.body.classList.remove('still');
+      lastFrame = now; lastInput = now;
+      playNote(NOTES[0]/2);
     }
     // jump to the next of those pieces in the pushed direction on screen, preferring the closest
     function moveSelection(dx: number, dy: number){
@@ -3062,6 +3095,7 @@ import Layout from '../layouts/Layout.astro';
       pointerFresh = true;
     });
     screen.addEventListener('pointerdown', e => {
+      if(still){ leaveStill(); return; }
       if(pilot && focused < 0){ // the mouse takes the universe back, unless it points at a galaxy to sail to
         setNdc(e);
         const w = pickWorld();
@@ -3109,6 +3143,7 @@ import Layout from '../layouts/Layout.astro';
     btnBack.addEventListener('click', () => { touched(); if(worldAt >= 0) leaveWorld(); else backOut(); });
 
     window.addEventListener('keydown', e => {
+      if(still){ if(!keys.has(e.key.toLowerCase())) leaveStill(); e.preventDefault(); return; } // the pad's keys go on through pollPad
       if(e.key === 'Escape'){
         if(boarded){ if(!delivering) leaveBalloon(); }
         else if(anyOpen()) closeSheets();
@@ -3120,6 +3155,7 @@ import Layout from '../layouts/Layout.astro';
       }
       if(boarded || anyOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
       if(pilot && KB_PILOT.includes(e.key.toLowerCase())) return; // flying: the balloon handles these
+      if(e.key === 'ArrowUp' && !pilot && focused < 0) return; // at the overview ↑ takes off, like W
       const tag = (e.target as HTMLElement).tagName;
       if(tag === 'INPUT' || tag === 'TEXTAREA') return; // typing, not steering
       if(e.key === ' ' && tag === 'BUTTON') return;
@@ -3131,6 +3167,7 @@ import Layout from '../layouts/Layout.astro';
         case 'i': openIndex(); break;
         case 'h': startTour(); break;
         case 't': board(); break;
+        case 'p': if(pilot && focused < 0) enterStill(); break;
         case 'c': if(meet){ openTalk(); e.preventDefault(); } break;
         case 'g': if(meet) giveGas(); break;
         case 'v': toggleMute(); break;
@@ -3142,6 +3179,7 @@ import Layout from '../layouts/Layout.astro';
 
     function resize(){
       if(!renderer) return;
+      if(still) still.drawn = false; // a new size clears the canvas: draw the picture again
       const W = window.innerWidth, H = window.innerHeight;
       renderer.setPixelRatio(DPR);
       renderer.setSize(W, H, false);
@@ -3172,15 +3210,16 @@ import Layout from '../layouts/Layout.astro';
     function frame(now: number){
       requestAnimationFrame(frame);
       if(renderer && !document.hidden) pollPad(now);
+      if(still?.drawn){ lastFrame = now; if(renderer && !document.hidden) updateSky(now, 0); return; } // the picture holds; the others still hear you're here
       if(!renderer || document.hidden || anyOpen()){ lastFrame = now; return; }
       const budget = frameBudget(now);
-      if(now-lastFrame < budget - 2) return;
-      const dt = Math.min(now-lastFrame, 100)/1000;
+      if(!still && now-lastFrame < budget - 2) return;
+      const dt = still ? 0 : Math.min(now-lastFrame, 100)/1000; // still: one last frame, with time stopped
       lastFrame = now;
       const ease = 1-Math.exp(-dt*6);
       const workAt = performance.now();
       if(devStats) renderer.info.reset();
-      const frozen = !!pilot?.selecting;
+      const frozen = !!pilot?.selecting || !!still;
       if(!frozen) sim += dt*1000;
       // slow device: drop bloom and resolution rather than the frame rate
       if(budget < 20) slowAvg = slowAvg*.97 + dt*.03; // only judge the device when we asked for full rate
@@ -3212,7 +3251,7 @@ import Layout from '../layouts/Layout.astro';
       // screen (the balloon, glued to the camera, stays upright on screen); undone after drawing
       const rolled = teaser && window.innerHeight > window.innerWidth;
       if(rolled) camera.rotateZ(Math.PI/2);
-      if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded && !sunScene; // still air for the words at the Sun
+      if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded && !sunScene && !still; // still air for the words at the Sun
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
       updateSky(now, dt);
       updateMeeting(now);
@@ -3316,10 +3355,11 @@ import Layout from '../layouts/Layout.astro';
       else if(faded.size) undimScene();
       if(!reduced && !frozen){ stars.rotation.y += dt*.004; nebula.rotation.y += dt*.0015; }
       placeSelector();
+      if(still) still.drawn = true; // this is the picture that holds
       if(composer && bloom && lens){
         bloom.strength = BLOOM*(1-calm) + logoPulse*.8;
         bloom.enabled = !lowPower && bloom.strength > .01;
-        lens.uniforms.uEnergy.value = reduced ? 0 : flightEnergy;
+        lens.uniforms.uEnergy.value = reduced || still ? 0 : flightEnergy; // a still is sharp
         lens.uniforms.uGrain.value = 1-calm;
         lens.uniforms.uTime.value = now*.001;
         composer.render();
