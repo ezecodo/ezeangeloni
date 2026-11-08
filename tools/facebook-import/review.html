@@ -22,10 +22,9 @@
   #index { flex-basis: 100%; display: flex; gap: 4px 10px; flex-wrap: wrap; max-height: 64px; overflow: auto; font-size: 10px; }
   #index a { color: var(--muted); text-decoration: none; }
   #index a:hover { color: var(--text); }
-  #index a.off { opacity: .35; text-decoration: line-through; }
+  #index a:not(.off) { color: var(--cyan); } /* albums with something chosen */
   main { padding: 10px 22px 80px; }
   section { margin-top: 40px; }
-  section.off .grid { opacity: .5; }
   .ah { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 10px; }
   .ah h2 { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 34px; }
   .ah label { display: flex; gap: 6px; align-items: center; cursor: pointer; letter-spacing: .12em; text-transform: uppercase; font-size: 10px; }
@@ -33,7 +32,7 @@
   .ah .desc { flex-basis: 100%; font-family: 'Cormorant Garamond', serif; font-size: 15px; color: var(--muted); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
   .card { border: 1px solid var(--line); position: relative; transition: opacity .2s; }
-  .card.off { opacity: .3; }
+  .card:not(.off):not(.done) { outline: 3px solid var(--cyan); outline-offset: -1px; } /* chosen: framed; the rest stay in full colour, to be seen */
   .card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #11111f; cursor: pointer; }
   .card .f { padding: 6px; display: flex; flex-direction: column; gap: 5px; }
   .card input[type=text], .card input[type=date] { width: 100%; font-size: 11px; }
@@ -53,6 +52,22 @@
   .card .err { color: var(--red); font-size: 10px; }
   .full { font-family: 'Cormorant Garamond', serif; font-size: 14px; line-height: 1.3; color: var(--muted); max-height: 0; overflow: hidden; transition: max-height .3s; white-space: pre-wrap; }
   .card.open .full { max-height: 400px; }
+  /* the whole picture, uncropped: click a photo; ← → the next one, space chooses, esc closes */
+  #lb { position: fixed; inset: 0; z-index: 20; background: rgba(8,8,16,.96); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 18px; }
+  #lb.on { display: flex; }
+  #lb img { max-width: 100%; object-fit: contain; outline: 3px solid transparent; outline-offset: 4px; }
+  #lb.chosen img { outline-color: var(--cyan); }
+  #lb .meta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; color: var(--muted); letter-spacing: .1em; }
+  #lb .meta b { color: var(--text); font-weight: normal; }
+  #lb .txt { font-family: 'Cormorant Garamond', serif; font-size: 17px; line-height: 1.3; max-width: 760px; max-height: 70px; overflow: auto; text-align: center; white-space: pre-wrap; }
+  #lb button.pickb.chosen { border-color: var(--cyan); color: var(--cyan); }
+  #lb .nav { position: absolute; top: 50%; transform: translateY(-50%); font-size: 26px; border: none; padding: 20px; }
+  #lb .prev { left: 6px; } #lb .next { right: 6px; }
+  #lb .x { position: absolute; top: 14px; right: 18px; }
+  #lb .edit { display: flex; gap: 8px; width: min(760px, 100%); }
+  #lb .edit .cap { flex: 1; font-family: 'Cormorant Garamond', serif; font-size: 18px; padding: 6px 10px; }
+  #lb .edit input:focus { border-color: var(--cyan); }
+  #lb .edit input:disabled { opacity: .4; }
 </style>
 </head>
 <body>
@@ -67,11 +82,13 @@
   <div id="status">date: <span style="color:var(--green)">green</span> camera · <span style="color:var(--gold)">gold</span> from the album's name (check it) · grey the day it went up to Facebook · <span style="color:var(--pink)">pink</span> duplicates, unticked · white your own · click a photo to read its text · "date the album" dates every photo in it without a camera date · everything is kept as you go</div>
 </header>
 <main id="main"></main>
+<div id="lb"><button class="x">close ✕</button><button class="nav prev">‹</button><button class="nav next">›</button>
+  <img alt=""><div class="meta"><span class="where"></span><b class="when"></b><span class="dupt" style="color:var(--pink)"></span><button class="pickb"></button><span class="n"></span></div><div class="edit"><input type="date" class="fd"><input type="text" class="cap" maxlength="300" placeholder="title (shown on the site)"></div><div class="txt"></div></div>
 <script type="module">
   const $ = (id) => document.getElementById(id);
-  const { items, done, target } = await fetch('/items.json').then((r) => r.json());
+  const { items, done, hidden, target } = await fetch('/items.json').then((r) => r.json());
   const today = new Date().toISOString().slice(0, 10);
-  items.forEach((it) => { it.on = done[it.id] ? false : typeof it.on === 'boolean' ? it.on : !it.dup; it.state = done[it.id] ? 'done' : ''; });
+  items.forEach((it) => { it.on = done[it.id] ? false : typeof it.on === 'boolean' ? it.on : false; it.state = done[it.id] ? 'done' : ''; }); // nothing is chosen until you choose it
   // every change goes to disk (.cronovisor-review.json in the export folder), so reloading loses nothing
   let pending = {}, saveTimer = 0;
   function keep(it, change){
@@ -138,14 +155,14 @@
     pick.addEventListener('change', () => { it.on = pick.checked; keep(it, { on: it.on }); el.classList.toggle('off', !it.on); tally(); });
     date.addEventListener('change', () => { it.fecha = date.value; if (/^\d{4}-\d{2}-\d{2}$/.test(date.value)) { it.how = 'yours'; keep(it, { fecha: it.fecha }); } tally(); });
     cap.addEventListener('input', () => { it.caption = cap.value; keep(it, { caption: it.caption }); });
-    el.querySelector('img').addEventListener('click', () => el.classList.toggle('open'));
+    el.querySelector('img').addEventListener('click', () => openLb(it));
     it.el = el;
     return el;
   }
   function tally() {
     const todo = items.filter((i) => i.on && i.state !== 'done');
     const months = new Set(todo.map((i) => i.fecha.slice(0, 7)));
-    $('count').textContent = `${items.length} photos · ${todo.length} chosen · ${months.size} barrios · ${items.filter((i) => i.state === 'done').length} uploaded`;
+    $('count').textContent = `${items.length} photos · ${todo.length} chosen · ${months.size} barrios · ${items.filter((i) => i.state === 'done').length} uploaded now · ${hidden} uploaded before (not shown)`;
     $('upload').disabled = !todo.length || !$('pass').value || todo.some((i) => !/^\d{4}-\d{2}-\d{2}$/.test(i.fecha));
     albums.forEach((a) => { const on = a.list.filter((i) => i.on).length; a.box.checked = on > 0; a.box.indeterminate = on > 0 && on < a.list.filter((i) => !i.dup).length; a.sec.classList.toggle('off', !on); });
     $('index').innerHTML = albums.map((a, k) => `<a href="#a${k}" class="${a.list.some((i) => i.on) ? '' : 'off'}"></a>`).join('');
@@ -173,6 +190,76 @@
     }
     if (!/stopped/.test($('status').textContent)) $('status').textContent = `${ok} uploaded${failed ? ` · ${failed} failed (red), upload again to retry` : ''} · open ezeangeloni.xyz to see the barrios`;
     tally();
+  });
+  // the lightbox: the photo as it is, not squared
+  const lb = $('lb');
+  let lbAt = -1;
+  function openLb(it) { lbAt = items.indexOf(it); showLb(); lb.classList.add('on'); }
+  function closeLb() { lb.classList.remove('on'); lbAt = -1; }
+  function showLb() {
+    const it = items[lbAt];
+    const im = lb.querySelector('img');
+    im.style.width = im.style.height = '';
+    im.src = '/img?id=' + encodeURIComponent(it.id);
+    lb.querySelector('.where').textContent = it.album;
+    lb.querySelector('.when').textContent = it.fecha;
+    lb.querySelector('.dupt').textContent = it.dup || '';
+    lb.querySelector('.txt').textContent = it.full && it.full.trim() !== (it.caption || '').trim() ? it.full : '';
+    const fd = lb.querySelector('.fd'), cap = lb.querySelector('.cap');
+    fd.value = it.fecha; fd.max = today; cap.value = it.caption || '';
+    fd.disabled = cap.disabled = it.state === 'done';
+    lb.querySelector('.n').textContent = `${lbAt + 1} / ${items.length}`;
+    const pb = lb.querySelector('.pickb');
+    pb.hidden = it.state === 'done';
+    pb.textContent = it.on ? '✓ chosen (space)' : 'choose (space)';
+    pb.classList.toggle('chosen', it.on);
+    lb.classList.toggle('chosen', it.on && it.state !== 'done');
+  }
+  function stepLb(d) { lbAt = (lbAt + d + items.length) % items.length; showLb(); items[lbAt].el?.scrollIntoView({ block: 'center' }); }
+  function toggleLb() {
+    const it = items[lbAt];
+    if (it.state === 'done') return;
+    it.on = !it.on; keep(it, { on: it.on });
+    if (it.el) { it.el.classList.toggle('off', !it.on); it.el.querySelector('.pick').checked = it.on; }
+    tally(); showLb();
+  }
+  // Facebook keeps them small: scale up to the space there is, keeping the proportions (the frame is what matters)
+  function fitLb() {
+    const im = lb.querySelector('img');
+    if (!im.naturalWidth) return;
+    const k = Math.min((innerWidth - 120) / im.naturalWidth, (innerHeight - 200) / im.naturalHeight);
+    im.style.width = Math.round(im.naturalWidth * k) + 'px'; im.style.height = Math.round(im.naturalHeight * k) + 'px';
+  }
+  lb.querySelector('img').addEventListener('load', fitLb);
+  addEventListener('resize', fitLb);
+  lb.querySelector('.x').addEventListener('click', closeLb);
+  lb.querySelector('.prev').addEventListener('click', () => stepLb(-1));
+  lb.querySelector('.next').addEventListener('click', () => stepLb(1));
+  lb.querySelector('.pickb').addEventListener('click', (e) => { e.currentTarget.blur(); toggleLb(); }); // blurred, so space doesn't press it again
+  lb.addEventListener('click', (e) => { if (e.target === lb) closeLb(); });
+  // edited here, it's the same as editing the card (and kept as you type)
+  lb.querySelector('.cap').addEventListener('input', (e) => {
+    const it = items[lbAt]; it.caption = e.target.value; keep(it, { caption: it.caption });
+    if (it.el) it.el.querySelector('.f input[type=text]').value = it.caption;
+  });
+  lb.querySelector('.fd').addEventListener('change', (e) => {
+    const it = items[lbAt]; it.fecha = e.target.value;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(it.fecha)) { it.how = 'yours'; keep(it, { fecha: it.fecha }); }
+    if (it.el) it.el.querySelector('.f input[type=date]').value = it.fecha;
+    lb.querySelector('.when').textContent = it.fecha; tally();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (lbAt < 0) return;
+    if (e.target.tagName === 'INPUT') { // typing: the keys are words; Enter or Esc is done writing
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.target.blur(); }
+      return;
+    }
+    if (e.key === 'Escape') closeLb();
+    else if (e.key === 'ArrowRight') stepLb(1);
+    else if (e.key === 'ArrowLeft') stepLb(-1);
+    else if (e.key === ' ') { e.preventDefault(); toggleLb(); }
+    else return;
+    e.preventDefault();
   });
   render();
 </script>

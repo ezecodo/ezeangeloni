@@ -14,8 +14,9 @@
 // like "Profilbilder" or "Uploads von Mobilgeräten" give none). Facebook writes its JSON as UTF-8 read as Latin-1
 // ("SeÃ±oras"); it's mended. Videos are left out. Duplicates are found by picture (a 64-bit difference hash made with
 // ffmpeg, cached in .cronovisor-hashes.json): the same photo twice in Facebook, and, if the Instagram export folder
-// is given, photos already imported from Instagram; both come unticked with a tag. Uploads are logged in
-// .cronovisor-imported.json inside the export folder, so a rerun never sends a photo twice.
+// is given, photos already imported from Instagram; both come with a tag. Nothing comes ticked: every photo is chosen by hand (Eze, 2026-11-07). Uploads are logged in
+// .cronovisor-imported.json inside the export folder, so a rerun never sends a photo twice, and the review page
+// leaves them out (and their twins): each visit shows only what's still to go, so it can be swept bit by bit.
 import http from 'http';
 import fs from 'fs/promises';
 import { existsSync, readFileSync, readdirSync } from 'fs';
@@ -27,7 +28,7 @@ const IG = process.argv[3] ? path.resolve(process.argv[3]) : '';
 const PORT = Number(process.env.PORT || 4341);
 const TARGET = process.env.TARGET || 'https://ezeangeloni.xyz/api/frases/photo';
 const POSTS = path.join(DIR, 'posts');
-const LOG = path.join(DIR, '.cronovisor-imported.json');
+const LOG = process.env.LOG || path.join(DIR, '.cronovisor-imported.json'); // LOG: only for testing
 const HASHES = path.join(DIR, '.cronovisor-hashes.json');
 const REVIEW = path.join(DIR, '.cronovisor-review.json'); // your ticks, dates and titles, kept as you change them
 if (!existsSync(path.join(POSTS, 'album'))) {
@@ -154,7 +155,7 @@ for (const it of [...items].sort((a, b) => rank(a) - rank(b))) {
   if (!h) continue;
   if (igHashes.some((g) => near(g, h))) { it.dup = 'on instagram'; continue; }
   const twin = kept.find((k) => near(hashes[k.file], h));
-  if (twin) { it.dup = `twin in ${twin.album}`; continue; }
+  if (twin) { it.dup = `twin in ${twin.album}`; it.twinOf = twin.id; continue; }
   kept.push(it);
 }
 // an album's photos sort by date, the albums by their first photo
@@ -169,13 +170,16 @@ const sniff = (b) => b[0] === 0xFF && b[1] === 0xD8 ? ['image/jpeg', 'jpg'] : b[
   : b.slice(0, 4).toString() === 'RIFF' && b.slice(8, 12).toString() === 'WEBP' ? ['image/webp', 'webp'] : null;
 const review = existsSync(REVIEW) ? JSON.parse(readFileSync(REVIEW, 'utf-8')) : {};
 let saving = Promise.resolve();
-const pub = () => items.map(({ file, ...it }) => ({ ...it, ...review[it.id] }));
+// what's already gone up (or is the same picture as one that has) isn't shown again: the review is a sweep, a little
+// at a time, and each visit only shows what's left. The log is read on every load, so reloading the page is enough
+const gone = (it) => !!(done[it.id] || (it.twinOf && done[it.twinOf]));
+const pub = () => items.filter((it) => !gone(it)).map(({ file, twinOf, ...it }) => ({ ...it, ...review[it.id] }));
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
     if (url.pathname === '/') return send(res, 200, readFileSync(new URL('./review.html', import.meta.url)), 'text/html; charset=utf-8');
-    if (url.pathname === '/items.json') return send(res, 200, { items: pub(), done, target: TARGET });
+    if (url.pathname === '/items.json') return send(res, 200, { items: pub(), done, hidden: items.filter(gone).length, target: TARGET });
     if (url.pathname === '/img') {
       const it = items.find((i) => i.id === url.searchParams.get('id'));
       if (!it) return send(res, 404, '');
