@@ -134,6 +134,8 @@ import Layout from '../layouts/Layout.astro';
       #xib-form input { flex: 1; min-width: 0; background: rgba(8,8,16,.6); border: 1px solid rgba(255,179,122,.35); color: var(--text); font: inherit; font-family: var(--serif); font-size: 1rem; padding: .5rem .6rem; outline: none; }
       #xib-form button { font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: #ffb37a; border: 1px solid rgba(255,179,122,.45); padding: .5rem .7rem; white-space: nowrap; }
       .sky-mark.xib { color: #ffb37a; }
+      .sky-mark.tanu { color: #ff7f6e; pointer-events: auto; cursor: pointer; } /* Tanu: her name takes you to her (or, flying, brings her to you) */
+      .sky-mark.tanu i { width: 34px; height: 13px; transform: rotate(-8deg); }
       .sky-mark.xib i { width: 10px; height: 10px; border-radius: 50%; transform: none; background: currentColor; border: none; box-shadow: 0 0 10px currentColor; }
       body.focus #xib-panel, body.aboard #xib-panel { opacity: 0; pointer-events: none; }
       /* crossing into another galaxy: everything goes to light */
@@ -615,6 +617,7 @@ import Layout from '../layouts/Layout.astro';
     import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
     import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
     import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+    import { Tanu } from '../cronovisor/tanu/tanu';
 
     const COLORS = ['#ff3f3f','#ff9f1c','#6ef9f5','#b8f75b','#c77dff','#ff6eb4','#38bdf8','#ffd166'];
     const NOTES =  [392, 440, 523, 587, 659, 349, 466, 311];
@@ -765,7 +768,7 @@ import Layout from '../layouts/Layout.astro';
     // but nothing answers: no dragging, zooming, opening, flying. Only someone signed in (a galaxy's owner) gets in.
     // It opens by itself on the day. (A curtain in the browser: the files on the server are as public as ever.)
     const RELEASE = Date.parse('2026-12-01T00:00:00+01:00');
-    if(import.meta.env.DEV && /[?&](fake|stats|doors)\b/.test(location.search)) sessionStorage.setItem('cv-dev-open', '1');
+    if(import.meta.env.DEV && /[?&](fake|stats|doors|tanu)\b/.test(location.search)) sessionStorage.setItem('cv-dev-open', '1');
     if(import.meta.env.DEV && /[?&]doors\b/.test(location.search)) sessionStorage.setItem('cv-dev-doors', new URLSearchParams(location.search).get('doors') || '1');
     // Crossing in from another galaxy, that page hands over what it already knew (the registry, which doors are open
     // to you, this galaxy's frases and sets, that you were in), so arriving doesn't wait on the network: ~0.8 s less
@@ -1113,6 +1116,9 @@ import Layout from '../layouts/Layout.astro';
     }
     // Months are clusters on a spiral: same month stays together, older months sit further out.
     let gasSpots: THREE.Vector3[] = [];
+    let monthSpots = new Map<string, THREE.Vector3>(); // each barrio's heart, by month ('2019-07')
+    // Tanu, the whale of the cosmos (src/cronovisor/tanu/): only in Eze's galaxy, not in the teaser
+    let tanu: Tanu | null = null, tanuFollow = false, tanuMark: HTMLElement | null = null, tanuFlight: unknown = null; // tanuFollow: the camera rides along with her
     // Months on a spiral that keeps its spacing however long the archive gets: about 30 apart along the curve
     // and between turns (an Archimedean spiral walked at constant speed), newest at the centre.
     function spiral(k: number){
@@ -1169,6 +1175,7 @@ import Layout from '../layouts/Layout.astro';
       // Gas for the balloon: a nebula at each turn of the year, where one time gives way to an older one,
       // and the biggest beyond the oldest month. To keep flying you travel into the past.
       galaxyR = R;
+      monthSpots = spots;
       PILOT_R = Math.max(150, galaxyR + 45);
       const along = (k: number, out: number) => {
         const { a, r } = spiral(k);
@@ -1229,11 +1236,53 @@ import Layout from '../layouts/Layout.astro';
       buildNebulae();
       buildWind();
       buildBalloon();
+      buildTanu();
       placeWorlds();
       addGateNebulae();
       cards();
       queuePhotos();
     }
+    function buildTanu(){
+      if(tanu || !renderer || GAL || teaser) return;
+      tanu = new Tanu({
+        zone: id => {
+          if(id === 'logo') return { at: new THREE.Vector3(), stand: 26 };
+          if(id === 'sun') return sun ? { at: sun.position.clone(), stand: 150 } : null; // clear of its heat
+          if(id === 'balloon'){ const b = tanuBalloon(); return b ? { at: b, stand: 21 } : null; } // as far off as her curiosity keeps her
+          const m = monthSpots.get(id);
+          if(m) return { at: m.clone(), stand: 18 };
+          const g = /^gas-(\d+)$/.exec(id);
+          if(g && gasClouds[+g[1]]) return { at: gasClouds[+g[1]].pos.clone(), stand: 6 };
+          return null;
+        },
+        balloon: tanuBalloon,
+        radius: () => galaxyR,
+        reduced,
+        lowPower: () => lowPower,
+      });
+      scene.add(tanu.group, tanu.wake);
+      tanuMark = document.createElement('div');
+      tanuMark.className = 'sky-mark tanu';
+      tanuMark.innerHTML = '<i></i><b>➤</b><span>Tanu</span>';
+      tanuMark.addEventListener('click', e => { e.stopPropagation(); goToTanu(); });
+      $('sky-marks').append(tanuMark);
+      if(import.meta.env.DEV && DEV_Q?.has('tanu')) import('../cronovisor/tanu/debug').then(m => m.tanuPanel(tanu!, { barrios: () => [...monthSpots.keys()], follow: on => { tanuFollow = on; } }));
+    }
+    // her name in the sky: flying, she comes to you; otherwise the camera goes to her and rides along until you look away
+    function goToTanu(){
+      if(!tanu || boarded) return;
+      touched();
+      if(pilot){ tanu.swimTo('balloon'); playNote(NOTES[2]); return; }
+      if(focused >= 0) backOutNow();
+      if(worldAt >= 0) leaveWorld();
+      const at = tanu.position.clone();
+      const from = at.clone().add(camera.position.clone().sub(at).setLength(48)); from.y += 9;
+      if(controls) controls.enabled = false;
+      flyTo(from, at, 2200, () => { if(controls){ controls.target.copy(tanu!.position); controls.enabled = true; } tanuFollow = true; });
+      tanuFlight = flight;
+    }
+    // the balloon, while someone flies it
+    function tanuBalloon(){ return pilot ? pilot.pos.clone() : null; }
     // The chronology is one continuous curve; pulses run along it from the present into the past.
     function buildThread(){
       if(pieces.length < 3) return; // a new galaxy, nothing to thread yet
@@ -2783,7 +2832,7 @@ import Layout from '../layouts/Layout.astro';
       pilot.speed = 0;
       playNote(NOTES[0]/2);
     }
-    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get controls(){ return controls; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, visit: (k: number) => visitWorld(k) };
+    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get controls(){ return controls; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, get tanu(){ return tanu; }, visit: (k: number) => visitWorld(k) };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
       const p = pilot;
@@ -3253,6 +3302,22 @@ import Layout from '../layouts/Layout.astro';
       if(rolled) camera.rotateZ(Math.PI/2);
       if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded && !sunScene && !still; // still air for the words at the Sun
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
+      if(tanu){
+        tanu.update(frozen ? 0 : dt, renderer.domElement.height, camera.fov);
+        if(flight && flight !== tanuFlight) tanuFollow = false; // something else took the camera
+        if(tanuFollow && (pilot || focused >= 0 || worldAt >= 0)) tanuFollow = false;
+        if(tanuFollow && !flight && controls){ // riding along with her (you can still orbit round her)
+          const d = camera.position.clone().sub(controls.target);
+          controls.target.lerp(tanu.position, 1-Math.exp(-dt*3));
+          if(d.length() > 70) d.setLength(70);
+          camera.position.copy(controls.target).add(d);
+          lastInput = now; // she's moving: keep the frame rate up
+        }
+        if(tanuMark){
+          tanuMark.hidden = camera.position.distanceTo(tanu.position) < 75;
+          if(!tanuMark.hidden) placeMark(tanuMark, tanu.position, window.innerWidth, window.innerHeight);
+        }
+      }
       updateSky(now, dt);
       updateMeeting(now);
       updateTour(now, dt);
@@ -3927,8 +3992,7 @@ import Layout from '../layouts/Layout.astro';
     function buildWorlds(){
       if(!renderer) return;
       if(worldAt >= 0) leaveWorld();
-      worlds.forEach(w => { dropField(w); scene.remove(w.mesh); w.mat.map?.dispose(); w.mat.dispose(); const k = billboards.indexOf(w.mesh); if(k >= 0) billboards.splice(k, 1); if(w.beacon){ scene.remove(w.beacon); w.beacon.material.dispose(); } });
-      $('sky-marks').replaceChildren(...(sunMark ? [sunMark] : []));
+      worlds.forEach(w => { dropField(w); scene.remove(w.mesh); w.mat.map?.dispose(); w.mat.dispose(); const k = billboards.indexOf(w.mesh); if(k >= 0) billboards.splice(k, 1); if(w.beacon){ scene.remove(w.beacon); w.beacon.material.dispose(); } w.mark?.remove(); }); // only the worlds' marks: the Sun's, Xibalbá's and Tanu's stay
       const ok = [...linkList.filter(l => l && /^https?:\/\//.test(l.url) && (l.label || l.image)).slice(0, 12), ...neighbours()];
       worlds = ok.map((link, k) => {
         const tint = COLORS[(k*3 + 2) % COLORS.length], size = link.galaxy ? 40 : 13;

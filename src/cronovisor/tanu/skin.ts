@@ -1,0 +1,146 @@
+// The skin Tanu wears, painted in the language of Selk'nam body paint: black, white and red (Eze's reference,
+// 2026-11-08: a humpback painted with long white lines and rows of red dots). On the whale: a dark, washed grey-black
+// body; white lines running head to tail along the flanks, as if drawn with a finger; rows of red dots between them;
+// a pale grooved throat; small white knobs on the head and along the fins' leading edge; red bands across the fins.
+// Unlit on purpose, with a faint rim so she reads against the sky. Kept under the bloom threshold.
+import * as THREE from 'three';
+
+export const SKIN_VERT = /* glsl */`
+  attribute float aS, aKind, aT, aSide, aC;
+  uniform float uPhase, uAmp, uFin, uBreath, uTurn;
+  varying vec3 vRest, vNormal, vView;
+  varying float vS, vKind, vT, vC;
+  // the spine, seen from the side: a wave from head to tail, small at the head and growing past the chest, plus the
+  // whole torso rocking on a pivot at the chest (the head dips as the tail rises)
+  float spineY(float s){
+    float A = uAmp*(.01 + .12*pow(smoothstep(.22, 1.06, s), 1.5));
+    return A*sin(uPhase - s*4.4) + uAmp*.022*sin(uPhase + 1.3)*(.42 - s);
+  }
+  // and from above: in a turn the body bends into a bow, head and tail towards the inside
+  float spineX(float s){ return -uTurn*.26*((s - .45)*(s - .45) - .07); }
+  void main(){
+    vec3 p = position, n = normal;
+    vRest = position; vS = aS; vKind = aKind; vT = aT; vC = aC;
+    float s = aS, zs = .5 - s;
+    // breathing: the body swells and settles along its normals, most at the chest
+    if(aKind < .5) p += n*uBreath*.006*(1. - smoothstep(.25, .8, s));
+    // the long pectoral fins row with each stroke, a little behind it, and lift on the outside of a turn
+    if(aKind > .5 && aKind < 1.5){
+      float row = sin(uPhase - 1.1 + aSide*.25);
+      p.y += aT*(.075*row + .035*sin(uFin + aSide*.4)) + aT*aT*aSide*uTurn*.07;
+      p.z += aT*.035*cos(uPhase - 1.1);
+    }
+    // the flukes: they pitch with the beat, the tips lagging behind the middle
+    if(aKind > 1.5 && aKind < 2.5){
+      p.y += (s - 1.)*.3*uAmp*cos(uPhase - s*4.4);
+      p.y += abs(p.x)*abs(p.x)*.55*uAmp*cos(uPhase - 5.2);
+    }
+    // bend every cross-section with the spine: it follows the curve and turns with it, so the tail arches
+    float e = .01;
+    float Y = spineY(s), X = spineX(s);
+    float dY = (spineY(s + e) - spineY(s - e))/(2.*e), dX = (spineX(s + e) - spineX(s - e))/(2.*e);
+    float a = atan(dY), b = atan(dX);
+    vec2 yz = vec2(p.y, p.z - zs);
+    yz = vec2(yz.x*cos(a) - yz.y*sin(a), yz.x*sin(a) + yz.y*cos(a));
+    vec2 ny = vec2(n.y*cos(a) - n.z*sin(a), n.y*sin(a) + n.z*cos(a));
+    p.y = yz.x + Y; p.z = yz.y + zs;
+    n.y = ny.x; n.z = ny.y;
+    vec2 xz = vec2(p.x, p.z - zs);
+    xz = vec2(xz.x*cos(b) - xz.y*sin(b), xz.x*sin(b) + xz.y*cos(b));
+    vec2 nx = vec2(n.x*cos(b) - n.z*sin(b), n.x*sin(b) + n.z*cos(b));
+    p.x = xz.x + X; p.z = xz.y + zs;
+    n.x = nx.x; n.z = nx.y;
+    vec4 mv = modelViewMatrix*vec4(p, 1.);
+    vView = -mv.xyz;
+    vNormal = normalize(normalMatrix*n);
+    gl_Position = projectionMatrix*mv;
+  }`;
+
+export const SKIN_FRAG = /* glsl */`
+  precision highp float;
+  uniform float uTime, uEyeLight, uOpacity;
+  uniform vec3 uEye;
+  varying vec3 vRest, vNormal, vView;
+  varying float vS, vKind, vT, vC;
+  const vec3 WHITE = vec3(.74, .72, .68);
+  const vec3 RED = vec3(.72, .1, .08);
+  float hash1(float n){ return fract(sin(n*127.1)*43758.5453); }
+  float noise(vec3 p){ // value noise, for the wash of the paint
+    vec3 i = floor(p), f = fract(p); f = f*f*(3. - 2.*f);
+    float n = i.x + i.y*57. + i.z*113.;
+    return mix(mix(mix(hash1(n), hash1(n + 1.), f.x), mix(hash1(n + 57.), hash1(n + 58.), f.x), f.y),
+               mix(mix(hash1(n + 113.), hash1(n + 114.), f.x), mix(hash1(n + 170.), hash1(n + 171.), f.x), f.y), f.z);
+  }
+  // a painted line: soft-edged, its width breathing along the stroke
+  float stroke(float d, float w, float aa){ return 1. - smoothstep(w - aa, w + aa, abs(d)); }
+  void main(){
+    vec3 N = normalize(vNormal), V = normalize(vView);
+    float facing = abs(dot(N, V));
+    // the body: grey-black, washed like ink on wet paper, a little lighter where it faces up
+    float wash = noise(vRest*38.)*.6 + noise(vRest*95.)*.4;
+    vec3 col = vec3(.05, .05, .055)*(.65 + .7*wash)*(.75 + .5*clamp(N.y*.5 + .5, 0., 1.));
+    col += vec3(.5, .52, .58)*pow(1. - facing, 3.)*.4; // the rim: her outline against the sky
+    float paint = 0.; vec3 pcol = WHITE;
+    if(vKind < .5){
+      float th = abs(atan(vRest.x, vRest.y));      // 0 on the back, pi under the belly
+      float rad = length(vRest.xy) + 1e-4;
+      float arc = th*rad;                           // distance round the body from the spine, in body lengths
+      float aa = fwidth(arc)*1.2 + 1e-4;
+      // long white lines down the flank, head to tail, drawn by hand (each wavers, swells and thins)
+      for(int k = 0; k < 4; k++){
+        float fk = float(k);
+        float at = (1.18 + fk*.36)*rad + .0035*sin(vS*31. + fk*2.3);
+        float from = .05 + fk*.035, to = .93 - fk*.07;
+        float reach = smoothstep(from, from + .05, vS)*smoothstep(to, to - .1, vS);
+        float w = (.0042 + .0016*sin(vS*17. + fk))*(k == 0 ? 1.15 : 1.);
+        paint = max(paint, stroke(arc - at, w, aa)*reach);
+      }
+      col = mix(col, WHITE*(.55 + .45*facing)*(.85 + .3*wash), paint);
+      // rows of red dots between the lines, staggered
+      for(int k = 0; k < 3; k++){
+        float fk = float(k);
+        float at = (1.36 + fk*.36)*rad;
+        float step_ = .046, off = mod(fk, 2.)*.5;
+        float cellS = (floor(vS/step_ - off) + .5 + off)*step_;
+        float reach = smoothstep(.1 + fk*.03, .15 + fk*.03, cellS)*smoothstep(.8 - fk*.09, .74 - fk*.09, cellS);
+        float d = length(vec2((vS - cellS)*1., arc - at));
+        float r = .0074*(.85 + .3*hash1(cellS*91. + fk));
+        float dot_ = (1. - smoothstep(r - aa, r + aa, d))*reach;
+        col = mix(col, RED*(.6 + .4*facing)*(.85 + .3*wash), dot_);
+      }
+      // the throat: pale, with its long grooves from chin to navel
+      if(th > 2.35){
+        float g = abs(fract(arc*95.) - .5);
+        float throat = smoothstep(2.35, 2.6, th)*smoothstep(.5, .3, vS)*smoothstep(0., .05, vS);
+        col = mix(col, WHITE*(.35 + .45*facing)*(1. - .55*(1. - smoothstep(.08, .22, g))), throat*.75);
+      }
+      // white knobs on the head, as a humpback's
+      if(vS < .16 && th < 1.3){
+        vec3 c = vRest*vec3(70., 70., 52.), cell = floor(c);
+        float h = hash1(dot(cell, vec3(1., 57., 113.)));
+        float d = length(c - cell - .5);
+        col = mix(col, WHITE, step(.72, h)*(1. - smoothstep(.16, .26, d))*.9);
+      }
+    } else if(vKind < 1.5){
+      // the long fins: dark, two red bands across near the tip, white knobs along the leading edge
+      float aa = fwidth(vT)*1.2 + 1e-4;
+      float bands = max(stroke(vT - .66, .035, aa), stroke(vT - .8, .03, aa));
+      col = mix(col, RED*(.6 + .4*facing), bands);
+      float knob = abs(fract(vT*13.) - .5);
+      col = mix(col, WHITE, (1. - smoothstep(.12, .2, knob))*smoothstep(.86, .93, vC)*step(.3, vT)*step(vT, .94));
+    }
+    // her eye: a pale, calm light
+    vec3 e = vec3(abs(vRest.x), vRest.y, vRest.z);
+    float de = length(e - uEye);
+    col += vec3(.95, .92, .82)*(1. - smoothstep(.005, .009, de))*uEyeLight*.8;
+    gl_FragColor = vec4(col, uOpacity);
+  }`;
+
+export function makeSkin(){
+  const uniforms = {
+    uTime: { value: 0 }, uPhase: { value: 0 }, uAmp: { value: .5 }, uFin: { value: 0 }, uBreath: { value: 0 }, uTurn: { value: 0 },
+    uEyeLight: { value: 1 }, uEye: { value: new THREE.Vector3() }, uOpacity: { value: 1 },
+  };
+  const mat = new THREE.ShaderMaterial({ vertexShader: SKIN_VERT, fragmentShader: SKIN_FRAG, uniforms, side: THREE.DoubleSide });
+  return { mat, uniforms };
+}
