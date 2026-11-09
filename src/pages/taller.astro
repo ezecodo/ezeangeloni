@@ -1,0 +1,49 @@
+---
+// The workshop on the site (Eze, 2026-11-09): the same viewer as `npm run taller` (taller/main.ts), for whoever is
+// signed in (the admin's session, `eze-upload-pass`, checked with whoami); anyone else gets an empty room. Unlisted
+// and noindex, but its models are ordinary files on the server: fine for designs not yet shown, not for secrets.
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="taller — Cronovisor">
+  <Fragment slot="head">
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono&family=Cormorant+Garamond:ital,wght@1,300&display=swap" rel="stylesheet" />
+    <style is:global>
+      html, body { margin: 0; height: 100%; background: #080810; color: #f0ede8; font-family: 'DM Mono', monospace; overflow: hidden; }
+      canvas { display: block; }
+      aside { position: fixed; left: 0; top: 0; bottom: 0; width: 230px; padding: 1.4rem; box-sizing: border-box; background: rgba(8,8,16,.82); border-right: 1px solid rgba(240,237,232,.12); z-index: 2; }
+      aside a { color: rgba(240,237,232,.55); text-decoration: none; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+      h1 { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 2.6rem; margin: .8rem 0 1.4rem; }
+      #list button { display: block; width: 100%; text-align: left; background: none; border: none; border-left: 2px solid transparent; color: rgba(240,237,232,.55); font: inherit; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; padding: .55rem .7rem; cursor: pointer; }
+      #list button:hover { color: #f0ede8; }
+      #list button.on { color: #ff6eb4; border-left-color: #ff6eb4; }
+      #about { position: fixed; left: 250px; bottom: 1.2rem; right: 1.4rem; font-size: 10px; letter-spacing: .1em; color: rgba(240,237,232,.45); z-index: 2; line-height: 1.7; margin: 0; }
+      #closed { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.6rem; color: rgba(240,237,232,.5); text-align: center; padding: 2rem; }
+      /* a phone: the list becomes a bar along the top */
+      @media (max-width: 700px){
+        aside { right: 0; bottom: auto; width: auto; display: flex; align-items: center; gap: .8rem; padding: .6rem .9rem; border-right: none; border-bottom: 1px solid rgba(240,237,232,.12); flex-wrap: wrap; }
+        h1 { font-size: 1.6rem; margin: 0; }
+        #list { display: flex; gap: .2rem; flex-wrap: wrap; }
+        #list button { width: auto; border-left: none; border-bottom: 2px solid transparent; padding: .4rem .5rem; }
+        #list button.on { border-bottom-color: #ff6eb4; }
+        #about { left: 1rem; }
+      }
+    </style>
+  </Fragment>
+  <aside hidden id="side"><a href="/">← cronovisor</a><h1>taller</h1><nav id="list"></nav></aside>
+  <p id="about"></p>
+  <p id="closed" hidden></p>
+  <script>
+    // only for someone signed in: then the workshop starts (its code is loaded only then)
+    const pass = localStorage.getItem('eze-upload-pass') || '';
+    const closed = document.getElementById('closed')!;
+    const shut = (t: string) => { closed.textContent = t; closed.hidden = false; };
+    if(!pass) shut('Sign in from the universe first.');
+    else fetch('/api/frases/whoami', { headers: { 'X-Auth': pass } })
+      .then(r => { if(!r.ok) throw 0; document.getElementById('side')!.hidden = false; return import('../../taller/main'); })
+      .then(m => m.startTaller())
+      .catch(() => shut('Nothing here.'));
+  </script>
+</Layout>

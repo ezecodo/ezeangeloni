@@ -1,5 +1,7 @@
 // The workshop: every element on the list, one at a time on the stage. To add one, make taller/elements/<name>.ts
 // (an Element: name, a line about it, how to set it on the stage) and add it to ELEMENTS below.
+// The same viewer runs locally (taller/index.html, `npm run taller`) and on the site at /taller/ for whoever is
+// signed in (src/pages/taller.astro), which calls startTaller() once the session is confirmed.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Element, Stage } from './elements/types';
@@ -7,6 +9,8 @@ import { tanu } from './elements/tanu';
 import { selknamFigure } from './elements/selknam-figure';
 
 const ELEMENTS: Element[] = [tanu, selknamFigure];
+
+export function startTaller(){
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -58,3 +62,4 @@ renderer.setAnimationLoop(() => {
 });
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); });
 (window as any).__taller = { scene, camera, controls };
+}
