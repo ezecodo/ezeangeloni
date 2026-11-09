@@ -46,11 +46,11 @@ import Layout from '../layouts/Layout.astro';
   <div id="shelf"></div>
   <div id="add" hidden>
     <button class="go" id="pick">save a game in my locker</button>
-    <input type="file" id="file" accept=".sfc,.smc,.md,.gen,.smd,.bin" hidden />
+    <input type="file" id="file" accept=".sfc,.smc,.md,.gen,.smd,.bin,.zip" hidden />
     <span id="msg"></span>
   </div>
   <footer>
-    SNES (.sfc .smc) · Mega Drive (.md .gen .smd .bin). Saves stay in this browser.<br />
+    SNES (.sfc .smc) · Mega Drive (.md .gen .smd .bin) · arcade: the board's files in one .zip, named as the game's set (e.g. <i>name</i>.zip). Saves stay in this browser.<br />
     emulator: <a href="https://github.com/EmulatorJS/EmulatorJS" rel="noopener">EmulatorJS</a> (GPL-3.0, <a href="/emulator/LICENSE.txt">license</a>), running on this server.
   </footer>
   <div id="play"><div class="bar"><span class="t" id="playing"></span><button id="leave">← back to the shelf</button></div><div id="game"></div></div>
@@ -60,7 +60,7 @@ import Layout from '../layouts/Layout.astro';
       const $ = (id) => document.getElementById(id);
       const pass = localStorage.getItem('eze-upload-pass') || '';
       const auth = { 'X-Auth': pass };
-      const NAMES = { snes: 'snes', segaMD: 'mega drive' };
+      const NAMES = { snes: 'snes', segaMD: 'mega drive', arcade: 'arcade' };
       const shelf = $('shelf'), msg = $('msg');
       const say = (t, err) => { msg.textContent = t; msg.className = err ? 'err' : ''; };
       const empty = (t) => { shelf.innerHTML = ''; const p = document.createElement('p'); p.className = 'empty'; p.textContent = t; shelf.appendChild(p); };

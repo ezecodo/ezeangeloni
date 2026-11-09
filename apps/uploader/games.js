@@ -11,9 +11,10 @@ import path from 'path';
 import crypto from 'crypto';
 
 const DIR = process.env.GAMES_DIR || '/root/cronovisor-games';
-const MAX = 16 * 1024 * 1024, PER_LOCKER = 30;
+const MAX = 16 * 1024 * 1024, MAX_ARCADE = 64 * 1024 * 1024, PER_LOCKER = 30;
 // what the room can play, by the file's extension
-const SYSTEMS = { sfc: 'snes', smc: 'snes', md: 'segaMD', gen: 'segaMD', smd: 'segaMD', bin: 'segaMD' };
+// (an arcade game is a .zip of its board's chips, and the emulator knows it by the zip's name, so that name is kept)
+const SYSTEMS = { sfc: 'snes', smc: 'snes', md: 'segaMD', gen: 'segaMD', smd: 'segaMD', bin: 'segaMD', zip: 'arcade' };
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status });
 
 let chain = Promise.resolve();
@@ -40,15 +41,18 @@ export function add(owner, buf, filename) {
   return locked(async () => {
     const ext = String(filename || '').toLowerCase().split('.').pop();
     const system = SYSTEMS[ext];
-    if (!system) throw bad('the room plays SNES (.sfc, .smc) and Mega Drive (.md, .gen, .smd, .bin) files', 415);
-    if (!buf?.length || buf.length > MAX) throw bad('too big for a cartridge', 413);
+    if (!system) throw bad('the room plays SNES (.sfc, .smc), Mega Drive (.md, .gen, .smd, .bin) and arcade (.zip) files', 415);
+    if (!buf?.length || buf.length > (system === 'arcade' ? MAX_ARCADE : MAX)) throw bad('too big', 413);
+    if (system === 'arcade' && !(buf[0] === 0x50 && buf[1] === 0x4b)) throw bad('that .zip isn’t a zip', 415);
     const games = await load(owner);
     if (games.length >= PER_LOCKER) throw bad('the locker is full', 409);
     const id = crypto.randomBytes(9).toString('hex');
     const dir = lockerOf(owner);
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
     await fs.writeFile(path.join(dir, `${id}.rom`), buf, { mode: 0o600 });
-    const name = String(filename).replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N} ._()'&-]/gu, ' ').trim().slice(0, 80) || 'game';
+    const base = String(filename).replace(/\.[^.]+$/, '');
+    const name = system === 'arcade' ? (/^[a-z0-9_-]{1,40}$/i.test(base) ? base : null) : base.replace(/[^\p{L}\p{N} ._()'&-]/gu, ' ').trim().slice(0, 80) || 'game';
+    if (!name) throw bad('an arcade zip keeps its set name (letters, numbers, _ or -), e.g. nbajamte.zip', 415);
     games.push({ id, name, ext, system, size: buf.length, added: new Date().toISOString().slice(0, 10) });
     await save(owner, games);
     return { id, name, system };

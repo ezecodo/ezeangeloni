@@ -742,7 +742,7 @@ const lockerOwner = async (req) => {
   if (!who?.slug){ gamesMiss(req); throw Object.assign(new Error('not found'), { status: 404 }); }
   return who.slug;
 };
-const gameUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024, files: 1 } });
+const gameUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 64 * 1024 * 1024, files: 1 } }); // arcade sets are bigger than cartridges
 app.get('/api/frases/games', galaxyRoute(async (req) => games.list(await lockerOwner(req))));
 app.post('/api/frases/games', gameUpload.single('game'), galaxyRoute(async (req) => {
   const owner = await lockerOwner(req);

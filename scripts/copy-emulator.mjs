@@ -1,7 +1,7 @@
 // The games room's emulator (EmulatorJS, GPL-3, from npm) goes into public/emulator/ before every dev and build,
 // so it's served from Eze's own server, never from a CDN. Its scripts are joined into emulator.min.js (that's the
 // file its loader asks for; without it it falls back to its debug mode, which also asks a CDN for updates).
-// Only the cores Eze plays are copied: SNES (snes9x) and Mega Drive (genesis_plus_gx).
+// Only the cores Eze plays are copied: SNES (snes9x), Mega Drive (genesis_plus_gx) and arcade (fbneo).
 // No game is ever here: each player keeps their own in their own private locker (apps/uploader/games.js).
 import { cpSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, readdirSync } from 'fs';
 import path from 'path';
@@ -9,7 +9,7 @@ import path from 'path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const src = path.join(root, 'node_modules/@emulatorjs/emulatorjs/data');
 const out = path.join(root, 'public/emulator/data');
-const CORES = ['snes9x', 'genesis_plus_gx'];
+const CORES = ['snes9x', 'genesis_plus_gx', 'fbneo'];
 
 if (!existsSync(src)) { console.warn('[emulator] @emulatorjs/emulatorjs not installed, skipping'); process.exit(0); }
 rmSync(path.join(root, 'public/emulator'), { recursive: true, force: true });

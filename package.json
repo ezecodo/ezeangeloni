@@ -11,6 +11,7 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@emulatorjs/core-fbneo": "^4.2.3",
     "@emulatorjs/core-genesis_plus_gx": "^4.2.3",
     "@emulatorjs/core-snes9x": "^4.2.3",
     "@emulatorjs/emulatorjs": "^4.2.3",
