@@ -259,7 +259,21 @@ import Layout from '../layouts/Layout.astro';
       #meet-form button { font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; }
       .meet-hint { margin: .7rem 0 0; opacity: .7; }
       @media (max-width: 600px) { #meet { left: 1rem; right: 1rem; width: auto; top: 5rem; } }
-      .t-btn .meeting, .t-btn .letgo { display: none; }
+      .t-btn .meeting, .t-btn .letgo, .t-btn .asking { display: none; }
+      body.asking:not(.focus):not(.selecting) :is(#t-b1, #t-b2) .flying { display: none; }
+      body.asking:not(.focus):not(.selecting) :is(#t-b1, #t-b2) .asking { display: inline; }
+      /* Tanu's offer: which years she'll take you to (her coral, as her name in the sky) */
+      #tanu-ask { position: fixed; right: 1.6rem; top: 5.4rem; z-index: 13; width: min(330px, 80vw); padding: 1rem 1.1rem .9rem; background: rgba(8,8,16,.78); border: 1px solid rgba(255,127,110,.3); font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+      #tanu-ask[hidden] { display: none; }
+      #tanu-ask .meet-kick { color: #ff7f6e; }
+      #tanu-ask h2 { margin: .25rem 0 .8rem; font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 2.1rem; letter-spacing: 0; text-transform: none; line-height: 1; color: var(--ink); }
+      #tanu-opts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; max-height: 50vh; overflow-y: auto; }
+      #tanu-opts button { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: .8rem; padding: .45rem .6rem; border: 1px solid transparent; color: var(--ink); text-align: left; }
+      #tanu-opts button b { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 1.35rem; letter-spacing: 0; text-transform: none; }
+      #tanu-opts button span { font-size: .55rem; color: var(--muted); }
+      #tanu-opts button.sel { border-color: rgba(255,127,110,.6); }
+      #tanu-opts button.sel b { color: #ff7f6e; }
+      @media (max-width: 600px) { #tanu-ask { left: 1rem; right: 1rem; width: auto; top: 5rem; } }
       body.following:not(.focus):not(.selecting) #t-b0 .flying { display: none; }
       body.following:not(.focus):not(.selecting) #t-b0 .letgo { display: inline; }
       body.meeting:not(.focus):not(.selecting) #t-b3 .flying { display: none; }
@@ -542,11 +556,17 @@ import Layout from '../layouts/Layout.astro';
     <form id="meet-form" hidden><input id="meet-input" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="say something…" /><button>send</button></form>
     <p class="meet-hint" id="meet-hint">fly away to part</p>
   </div>
+  <div id="tanu-ask" hidden>
+    <p class="meet-kick">Tanu · the sentinel of this galaxy</p>
+    <h2 id="tanu-q">which years?</h2>
+    <ol id="tanu-opts"></ol>
+    <p class="meet-hint" id="tanu-hint"></p>
+  </div>
   <button id="t-fly" aria-label="fly the balloon">fly</button>
   <div id="t-zone" aria-hidden="true"></div><div id="t-base" aria-hidden="true"></div><div id="t-knob" aria-hidden="true"></div>
   <button class="t-btn" id="t-b0" aria-hidden="true" tabindex="-1"><span class="flying">burner</span><span class="letgo">let<br>go</span><span class="at-piece">slide<br>show</span></button>
-  <button class="t-btn" id="t-b1" aria-hidden="true" tabindex="-1"><span class="flying">pause</span><span class="choosing">open</span><span class="at-piece">next</span></button>
-  <button class="t-btn" id="t-b2" aria-hidden="true" tabindex="-1"><span class="flying">land</span><span class="choosing">resume</span><span class="at-piece">fly on</span></button>
+  <button class="t-btn" id="t-b1" aria-hidden="true" tabindex="-1"><span class="flying">pause</span><span class="asking">go</span><span class="choosing">open</span><span class="at-piece">next</span></button>
+  <button class="t-btn" id="t-b2" aria-hidden="true" tabindex="-1"><span class="flying">land</span><span class="asking">back</span><span class="choosing">resume</span><span class="at-piece">fly on</span></button>
   <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="meeting">gas</span><span class="choosing">still</span><span class="at-piece">word</span></button>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
@@ -620,7 +640,7 @@ import Layout from '../layouts/Layout.astro';
     import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
     import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
     import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-    import { Tanu } from '../cronovisor/tanu/tanu';
+    import { Tanu, type Leg } from '../cronovisor/tanu/tanu';
 
     const COLORS = ['#ff3f3f','#ff9f1c','#6ef9f5','#b8f75b','#c77dff','#ff6eb4','#38bdf8','#ffd166'];
     const NOTES =  [392, 440, 523, 587, 659, 349, 466, 311];
@@ -1280,7 +1300,11 @@ import Layout from '../layouts/Layout.astro';
     function goToTanu(){
       if(!tanu || boarded) return;
       touched();
-      if(pilot){ tanu.swimTo('balloon'); playNote(NOTES[2]); return; }
+      if(pilot){ // flying: she comes to you, and once beside you she offers you times
+        if(trip) return;
+        tanu.swimTo('balloon').then(() => { if(pilot && tanu && !ask && !trip && tanu.position.distanceTo(pilot.pos) < 40) openAsk(); });
+        playNote(NOTES[2]); return;
+      }
       if(focused >= 0) backOutNow();
       if(worldAt >= 0) leaveWorld();
       const at = tanu.position.clone();
@@ -1291,6 +1315,186 @@ import Layout from '../layouts/Layout.astro';
     }
     // the balloon, while someone flies it
     function tanuBalloon(){ return pilot ? pilot.pos.clone() : null; }
+    // ── Tanu, the sentinel: bump into her while flying and she offers you years; choose and she takes you there ──
+    // (Eze, 2026-11-09). First a few stretches of years, cut so each holds about as much of the archive, then the
+    // years of the one you pick (or the whole stretch). She swims there barrio by barrio and the balloon follows her
+    // on its own (the stick looks around); the burner takes the helm and you follow her by hand, and she waits for
+    // you whenever you fall behind. Entering each year she stops, turns to you, breathes out a plume of light and
+    // calls, and the year shows like a chapter title. At the end she stays beside you a while: bump her again for
+    // other years.
+    type AskItem = { label: string; sub: string; years: string[]; range?: number };
+    let ask: { level: 0 | 1; items: AskItem[]; sel: number; release: () => void; ranges: AskItem[] } | null = null;
+    let trip: { years: string[]; label: string; auto: boolean } | null = null;
+    let tanuArmed = true, tanuCool = 0; // after an offer she needs you to have drawn away (and a moment) before the next
+    const askEl = $('tanu-ask'), askOpts = $('tanu-opts');
+    function yearsOfArchive(){
+      const n = new Map<string, number>();
+      stations.slice(1).forEach(s => { const y = s.date.slice(0, 4); n.set(y, (n.get(y) || 0) + 1); });
+      return [...n.entries()].sort((a, b) => b[0].localeCompare(a[0])); // newest first, as you'd travel from the centre
+    }
+    const span = (ys: string[]) => ys.length > 1 ? `${ys[ys.length-1]} – ${ys[0]}` : ys[0];
+    const memories = (n: number) => `${n} ${n === 1 ? 'memory' : 'memories'}`;
+    function tanuRanges(): AskItem[] {
+      const ys = yearsOfArchive(), total = ys.reduce((a, [, n]) => a + n, 0);
+      if(ys.length <= 5) return ys.map(([y, n]) => ({ label: y, sub: memories(n), years: [y] }));
+      // contiguous stretches of about equal weight (never more than five)
+      const k = 5, out: AskItem[] = [];
+      let cur: string[] = [], sum = 0, done = 0;
+      ys.forEach(([y, n], i) => {
+        cur.push(y); sum += n;
+        const left = ys.length - i - 1, still = k - out.length - 1;
+        if(still > 0 && (sum >= (total - done)/(still + 1) || left === still)){ out.push({ label: span(cur), sub: memories(sum), years: cur, range: out.length }); done += sum; cur = []; sum = 0; }
+      });
+      if(cur.length) out.push({ label: span(cur), sub: memories(sum), years: cur, range: out.length });
+      return out;
+    }
+    function openAsk(){
+      if(!pilot || !tanu || ask || trip) return;
+      const ranges = tanuRanges();
+      if(!ranges.length) return;
+      ask = { level: 0, items: ranges, sel: 0, release: tanu.attend(), ranges };
+      askEl.hidden = false;
+      document.body.classList.add('asking');
+      tanuCall(.6);
+      renderAsk();
+    }
+    function closeAsk(){
+      if(!ask) return;
+      ask.release();
+      ask = null;
+      askEl.hidden = true;
+      document.body.classList.remove('asking');
+      tanuArmed = false; tanuCool = performance.now() + 4000;
+    }
+    function renderAsk(){
+      if(!ask) return;
+      const yearsOf = (y: string) => yearsOfArchive().find(e => e[0] === y)?.[1] || 0;
+      $('tanu-q').textContent = ask.level ? ask.items[0].label.replace('the whole stretch · ', '') : 'which years?';
+      askOpts.innerHTML = '';
+      ask.items.forEach((it, i) => {
+        const li = document.createElement('li'), b = document.createElement('button');
+        b.innerHTML = '<b></b><span></span>';
+        b.querySelector('b')!.textContent = it.label;
+        b.querySelector('span')!.textContent = it.sub || (it.years.length === 1 ? memories(yearsOf(it.years[0])) : '');
+        if(i === ask!.sel) b.classList.add('sel');
+        b.addEventListener('mouseenter', () => { if(ask){ ask.sel = i; markAsk(); } });
+        b.addEventListener('click', e => { e.stopPropagation(); if(ask){ ask.sel = i; chooseAsk(); } });
+        li.appendChild(b); askOpts.appendChild(li);
+      });
+      const kb = document.body.classList.contains('kb'), touch = document.body.classList.contains('touch');
+      $('tanu-hint').textContent = touch ? `go · back${ask.level ? '' : ' · or fly away'}`
+        : kb ? `W S choose · E go · Q ${ask.level ? 'back' : 'not now'}` : `stick choose · ● right go · ▲ ${ask.level ? 'back' : 'not now'}`;
+    }
+    function markAsk(){
+      askOpts.querySelectorAll('button').forEach((b, i) => b.classList.toggle('sel', i === ask!.sel));
+      askOpts.querySelectorAll('button')[ask!.sel]?.scrollIntoView({ block: 'nearest' });
+    }
+    function moveAsk(d: number){ if(!ask) return; ask.sel = (ask.sel + d + ask.items.length) % ask.items.length; markAsk(); playNote(NOTES[ask.sel % 5]*.5); }
+    function chooseAsk(){
+      if(!ask) return;
+      const it = ask.items[ask.sel];
+      if(ask.level === 0 && it.range !== undefined && it.years.length > 1){
+        // a stretch: the whole of it, or one of its years
+        ask.level = 1; ask.sel = 0;
+        ask.items = [{ label: `the whole stretch · ${it.label}`, sub: it.sub, years: it.years }, ...it.years.map(y => ({ label: y, sub: '', years: [y] }))];
+        playNote(NOTES[4]); renderAsk(); return;
+      }
+      const years = it.years, label = span(years);
+      closeAsk();
+      startTrip(years, label);
+    }
+    function backAsk(){
+      if(!ask) return;
+      if(ask.level === 1){ const r = ask.ranges.findIndex(x => x.years[0] === ask!.items[0].years[0]); ask.level = 0; ask.items = ask.ranges; ask.sel = Math.max(0, r); renderAsk(); playNote(NOTES[5]); }
+      else closeAsk();
+    }
+    // the journey: one stretch per year (through the barrios of the year before, on to the first barrio of this one),
+    // from whichever end of the chosen years lies nearer the balloon; heights flattened so the balloon can follow
+    function startTrip(years: string[], label: string){
+      if(!pilot || !tanu) return;
+      const months = [...monthSpots.keys()].filter(m => years.includes(m.slice(0, 4))).sort();
+      if(!months.length) return;
+      const at = (m: string) => { const v = monthSpots.get(m)!.clone(); v.y = v.y*.25 + 4; return v; };
+      if(at(months[months.length-1]).distanceTo(pilot.pos) < at(months[0]).distanceTo(pilot.pos)) months.reverse();
+      const legs: Leg[] = [];
+      let via: THREE.Vector3[] = [];
+      months.forEach((m, i) => {
+        const y = m.slice(0, 4), fresh = i === 0 || months[i-1].slice(0, 4) !== y;
+        if(fresh){ legs.push({ via, stop: at(m), wait: 6, onArrive: () => tanuArrived(y) }); via = []; }
+        else via.push(at(m));
+      });
+      if(via.length){ const last = via.pop()!; legs.push({ via, stop: last, wait: 1, onArrive: () => tanuCall(.5) }); } // on through the last year's barrios
+      trip = { years, label, auto: true };
+      document.body.classList.add('guided');
+      playNote(NOTES[2]); setTimeout(() => playNote(NOTES[4]), 180);
+      tanu.guide(legs).then(() => {
+        const was = trip;
+        trip = null;
+        document.body.classList.remove('guided');
+        if(was && pilot && tanu){ tanu.stay(40); tanuArmed = false; tanuCool = performance.now() + 5000; }
+      });
+    }
+    function endTrip(){
+      if(!trip) return;
+      trip = null;
+      document.body.classList.remove('guided');
+      tanu?.cancel();
+    }
+    function tanuArrived(year: string){
+      tanuCall(1);
+      const title = $('arrival');
+      title.querySelector('p')!.textContent = 'Tanu brought you to';
+      title.querySelector('h2')!.textContent = year;
+      title.classList.add('show');
+      clearTimeout(tanuTitleT);
+      tanuTitleT = setTimeout(() => title.classList.remove('show'), 5200);
+    }
+    let tanuTitleT = 0 as unknown as ReturnType<typeof setTimeout>;
+    // her call (a first sketch of her song, stage B): a long sliding moan with a slow vibrato and a higher answer,
+    // in a hall of echoes; as loud as she is near
+    function tanuCall(k: number){
+      if(!audioCtx || !masterGain || !tanu) return;
+      const ctx = audioCtx, t = ctx.currentTime, d = camera.position.distanceTo(tanu.position);
+      const vol = Math.min(1, 70/Math.max(20, d))*.32*k;
+      const out = ctx.createGain(); out.gain.value = vol;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+      const echo = ctx.createDelay(1), fb = ctx.createGain(); echo.delayTime.value = .42; fb.gain.value = .38;
+      lp.connect(out); out.connect(masterGain); out.connect(echo); echo.connect(fb); fb.connect(echo); fb.connect(masterGain);
+      const voice = (at: number, pts: number[], len: number, g: number) => {
+        const o = ctx.createOscillator(), o2 = ctx.createOscillator(), env = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+        o.type = 'sine'; o2.type = 'triangle';
+        lfo.frequency.value = 4.6; lg.gain.value = pts[0]*.018; lfo.connect(lg); lg.connect(o.frequency); lg.connect(o2.frequency);
+        pts.forEach((f, i) => { const when = t + at + len*i/(pts.length-1); if(i) { o.frequency.exponentialRampToValueAtTime(f, when); o2.frequency.exponentialRampToValueAtTime(f*2.01, when); } else { o.frequency.setValueAtTime(f, when); o2.frequency.setValueAtTime(f*2.01, when); } });
+        env.gain.setValueAtTime(0.0001, t + at);
+        env.gain.exponentialRampToValueAtTime(g, t + at + len*.25);
+        env.gain.exponentialRampToValueAtTime(g*.6, t + at + len*.75);
+        env.gain.exponentialRampToValueAtTime(0.0001, t + at + len);
+        const m = ctx.createGain(); m.gain.value = .25; o2.connect(m); m.connect(env);
+        o.connect(env); env.connect(lp);
+        for(const x of [o, o2, lfo]){ x.start(t + at); x.stop(t + at + len + .05); }
+      };
+      voice(0, [196, 262, 233], 2.6, .9);
+      if(k > .7) voice(1.9, [349, 466, 392, 311], 2.2, .45);
+    }
+    // every frame while flying: bumping into her opens the offer; the offer and the journey end as they should
+    function updateTanuGuide(now: number){
+      if(!tanu) return;
+      if(ask && (!pilot || focused >= 0 || boarded || pilot.home || follow)) closeAsk();
+      if(trip && (!pilot || pilot.home || follow || pilot.auto)) endTrip();
+      if(!pilot) return;
+      const d = tanu.position.distanceTo(pilot.pos);
+      if(!tanuArmed && d > 34 && now > tanuCool) tanuArmed = true;
+      if(tanuArmed && !ask && !trip && now > tanuCool && focused < 0 && !boarded && !pilot.selecting && !pilot.home && !pilot.auto && !follow && !sunScene && pilot.dock < 0
+        && tanu.touches(pilot.pos.clone().add(new THREE.Vector3(0, 2.2, 0)), 2.6)){
+        // a soft bump: the balloon is pushed off her and stops, she turns to you
+        const away = pilot.pos.clone().sub(tanu.position).setY(0);
+        if(away.lengthSq() < .01) away.set(1, 0, 0);
+        pilot.knock.copy(away.normalize().multiplyScalar(5));
+        pilot.speed *= .2;
+        playNote(NOTES[7]/4);
+        openAsk();
+      }
+    }
     // The chronology is one continuous curve; pulses run along it from the present into the past.
     function buildThread(){
       if(pieces.length < 3) return; // a new galaxy, nothing to thread yet
@@ -2438,6 +2642,13 @@ import Layout from '../layouts/Layout.astro';
         else if(!pad.held[2] && !flight && balloon?.mode === 'cruise') enterPilot();
         return;
       }
+      if(ask){ // Tanu's offer: the stick chooses, ● right / E goes, ▲ / Q goes back (or says not now), the burner flies on
+        if(pad.y && step()) moveAsk(pad.y);
+        if(tap(1)) chooseAsk();
+        else if(tap(2)) backAsk();
+        else if(tap(0)) closeAsk();
+        return;
+      }
       if(pilot.selecting){
         if(step()) moveSelection(pad.x, pad.y);
         if(tap(1) && pilot.sel === 0) board();
@@ -2840,7 +3051,7 @@ import Layout from '../layouts/Layout.astro';
       pilot.speed = 0;
       playNote(NOTES[0]/2);
     }
-    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get controls(){ return controls; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, get tanu(){ return tanu; }, get renderer(){ return renderer; }, visit: (k: number) => visitWorld(k) };
+    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get controls(){ return controls; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, get tanu(){ return tanu; }, get renderer(){ return renderer; }, visit: (k: number) => visitWorld(k), openAsk: () => openAsk(), get ask(){ return ask; }, get trip(){ return trip; }, startTrip: (y: string[], l: string) => startTrip(y, l), ranges: () => tanuRanges() };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
       const p = pilot;
@@ -2850,7 +3061,9 @@ import Layout from '../layouts/Layout.astro';
       // sailing on its own, the stick looks around (the balloon keeps its course); the burner takes the helm back
       if(p.auto && (pad.held[0] || !worlds[p.auto.k]?.link.galaxy?.open)) p.auto = null;
       if(follow && pad.held[0] && !pad.prev[0]) stopFollow('you fly on your own'); // the burner takes the helm back
-      if((p.auto || follow) && (pad.x || pad.y)){
+      const towed = !!(trip?.auto && tanu);
+      if(trip?.auto && pad.held[0] && !pad.prev[0]) trip.auto = false; // the burner takes the helm: from now on you follow her yourself
+      if((p.auto || follow || towed) && (pad.x || pad.y)){
         p.lookYaw = Math.max(-Math.PI, Math.min(Math.PI, p.lookYaw - pad.x*dt*1.7));
         p.lookPitch = Math.max(-.5, Math.min(1.1, p.lookPitch - pad.y*dt*1.1));
       } else { p.lookYaw *= Math.exp(-dt*.8); p.lookPitch *= Math.exp(-dt*.8); } // let go: back behind the balloon, slowly
@@ -2874,7 +3087,7 @@ import Layout from '../layouts/Layout.astro';
         if(!wants) sunScene.free = true;
         if(now-sunScene.t0 > 2500 && wants && (sunScene.free || sunScene.push > 1.2)) endSunScene();
       }
-      const moored = p.dock >= 0 || !!sunScene;
+      const moored = p.dock >= 0 || !!sunScene || !!ask; // Tanu's offer holds the balloon too
       const withHim = nearHim(p.pos); // beside him the balloon hovers, as long as you don't push on
       const free = !p.selecting && !p.home && !moored; // while choosing a piece the stick belongs to the selection
       let sx = free ? pad.x : 0, sy = free ? pad.y : 0, held = free && pad.held[0];
@@ -2902,10 +3115,11 @@ import Layout from '../layouts/Layout.astro';
         if(there && gas > .98) p.auto.sun = false; // full: on to the galaxy
       }
       const leader = follow && free ? others.get(follow.id) : null;
-      if(leader){ sx = 0; sy = 0; held = false; } // towed: the stick looks around, and the tank rests
+      const tow = towed && free && !leader ? tanu : null; // Tanu leads: the balloon goes with her
+      if(leader || tow){ sx = 0; sy = 0; held = false; } // towed: the stick looks around, and the tank rests
       // the tank: the burner and the pilot flame spend it; low, the flame coughs
       const voidK = inVoid(p.pos);
-      if(free && !leader) gas = Math.max(0, gas - dt*(GAS_IDLE*(voidK ? VOID_IDLE : 1) + (held ? GAS_BURN*(voidK ? VOID_BURN : 1) : 0)));
+      if(free && !leader && !tow) gas = Math.max(0, gas - dt*(GAS_IDLE*(voidK ? VOID_IDLE : 1) + (held ? GAS_BURN*(voidK ? VOID_BURN : 1) : 0)));
       const cough = gas < GAS_LOW && !inXibalba(p.pos) && Math.sin(now*.023) + Math.sin(now*.0071)*1.3 < -.35; // never in Xibalbá: you can always climb out
       const burning = held && gas > 0 && !cough;
       burnerOn = burning;
@@ -2921,7 +3135,7 @@ import Layout from '../layouts/Layout.astro';
       // (only once you're below the Sun: at its height you can stay beside it and fill the tank)
       const pull = xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y - 90 ? 6 : 1;
       if(p.still && (pad.x || pad.y || pad.held[0])) p.still = false; // arrived from another galaxy: it hovers where it came out until you fly
-      const climb = p.selecting || moored || p.still || ((withHim || meet || follow) && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW && !inXibalba(p.pos) ? .55 : 1) : SINK*pull;
+      const climb = p.selecting || moored || p.still || ((withHim || meet || follow || tow) && !held) ? 0 : burning ? CLIMB*(gas < GAS_LOW && !inXibalba(p.pos) ? .55 : 1) : SINK*pull;
       p.vy += (climb - p.vy)*(1-Math.exp(-dt*(burning ? 3.5 : p.selecting || moored ? 6 : 1.8)));
       p.pos.y += p.vy*dt;
       const floor = inXibalba(p.pos) || (xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260) ? xibBottom() : -PILOT_Y; // under the Sun the road goes down to Xibalbá
@@ -2945,6 +3159,22 @@ import Layout from '../layouts/Layout.astro';
           const want = Math.atan2(aim.x, aim.z), diff = Math.atan2(Math.sin(want - p.heading), Math.cos(want - p.heading));
           p.heading += diff*(1-Math.exp(-dt*2));
           p.turn = Math.max(-1, Math.min(1, diff*1.5));
+        } else if(tow){
+          // behind her as she swims (a little to the side, a little above, so she's in view); where she stops, it
+          // keeps its own side of her, facing her
+          const T = tow.position, v = tow.velocity, moving = v.lengthSq() > 4;
+          const dir = moving ? v.clone().setY(0).normalize() : p.pos.clone().sub(T).setY(0).normalize().negate();
+          const side = new THREE.Vector3(dir.z, 0, -dir.x);
+          const spot = T.clone().addScaledVector(dir, -28).addScaledVector(side, 10);
+          spot.y = T.y + 4;
+          if(moving) p.pos.addScaledVector(v, dt*.9);
+          p.pos.lerp(spot, 1-Math.exp(-dt*.9));
+          // the balloon looks a little past her, so the camera behind it sees her beside it, not hidden by it
+          const aim = moving && p.pos.distanceTo(spot) < 14 ? dir : T.clone().addScaledVector(side, 9).sub(p.pos).setY(0);
+          const want = Math.atan2(aim.x, aim.z), diff = Math.atan2(Math.sin(want - p.heading), Math.cos(want - p.heading));
+          p.heading += diff*(1-Math.exp(-dt*1.6));
+          p.turn = Math.max(-1, Math.min(1, diff*1.5));
+          p.speed = 0;
         }
         const r = Math.hypot(p.pos.x, p.pos.z);
         if(r > PILOT_R){ p.pos.x *= PILOT_R/r; p.pos.z *= PILOT_R/r; } // the edge of the archive holds it back
@@ -3023,7 +3253,7 @@ import Layout from '../layouts/Layout.astro';
         look.lerp(aim, reduced ? 1 : 1-Math.exp(-dt*.9));
       } else if(moored){
         // moored: step aside so the balloon and the world sit together on the left, their story on the right
-        const w = worlds[p.dock].mesh.position, mid = p.pos.clone().lerp(w, .5).add(new THREE.Vector3(0, 2, 0));
+        const w = p.dock >= 0 ? worlds[p.dock].mesh.position : tanu!.position, mid = p.pos.clone().lerp(w, .5).add(new THREE.Vector3(0, 2, 0));
         const axis = w.clone().sub(p.pos).setY(0).normalize(), up = new THREE.Vector3(0, 1, 0);
         const side = axis.clone().cross(up);
         if(side.dot(camera.position.clone().sub(mid)) < 0) side.negate(); // the side the camera is already on
@@ -3052,16 +3282,18 @@ import Layout from '../layouts/Layout.astro';
         $('wind-arrow').style.transform = `rotate(${-ang}deg)`;
         const d = new Date();
         $('wind-txt').textContent = `wind ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${Math.round(wind.length()*3)} km/h · altitude ${Math.round(p.pos.y + PILOT_Y)}`;
-        const mw = moored ? worlds[p.dock].link : p.nearGalaxy >= 0 ? worlds[p.nearGalaxy].link : null, kb = document.body.classList.contains('kb');
+        const mw = p.dock >= 0 ? worlds[p.dock].link : p.nearGalaxy >= 0 ? worlds[p.nearGalaxy].link : null, kb = document.body.classList.contains('kb');
         const xibAt = xib && inXibalba(p.pos) ? journeyAt() : null;
         const xibLevel = xib && inXibalba(p.pos) ? Math.max(0, Math.min(8, Math.floor((xib.top - p.pos.y)/LEVEL_H + .5))) : -1;
         const ag = p.auto ? worlds[p.auto.k]?.link : null;
-        $('gas-msg').textContent = ag ? (p.auto!.sun ? `sailing to ${ag.label}'s galaxy · by the Sun first, for gas` : `sailing to ${ag.label}'s galaxy`) + (kb ? ' · W A S D look around · space takes the helm' : ' · stick looks around · ● left burner takes the helm')
+        $('gas-msg').textContent = ask ? 'Tanu offers you years'
+          : trip ? (tanu?.waiting ? `Tanu waits for you · ${trip.label}` : trip.auto ? `Tanu guides you · ${trip.label} · ${kb ? 'W A S D look around · space takes the helm' : 'stick looks around · ● left burner takes the helm'}` : `follow Tanu · ${trip.label}`)
+          : ag ? (p.auto!.sun ? `sailing to ${ag.label}'s galaxy · by the Sun first, for gas` : `sailing to ${ag.label}'s galaxy`) + (kb ? ' · W A S D look around · space takes the helm' : ' · stick looks around · ● left burner takes the helm')
           : withHim ? `${xib!.j.name || 'papá'} · en su viaje · tramo ${xibAt ? xibAt.i + 1 : 9} de 9`
           : xibLevel >= 0 ? `Xibalbá · ${xibLevel + 1} · ${LEVELS[xibLevel]}`
           : xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y - 90 ? `under the Sun · let go of the burner to go down to ${xib.j.name || 'him'}`
           : mw?.galaxy ? `${mw.label}'s galaxy · ${!mw.galaxy.open ? 'closed: knock at its door with the mouse' : gas < CROSS_COST ? 'you need 2 gallons to cross' : 'fly into its heart to cross over'}`
-          : moored ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
+          : p.dock >= 0 ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
           : gas < GAS_LOW ? 'low gas · nebulae lie in the past'
@@ -3205,6 +3437,7 @@ import Layout from '../layouts/Layout.astro';
         if(boarded){ if(!delivering) leaveBalloon(); }
         else if(anyOpen()) closeSheets();
         else if(pilot?.selecting && focused < 0) endSelection();
+        else if(ask) closeAsk();
         else if(pilot && focused < 0) exitPilot();
         else if(worldAt >= 0) leaveWorld();
         else { touched(); if(pilot && focused >= 0) flyOn(); else backOut(); }
@@ -3332,6 +3565,7 @@ import Layout from '../layouts/Layout.astro';
       }
       updateSky(now, dt);
       updateMeeting(now);
+      updateTanuGuide(now);
       updateTour(now, dt);
       updateGas(dt, frozen ? 0 : dt, now);
       updateWorlds(frozen ? 0 : dt);

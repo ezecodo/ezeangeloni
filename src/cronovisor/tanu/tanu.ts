@@ -35,6 +35,10 @@ const MAX_TURN = .5;                 // radians a second, at most (reached slowl
 const MAX_PITCH = .42;               // the steepest she climbs or dives (radians)
 
 type Task = { run: () => Promise<void> };
+// a stretch of a guided journey: through some places on to a stop, where she turns to the balloon and gives a sign
+export interface Leg { via: THREE.Vector3[]; stop: THREE.Vector3; wait: number; onArrive?: () => void }
+const GUIDE = 13;                    // her pace while guiding (the balloon flies at 22 at most: whoever follows by hand keeps up)
+const WAIT_FAR = 62, WAIT_NEAR = 40; // the balloon falls this far behind: she stops and looks back; it comes this near: she goes on
 
 
 export class Tanu {
@@ -60,10 +64,13 @@ export class Tanu {
   private finClock = 0;              // the fins' own slow rhythm (faster while she hovers and sculls)
   private clock = 0;                 // her own time: the universe's, stopped when it stops
   private path: { curve: THREE.CatmullRomCurve3; u: number; len: number; speed: number; done?: () => void } | null = null;
-  private looking: { target: () => THREE.Vector3 | null; until: number; done: () => void } | null = null;
+  private looking: { target: () => THREE.Vector3 | null; until: number; done: () => void; far?: number } | null = null;
   private curiousAt = -1e9;
   private dodgeAt = 0;          // when she last gave up on the balloon (she waits a while before the next time)
   private busy = false;              // an action from outside is running: her own whims wait
+  private settle: (() => void) | null = null; // ends the action running now (cancel)
+  private gen = 0;                   // cancel() drops whatever was queued before it
+  private guiding: { legs: Leg[]; i: number; pause: number; waiting: boolean; done: () => void } | null = null;
   private queue: Promise<void> = Promise.resolve();
   private nextBreath = 8;
   private dustDebt = 0;
@@ -108,7 +115,13 @@ export class Tanu {
 
   // ── the controller (what the brain will call) ──────────────────────────────
   private enqueue(state: TanuState, run: () => Promise<void>){
-    const go = async () => { this.busy = true; this.state = state; try { await run(); } finally { this.busy = false; this.state = 'idle'; this.path = null; this.looking = null; } };
+    const gen = this.gen;
+    const go = async () => {
+      if(gen !== this.gen) return; // cancelled while it waited its turn
+      this.busy = true; this.state = state;
+      try { await Promise.race([run(), new Promise<void>(r => { this.settle = r; })]); }
+      finally { this.settle = null; this.busy = false; this.state = 'idle'; this.path = null; this.looking = null; this.guiding = null; }
+    };
     const p = this.queue.then(go, go);
     this.queue = p.catch(() => {});
     return p;
@@ -132,6 +145,55 @@ export class Tanu {
       this.looking = { target: get, until: this.clock + 6, done };
     }));
   }
+  /** stay beside the balloon, facing it, until released (the encounter: she offers times while you choose) */
+  attend(): () => void {
+    let release = () => { released = true; }, released = false;
+    this.enqueue('look', () => new Promise<void>((done) => {
+      if(released || !this.host.balloon()){ done(); return; }
+      this.path = null;
+      this.looking = { target: () => this.host.balloon(), until: Infinity, done };
+      release = () => { if(this.looking?.done === done) this.looking.until = 0; };
+    }));
+    return () => release();
+  }
+  /** after a journey: she stays a while facing the balloon, and goes her own way once it's left (or time's up) */
+  stay(secs: number): Promise<void> {
+    return this.enqueue('look', () => new Promise<void>((done) => {
+      if(!this.host.balloon()){ done(); return; }
+      this.path = null;
+      this.looking = { target: () => this.host.balloon(), until: this.clock + secs, done, far: 95 };
+    }));
+  }
+  /** guide the balloon: swim leg by leg at a pace it can follow, waiting whenever it falls behind; at each stop she
+   *  turns to it, breathes out a plume of light and calls `onArrive` (the host's song and words), waits, goes on */
+  guide(legs: Leg[]): Promise<void> {
+    return this.enqueue('guide', () => new Promise<void>((done) => {
+      if(!legs.length){ done(); return; }
+      this.looking = null;
+      this.guiding = { legs, i: -1, pause: 0, waiting: false, done };
+      this.nextLeg();
+    }));
+  }
+  /** stop whatever she was asked to do (and anything queued): she goes back to her own swim */
+  cancel(){ this.gen++; this.settle?.(); }
+  /** the sign she gives: a big plume of star dust from the blowhole */
+  signal(){ this.plume(150); this.nextBreath = this.clock + 20 + this.rng()*15; }
+  /** is this point (the balloon's envelope) touching her body? Her body as a capsule along her length */
+  touches(p: THREE.Vector3, r: number){
+    const a = this.pos.clone().addScaledVector(this.fwd, -LENGTH*.42), ab = this.fwd.clone().multiplyScalar(LENGTH*.84);
+    const t = THREE.MathUtils.clamp(p.clone().sub(a).dot(ab)/ab.lengthSq(), 0, 1);
+    return a.addScaledVector(ab, t).distanceTo(p) < r + LENGTH*.11;
+  }
+  get velocity(){ return this.vel; }
+  get waiting(){ return !!this.guiding?.waiting; }
+  get guidingNow(){ return !!this.guiding; }
+  private nextLeg(){
+    const g = this.guiding!;
+    g.i++;
+    if(g.i >= g.legs.length){ const d = g.done; this.guiding = null; d(); return; }
+    const leg = g.legs[g.i];
+    this.swimVia(leg.via, leg.stop, GUIDE);
+  }
   sing(emotion: Emotion): Promise<void> { this.mood = emotion; return this.later('sing', 'B'); }
   blowConstellation(label: string): Promise<void> { return this.later('blow', 'C', label); }
   transform(form: 'whale' | 'tanu'): Promise<void> { return this.later('transform', 'D', form); }
@@ -149,6 +211,16 @@ export class Tanu {
     mid.y += (this.rng() - .5)*dist*.08;
     const curve = new THREE.CatmullRomCurve3([from, ahead, mid, to], false, 'centripetal');
     this.path = { curve, u: 0, len: curve.getLength(), speed, done };
+  }
+  // through some places on to a stop: the curve starts the way she's facing and passes every one of them
+  private swimVia(via: THREE.Vector3[], to: THREE.Vector3, speed: number){
+    const from = this.pos.clone(), first = via[0] ?? to;
+    // she sets off mostly towards the first place (at a stop she's facing the balloon: not into it)
+    const lead = this.fwd.clone().lerp(first.clone().sub(from).normalize(), .75).normalize();
+    const ahead = from.clone().addScaledVector(lead, THREE.MathUtils.clamp(from.distanceTo(first)*.3, 8, 30));
+    const pts = [from, ahead, ...via, to].filter((v, i, a) => i === 0 || v.distanceTo(a[i-1]) > 4);
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    this.path = { curve, u: 0, len: curve.getLength(), speed };
   }
   private wander(){
     const R = this.host.radius();
@@ -206,7 +278,22 @@ export class Tanu {
       const t = this.looking.target();
       if(t) this.want.copy(t.clone().sub(this.pos).normalize());
       target = .4;
-      if(this.clock > this.looking.until){ const d = this.looking.done; this.looking = null; d(); }
+      if(this.clock > this.looking.until || !t || (this.looking.far && t.distanceTo(this.pos) > this.looking.far)){ const d = this.looking.done; this.looking = null; d(); }
+    } else if(this.guiding){
+      const g = this.guiding;
+      if(!B){ this.cancel(); return; } // nobody flying: the journey's over
+      if(!this.path){
+        // at a stop: facing the balloon while she waits, then on
+        this.want.copy(B.clone().sub(this.pos).normalize());
+        target = .3;
+        if(this.clock > g.pause && dB < WAIT_FAR) this.nextLeg();
+      } else {
+        // the balloon fell behind: she stops and looks back for it, and goes on once it's near again
+        if(!g.waiting && dB > WAIT_FAR) g.waiting = true;
+        else if(g.waiting && dB < WAIT_NEAR) g.waiting = false;
+        const p = this.path, left = (1 - p.u)*p.len;
+        target = g.waiting ? 0 : p.speed*THREE.MathUtils.clamp(left/18, .25, 1)*THREE.MathUtils.clamp(1.25 - dB/WAIT_FAR, .45, 1); // she slows as it lags
+      }
     } else {
       if(!this.path) this.wander();
       const p = this.path!;
@@ -243,9 +330,14 @@ export class Tanu {
       const q = p.curve.getPointAt(p.u), tan = p.curve.getTangentAt(p.u);
       // the course is the curve's, the body follows a little behind, so turns are soft
       this.pos.lerp(q, 1 - Math.exp(-dt*3));
-      this.want.copy(tan);
+      if(this.guiding?.waiting && B) this.want.copy(B.clone().sub(this.pos).normalize()); // looking back for it
+      else this.want.copy(tan);
       this.vel.copy(this.pos).sub(from).divideScalar(dt);
-      if(p.u >= 1){ this.path = null; p.done?.(); }
+      if(p.u >= 1){
+        this.path = null; p.done?.();
+        const g = this.guiding;
+        if(g){ const leg = g.legs[g.i]; g.pause = this.clock + leg.wait; this.signal(); leg.onArrive?.(); }
+      }
     } else {
       // her body carries her: it goes mostly where she's heading, but can lead it a little towards where she means
       // to go, so she starts rising as she begins to pitch up instead of turning first and moving after
@@ -302,13 +394,18 @@ export class Tanu {
     // breathing out: a plume of star dust from the blowhole every half a minute or so
     if(this.clock > this.nextBreath){
       this.nextBreath = this.clock + 26 + this.rng()*20;
-      const at = this.tmp.copy(this.blowholeAt).applyMatrix4(m).clone();
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.group.quaternion);
-      const n = this.host.lowPower() ? 30 : 70;
-      for(let i = 0; i < n; i++){
-        const v = up.clone().multiplyScalar(4.5 + this.rng()*4).add(new THREE.Vector3(this.rng() - .5, this.rng() - .5, this.rng() - .5).multiplyScalar(2.2)).addScaledVector(this.fwd, this.speed*.6);
-        this.dust.emit(at, v, this.clock + this.rng()*.5, 2.5 + this.rng()*2, .3 + this.rng()*.45);
-      }
+      this.plume(70);
+    }
+  }
+  private plume(n: number){
+    if(this.host.reduced) n = Math.round(n*.3);
+    const at = this.tmp.copy(this.blowholeAt).applyMatrix4(this.body.matrixWorld).clone();
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.group.quaternion);
+    if(this.host.lowPower()) n = Math.round(n*.45);
+    const big = n > 100 ? 1.5 : 1; // the sign is taller and lasts longer than a breath
+    for(let i = 0; i < n; i++){
+      const v = up.clone().multiplyScalar((4.5 + this.rng()*4)*big).add(new THREE.Vector3(this.rng() - .5, this.rng() - .5, this.rng() - .5).multiplyScalar(2.2*big)).addScaledVector(this.fwd, this.speed*.6);
+      this.dust.emit(at, v, this.clock + this.rng()*.5*big, (2.5 + this.rng()*2)*big, .3 + this.rng()*.45);
     }
   }
   private place(){
