@@ -112,9 +112,9 @@ export const SKIN_FRAG = /* glsl */`
       vec3 eyeCol = vec3(.66, .62, .55);                   // ivory
       eyeCol = mix(eyeCol, vec3(.38, .22, .1), 1. - smoothstep(.5, .6, d));   // the iris
       eyeCol = mix(eyeCol, vec3(.02, .015, .012), 1. - smoothstep(.2, .28, d)); // the pupil
-      eyeCol *= .75 + .35*max(0., dot(N, V));
+      eyeCol *= .7 + .25*max(0., dot(N, V));
       float spec = pow(max(0., dot(N, normalize(V + vec3(.35, .7, .2)))), 70.);
-      eyeCol += vec3(1., .97, .92)*spec*.6;
+      eyeCol += vec3(1., .97, .92)*spec*.18;   // a small catchlight: the eye stays under the bloom threshold
       // the lid: its edge sweeps from above the eye (blink 0) to below it (blink 1)
       float up = (vRest.y - uEye.y)/max(uEyeR, 1e-4);
       float edge = 1.15 - 2.3*uBlink;

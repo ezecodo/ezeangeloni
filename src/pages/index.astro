@@ -1266,6 +1266,7 @@ import Layout from '../layouts/Layout.astro';
         model: '/models/tanu-humpback.glb', // "Game-ready Humpback Whale" by Allie2k, CC BY (credited in the about sheet)
         // her shaders compiled in the background (KHR_parallel_shader_compile) before she shows: appearing used to stall the page ~0.1 s
         prepare: o => renderer!.compileAsync(o, camera, scene),
+        viewer: () => camera.position,
       });
       scene.add(tanu.group, tanu.wake);
       tanuMark = document.createElement('div');

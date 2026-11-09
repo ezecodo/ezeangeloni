@@ -21,7 +21,8 @@ export interface TanuHost {
   reduced: boolean;                  // prefers-reduced-motion
   lowPower(): boolean;
   model?: string;                    // a sculpted body (GLB) to wear instead of the procedural one; she waits hidden until it's in
-  prepare?(o: THREE.Object3D): Promise<unknown>; // get her shaders and textures ready off the main thread before she shows (no stall)
+  prepare?(o: THREE.Object3D): Promise<unknown>;
+  viewer?(): THREE.Vector3;          // where the camera is: on her own she keeps clear of it (passing through it blacked out or flashed the screen) // get her shaders and textures ready off the main thread before she shows (no stall)
 }
 
 const LENGTH = 22;                   // the balloon is about 6 tall
@@ -57,7 +58,8 @@ export class Tanu {
   private clock = 0;                 // her own time: the universe's, stopped when it stops
   private path: { curve: THREE.CatmullRomCurve3; u: number; len: number; speed: number; done?: () => void } | null = null;
   private looking: { target: () => THREE.Vector3 | null; until: number; done: () => void } | null = null;
-  private curiousAt = -1e9;          // when she last gave up on the balloon (she waits a while before the next time)
+  private curiousAt = -1e9;
+  private dodgeAt = 0;          // when she last gave up on the balloon (she waits a while before the next time)
   private busy = false;              // an action from outside is running: her own whims wait
   private queue: Promise<void> = Promise.resolve();
   private nextBreath = 8;
@@ -151,7 +153,8 @@ export class Tanu {
     for(let k = 0; k < 8; k++){ // somewhere else in the galaxy, not too near where she is
       const a = this.rng()*Math.PI*2, r = R*(.3 + .8*this.rng());
       to.set(Math.cos(a)*r, (this.rng() - .5)*42, Math.sin(a)*r);
-      if(to.distanceTo(this.pos) > 70) break;
+      const eye = this.host.viewer?.();
+      if(to.distanceTo(this.pos) > 70 && (!eye || to.distanceTo(eye) > 90)) break;
     }
     this.swimPath(to, CRUISE);
   }
@@ -171,6 +174,14 @@ export class Tanu {
     if(!this.busy){
       if(this.state === 'idle' && dB < CURIOUS_NEAR && this.clock - this.curiousAt > 20){ this.state = 'curious'; this.path = null; }
       if(this.state === 'curious' && dB > CURIOUS_LEAVE){ this.state = 'idle'; this.curiousAt = this.clock; }
+    }
+    // on her own (not curious, not asked), she keeps clear of the camera: too near, she turns away and takes
+    // another way
+    const eye = this.host.viewer?.();
+    if(eye && !this.busy && this.state === 'idle' && this.pos.distanceTo(eye) < 45 && this.clock > this.dodgeAt){
+      this.dodgeAt = this.clock + 4;
+      const away = this.pos.clone().sub(eye).setY(0).normalize();
+      this.swimPath(this.pos.clone().addScaledVector(away, 90).setY(THREE.MathUtils.clamp(this.pos.y, -20, 20)), CRUISE);
     }
     let target = this.speed;
     let course: THREE.Vector3 | null = null; // curious: the way to her spot, which her body may start along before she's turned

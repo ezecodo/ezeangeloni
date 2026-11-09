@@ -16,8 +16,10 @@ const VERT = /* glsl */`
     p += vec3(sin(age*.9 + aLife.w*6.3), cos(age*.7 + aLife.w*4.1), sin(age*.6 + aLife.w*2.7))*.35*k;
     vec4 mv = modelViewMatrix*vec4(p, 1.);
     gl_Position = projectionMatrix*mv;
-    gl_PointSize = aLife.z*uView/max(.1, -mv.z)*(1. - k*.6);
-    vA = smoothstep(0., .08, k)*pow(1. - k, 1.6);
+    // never bigger than a small glow on screen, and gone right at the lens: a grain of dust drifting into the
+    // camera used to fill the whole screen for a moment (a flash over everything)
+    gl_PointSize = min(36., aLife.z*uView/max(.1, -mv.z)*(1. - k*.6));
+    vA = smoothstep(0., .08, k)*pow(1. - k, 1.6)*smoothstep(3., 9., -mv.z);
     vSeed = aLife.w;
   }`;
 const FRAG = /* glsl */`
