@@ -21,6 +21,7 @@ export interface TanuHost {
   reduced: boolean;                  // prefers-reduced-motion
   lowPower(): boolean;
   model?: string;                    // a sculpted body (GLB) to wear instead of the procedural one; she waits hidden until it's in
+  prepare?(o: THREE.Object3D): Promise<unknown>; // get her shaders and textures ready off the main thread before she shows (no stall)
 }
 
 const LENGTH = 22;                   // the balloon is about 6 tall
@@ -84,6 +85,8 @@ export class Tanu {
         if(m.normalMap){ u.uNormalMap.value = m.normalMap; u.uHasNormalMap.value = 1; }
         this.flukeAt.copy(m.fluke); this.blowholeAt.copy(m.blowhole);
       }).catch(e => console.warn('[tanu] the sculpted body did not load, the procedural one swims', e))
+        .then(() => this.host.prepare?.(new THREE.Mesh(this.body.geometry, this.body.material))) // a stand-in sharing her material: ready before she's drawn, no stall when she appears
+        .catch(() => {})
         .finally(() => { this.body.visible = true; });
     }
     this.dust = new Dust(host.reduced ? 160 : 520);
