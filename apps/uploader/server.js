@@ -8,6 +8,7 @@ import { saveLinks, storeLinkImage } from './links.js';
 import * as galaxies from './galaxies.js';
 import * as xibalba from './xibalba.js';
 import * as threads from './threads.js';
+import * as games from './games.js';
 import { attachSky, iceServers } from './sky.js';
 import { addPhoto, addText, removeItem, editItem, fromTelegram, ensureImagesDir, monthLabel, backfillThumbs } from './frases.js';
 
@@ -730,6 +731,32 @@ app.put('/api/frases/xibalba/settings', express.json(), checkAuth, galaxyRoute(a
 const xibUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
 app.post('/api/frases/xibalba/photos', checkAuth, xibUpload.single('photo'), galaxyRoute(async (req) => { if (!req.file) throw Object.assign(new Error('photo required'), { status: 400 }); return xibalba.addPhoto(req.file.buffer, req.body?.caption); }));
 app.delete('/api/frases/xibalba/photos/:id', checkAuth, galaxyRoute(async (req) => xibalba.removePhoto(req.params.id)));
+
+// The games room: each galaxy owner's own locker of the games they own (games.js). Only the owner's own password
+// opens it; to anyone else (wrong password, no password, another owner) it doesn't exist. Every request counts
+// against a per-IP limit, so guessing passwords here is as slow as anywhere else.
+const gamesLimit = limited(120), gamesMiss = limited(10);
+const lockerOwner = async (req) => {
+  gamesLimit(req);
+  const who = await visitor(req);
+  if (!who?.slug){ gamesMiss(req); throw Object.assign(new Error('not found'), { status: 404 }); }
+  return who.slug;
+};
+const gameUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024, files: 1 } });
+app.get('/api/frases/games', galaxyRoute(async (req) => games.list(await lockerOwner(req))));
+app.post('/api/frases/games', gameUpload.single('game'), galaxyRoute(async (req) => {
+  const owner = await lockerOwner(req);
+  if (!req.file) throw Object.assign(new Error('a game file, please'), { status: 400 });
+  return games.add(owner, req.file.buffer, req.file.originalname);
+}));
+app.get('/api/frases/games/:id', async (req, res) => {
+  try {
+    const { file, name } = await games.file(await lockerOwner(req), req.params.id);
+    res.set({ 'Cache-Control': 'private, no-store', 'Content-Disposition': `attachment; filename="${encodeURIComponent(name)}"`, 'X-Robots-Tag': 'noindex' });
+    res.type('application/octet-stream').sendFile(file);
+  } catch (e) { res.status(e.status || 500).json({ error: e.status ? e.message : 'failed' }); }
+});
+app.delete('/api/frases/games/:id', galaxyRoute(async (req) => games.remove(await lockerOwner(req), req.params.id)));
 
 // ── threads between pieces of two galaxies ──
 app.post('/api/frases/threads/list', express.json({ limit: '8kb' }), galaxyRoute(async (req) => {

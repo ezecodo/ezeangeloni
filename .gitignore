@@ -24,3 +24,5 @@ pnpm-debug.log*
 .idea/
 
 public/frases.json
+# the games room emulator, copied from node_modules by scripts/copy-emulator.mjs
+public/emulator/

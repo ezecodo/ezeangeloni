@@ -3,12 +3,17 @@
   "type": "module",
   "version": "0.0.1",
   "scripts": {
+    "predev": "node scripts/copy-emulator.mjs",
     "dev": "astro dev",
+    "prebuild": "node scripts/copy-emulator.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
+    "@emulatorjs/core-genesis_plus_gx": "^4.2.3",
+    "@emulatorjs/core-snes9x": "^4.2.3",
+    "@emulatorjs/emulatorjs": "^4.2.3",
     "astro": "^5.17.1",
     "three": "^0.187.0"
   }

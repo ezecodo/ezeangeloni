@@ -1,0 +1,130 @@
+---
+// The games room (Eze, 2026-11-09): to play the games of his childhood with his brother, each with his own copy.
+// The emulator is EmulatorJS (GPL-3), served from public/emulator/ (scripts/copy-emulator.mjs). The games are not
+// here: each owner keeps theirs in a private locker on the server (apps/uploader/games.js), opened only with their
+// own password (the same session as the admin and the universe, `eze-upload-pass`). To anyone else this page is an
+// empty room.
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="sala de juegos — Cronovisor">
+  <Fragment slot="head">
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono&family=Cormorant+Garamond:ital,wght@1,300&display=swap" rel="stylesheet" />
+    <style is:global>
+      * { box-sizing: border-box; }
+      body { background: #080810; color: #f0ede8; font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: .08em; }
+      a { color: inherit; }
+      button { font: inherit; color: inherit; background: none; border: 1px solid rgba(240,237,232,.25); padding: .55rem .8rem; cursor: pointer; letter-spacing: .14em; text-transform: uppercase; font-size: 10px; }
+      button:hover { border-color: rgba(240,237,232,.6); }
+      button.go { border-color: #ff6eb4; color: #ff6eb4; }
+      header { display: flex; align-items: baseline; gap: 1.2rem; padding: 1.2rem 1.6rem; }
+      header a { text-decoration: none; opacity: .7; text-transform: uppercase; font-size: 11px; }
+      h1 { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: clamp(2.6rem, 7vw, 5rem); margin: .4rem 1.6rem 0; line-height: 1; }
+      .sub { margin: .8rem 1.6rem 2rem; color: rgba(240,237,232,.45); max-width: 640px; line-height: 1.6; }
+      #shelf { margin: 0 1.6rem; display: flex; flex-direction: column; gap: .5rem; max-width: 720px; }
+      .game { display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid rgba(240,237,232,.12); padding: .7rem 0; }
+      .game .n { flex: 1; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.6rem; letter-spacing: 0; }
+      .game .s { color: rgba(240,237,232,.45); text-transform: uppercase; font-size: 10px; }
+      .game .x { border: none; opacity: .45; }
+      #add { margin: 1.4rem 1.6rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+      #msg { color: rgba(240,237,232,.6); }
+      #msg.err { color: #ff3f3f; }
+      #play { position: fixed; inset: 0; background: #080810; display: none; flex-direction: column; }
+      #play.on { display: flex; }
+      #play .bar { display: flex; gap: 1rem; align-items: center; padding: .7rem 1rem; }
+      #play .bar .t { flex: 1; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.4rem; letter-spacing: 0; }
+      #game { flex: 1; min-height: 0; }
+      footer { margin: 4rem 1.6rem 2rem; color: rgba(240,237,232,.35); font-size: 10px; line-height: 1.8; }
+      .empty { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.4rem; color: rgba(240,237,232,.5); letter-spacing: 0; }
+    </style>
+  </Fragment>
+  <header><a href="/">← cronovisor</a></header>
+  <h1>sala de juegos</h1>
+  <p class="sub" id="sub">Your own games, in your own locker: only your password opens it. Two joysticks, two players.</p>
+  <div id="shelf"></div>
+  <div id="add" hidden>
+    <button class="go" id="pick">save a game in my locker</button>
+    <input type="file" id="file" accept=".sfc,.smc,.md,.gen,.smd,.bin" hidden />
+    <span id="msg"></span>
+  </div>
+  <footer>
+    SNES (.sfc .smc) · Mega Drive (.md .gen .smd .bin). Saves stay in this browser.<br />
+    emulator: <a href="https://github.com/EmulatorJS/EmulatorJS" rel="noopener">EmulatorJS</a> (GPL-3.0, <a href="/emulator/LICENSE.txt">license</a>), running on this server.
+  </footer>
+  <div id="play"><div class="bar"><span class="t" id="playing"></span><button id="leave">← back to the shelf</button></div><div id="game"></div></div>
+
+  <script is:inline>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const pass = localStorage.getItem('eze-upload-pass') || '';
+      const auth = { 'X-Auth': pass };
+      const NAMES = { snes: 'snes', segaMD: 'mega drive' };
+      const shelf = $('shelf'), msg = $('msg');
+      const say = (t, err) => { msg.textContent = t; msg.className = err ? 'err' : ''; };
+      const empty = (t) => { shelf.innerHTML = ''; const p = document.createElement('p'); p.className = 'empty'; p.textContent = t; shelf.appendChild(p); };
+      let games = [];
+
+      async function load(){
+        if (!pass) { empty('Sign in from the universe first (the about sheet, “is this your galaxy?”).'); return; }
+        const r = await fetch('/api/frases/games', { headers: auth, cache: 'no-store' }).catch(() => null);
+        if (!r || !r.ok) { empty(r && r.status === 429 ? 'Too many tries. Later.' : 'Nothing here.'); return; }
+        games = await r.json();
+        $('add').hidden = false;
+        shelf.innerHTML = '';
+        if (!games.length) { empty('Your locker is empty.'); return; }
+        for (const g of games) {
+          const row = document.createElement('div'); row.className = 'game';
+          const n = document.createElement('span'); n.className = 'n'; n.textContent = g.name;
+          const s = document.createElement('span'); s.className = 's'; s.textContent = `${NAMES[g.system] || g.system} · ${(g.size/1048576).toFixed(1)} MB`;
+          const play = document.createElement('button'); play.className = 'go'; play.textContent = 'play';
+          play.addEventListener('click', () => { location.search = '?play=' + encodeURIComponent(g.id); });
+          const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕'; x.title = 'take it out of my locker';
+          x.addEventListener('click', async () => {
+            if (!confirm(`Take “${g.name}” out of your locker? It's deleted from the server.`)) return;
+            const d = await fetch('/api/frases/games/' + encodeURIComponent(g.id), { method: 'DELETE', headers: auth });
+            if (d.ok) load(); else say('could not remove it', true);
+          });
+          row.append(n, s, play, x);
+          shelf.appendChild(row);
+        }
+      }
+
+      $('pick').addEventListener('click', () => $('file').click());
+      $('file').addEventListener('change', async () => {
+        const f = $('file').files[0]; $('file').value = '';
+        if (!f) return;
+        say(`saving ${f.name}…`);
+        const body = new FormData(); body.append('game', f, f.name);
+        const r = await fetch('/api/frases/games', { method: 'POST', headers: auth, body }).catch(() => null);
+        const j = r ? await r.json().catch(() => ({})) : {};
+        if (r && r.ok) { say(`${j.name} is in your locker`); load(); } else say(j.error || 'could not save it', true);
+      });
+
+      // playing: the game comes out of the locker straight into the emulator, in this browser only
+      async function play(id){
+        const r = await fetch('/api/frases/games', { headers: auth, cache: 'no-store' }).catch(() => null);
+        const list = r && r.ok ? await r.json() : [];
+        const g = list.find((x) => x.id === id);
+        if (!g) { history.replaceState(null, '', location.pathname); load(); return; }
+        $('playing').textContent = g.name;
+        $('play').classList.add('on');
+        const res = await fetch('/api/frases/games/' + encodeURIComponent(id), { headers: auth, cache: 'no-store' });
+        if (!res.ok) { $('playing').textContent = 'could not open it'; return; }
+        const file = new File([await res.blob()], `${g.name}.${g.ext}`);
+        Object.assign(window, {
+          EJS_player: '#game', EJS_core: g.system, EJS_gameUrl: file, EJS_gameName: g.name,
+          EJS_pathtodata: '/emulator/data/', EJS_startOnLoaded: true, EJS_color: '#ff6eb4', EJS_backgroundColor: '#080810',
+          EJS_language: 'en-US', EJS_Buttons: { netplay: false },
+        });
+        const s = document.createElement('script'); s.src = '/emulator/data/loader.js';
+        document.body.appendChild(s);
+      }
+      $('leave').addEventListener('click', () => { location.search = ''; });
+
+      const id = new URLSearchParams(location.search).get('play');
+      if (id && pass) play(id); else load();
+    })();
+  </script>
+</Layout>
