@@ -30,7 +30,8 @@ export const SKIN_VERT = /* glsl */`
     vRest = position; vS = aS; vKind = aKind; vT = aT; vC = aC; vUv = uv;
     float s = aS, zs = .5 - s;
     // breathing: the body swells and settles along its normals, most at the chest
-    if(aKind < .5) p += n*uBreath*.006*(1. - smoothstep(.25, .8, s));
+    // (the chest only: the head stays still, so the eyes and their sockets never part)
+    if(aKind < .5) p += n*uBreath*.006*smoothstep(.29, .37, s)*(1. - smoothstep(.5, .8, s));
     // the long pectoral fins row from their hinge, a little behind each stroke, the tip lagging the root so the
     // fin bends like a flexible wing; hovering she sculls with them to hold her place; turning, the outside one
     // lifts; climbing or diving, both tilt like elevators
@@ -72,7 +73,7 @@ export const SKIN_VERT = /* glsl */`
 
 export const SKIN_FRAG = /* glsl */`
   precision highp float;
-  uniform float uTime, uEyeLight, uOpacity, uHasNormalMap;
+  uniform float uTime, uEyeLight, uOpacity, uHasNormalMap, uEyeR, uBlink;
   uniform vec3 uEye;
   uniform sampler2D uNormalMap;
   varying vec3 vRest, vNormal, vView;
@@ -103,6 +104,24 @@ export const SKIN_FRAG = /* glsl */`
   void main(){
     vec3 N = normalize(vNormal), V = normalize(vView);
     if(!gl_FrontFacing) N = -N;
+    // her eye (the cap that closes the sculpture's socket): light, so it reads from afar on the dark head (Eze:
+    // so the blink shows), a warm ivory round an amber-brown iris and a dark pupil, wet with a catchlight (kept
+    // under the bloom threshold). Blinking, a dark lid the colour of her skin comes down from above and lifts.
+    if(vKind > 2.5){
+      float d = 1. - vC;                                   // 0 at the centre, 1 at the rim
+      vec3 eyeCol = vec3(.66, .62, .55);                   // ivory
+      eyeCol = mix(eyeCol, vec3(.38, .22, .1), 1. - smoothstep(.5, .6, d));   // the iris
+      eyeCol = mix(eyeCol, vec3(.02, .015, .012), 1. - smoothstep(.2, .28, d)); // the pupil
+      eyeCol *= .75 + .35*max(0., dot(N, V));
+      float spec = pow(max(0., dot(N, normalize(V + vec3(.35, .7, .2)))), 70.);
+      eyeCol += vec3(1., .97, .92)*spec*.6;
+      // the lid: its edge sweeps from above the eye (blink 0) to below it (blink 1)
+      float up = (vRest.y - uEye.y)/max(uEyeR, 1e-4);
+      float edge = 1.15 - 2.3*uBlink;
+      eyeCol = mix(eyeCol, vec3(.04, .036, .038), smoothstep(edge - .12, edge + .12, up));
+      gl_FragColor = vec4(eyeCol, uOpacity);
+      return;
+    }
     if(uHasNormalMap > .5) N = relief(N);
     float facing = abs(dot(N, V));
     // a soft light from above and to one side, so the relief reads (never strong enough to bloom)
@@ -162,17 +181,21 @@ export const SKIN_FRAG = /* glsl */`
       float kd = length(vec2((fract(ph) - .5)*.85, (vC - .95)*3.2));
       col = mix(col, WHITE*(.6 + .4*facing), (1. - smoothstep(.13, .18, kd))*step(.2, vT)*step(vT, .97));
     }
-    // her eye: a pale, calm light
+    // round her eye the paint gives way to a dark patch (on the procedural body, with no eye of its own, a calm
+    // pale light)
     vec3 e = vec3(abs(vRest.x), vRest.y, vRest.z);
     float de = length(e - uEye);
-    col += vec3(.95, .92, .82)*(1. - smoothstep(.005, .009, de))*uEyeLight*.8;
+    // (no ring of its own: the socket is almond-shaped, and the eye shows that shape itself)
+    if(uEyeR > 0.){
+      col = mix(col, vec3(.03, .028, .03)*lit, 1. - smoothstep(uEyeR*1.05, uEyeR*1.7, de));
+    } else col += vec3(.95, .92, .82)*(1. - smoothstep(.005, .009, de))*uEyeLight*.8;
     gl_FragColor = vec4(col, uOpacity);
   }`;
 
 export function makeSkin(){
   const uniforms = {
     uTime: { value: 0 }, uPhase: { value: 0 }, uAmp: { value: .5 }, uFin: { value: 0 }, uBreath: { value: 0 }, uTurn: { value: 0 },
-    uEyeLight: { value: 1 }, uEye: { value: new THREE.Vector3() }, uOpacity: { value: 1 }, uFinRoot: { value: new THREE.Vector3() }, uFlukeS: { value: 1 }, uFinRest: { value: .1 }, uPitch: { value: 0 }, uHover: { value: 0 }, uHasNormalMap: { value: 0 }, uNormalMap: { value: null as THREE.Texture | null },
+    uEyeLight: { value: 1 }, uEye: { value: new THREE.Vector3() }, uOpacity: { value: 1 }, uFinRoot: { value: new THREE.Vector3() }, uFlukeS: { value: 1 }, uFinRest: { value: .1 }, uEyeR: { value: 0 }, uBlink: { value: 0 }, uPitch: { value: 0 }, uHover: { value: 0 }, uHasNormalMap: { value: 0 }, uNormalMap: { value: null as THREE.Texture | null },
   };
   const mat = new THREE.ShaderMaterial({ vertexShader: SKIN_VERT, fragmentShader: SKIN_FRAG, uniforms, side: THREE.DoubleSide });
   return { mat, uniforms };

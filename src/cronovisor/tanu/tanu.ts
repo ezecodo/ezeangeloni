@@ -31,6 +31,7 @@ const MAX_PITCH = .42;               // the steepest she climbs or dives (radian
 
 type Task = { run: () => Promise<void> };
 
+
 export class Tanu {
   readonly group = new THREE.Group();
   state: TanuState = 'idle';
@@ -77,6 +78,7 @@ export class Tanu {
         const u = this.skin.uniforms;
         u.uFinRoot.value.copy(m.finRoot);
         u.uEye.value.copy(m.eye);
+        u.uEyeR.value = m.eyeR;
         u.uFlukeS.value = m.flukeS;
         u.uFinRest.value = m.finRest;
         if(m.normalMap){ u.uNormalMap.value = m.normalMap; u.uHasNormalMap.value = 1; }
@@ -259,9 +261,12 @@ export class Tanu {
     u.uBreath.value = Math.sin(this.clock*Math.PI*2/9);
     u.uTime.value = this.clock;
     // a slow blink now and then
+    // (the lid comes down and lifts in a third of a second)
     if(this.clock > this.blinkAt){ this.blinkAt = this.clock + 5 + this.rng()*9; }
-    const b = this.blinkAt - this.clock;
-    u.uEyeLight.value = b < .18 ? .15 : 1;
+    const b = this.blinkAt - this.clock, BLINK = .34;
+    const shut = b < BLINK ? Math.sin(Math.PI*(1 - b/BLINK)) : 0;
+    u.uBlink.value = shut;
+    u.uEyeLight.value = 1 - .85*shut;
     this.breathe(dt);
   }
   private tmp = new THREE.Vector3();
