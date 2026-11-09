@@ -36,7 +36,7 @@ const MAX_PITCH = .42;               // the steepest she climbs or dives (radian
 
 type Task = { run: () => Promise<void> };
 // a stretch of a guided journey: through some places on to a stop, where she turns to the balloon and gives a sign
-export interface Leg { via: THREE.Vector3[]; stop: THREE.Vector3; wait: number; onArrive?: () => void }
+export interface Leg { via: THREE.Vector3[]; stop: THREE.Vector3; wait: number; hold?: boolean; onArrive?: () => void } // hold: she waits there until told to go on (`proceed`)
 const GUIDE = 13;                    // her pace while guiding (the balloon flies at 22 at most: whoever follows by hand keeps up)
 const WAIT_FAR = 62, WAIT_NEAR = 40; // the balloon falls this far behind: she stops and looks back; it comes this near: she goes on
 
@@ -70,7 +70,7 @@ export class Tanu {
   private busy = false;              // an action from outside is running: her own whims wait
   private settle: (() => void) | null = null; // ends the action running now (cancel)
   private gen = 0;                   // cancel() drops whatever was queued before it
-  private guiding: { legs: Leg[]; i: number; pause: number; waiting: boolean; done: () => void } | null = null;
+  private guiding: { legs: Leg[]; i: number; pause: number; waiting: boolean; holding: boolean; done: () => void } | null = null;
   private queue: Promise<void> = Promise.resolve();
   private nextBreath = 8;
   private dustDebt = 0;
@@ -170,7 +170,7 @@ export class Tanu {
     return this.enqueue('guide', () => new Promise<void>((done) => {
       if(!legs.length){ done(); return; }
       this.looking = null;
-      this.guiding = { legs, i: -1, pause: 0, waiting: false, done };
+      this.guiding = { legs, i: -1, pause: 0, waiting: false, holding: false, done };
       this.nextLeg();
     }));
   }
@@ -187,6 +187,10 @@ export class Tanu {
   get velocity(){ return this.vel; }
   get waiting(){ return !!this.guiding?.waiting; }
   get guidingNow(){ return !!this.guiding; }
+  /** at a stop that waits for you: you look round the barrio as long as you like */
+  get atStop(){ return !!this.guiding?.holding; }
+  /** "go on, Tanu": she leaves the stop she's waiting at */
+  proceed(){ const g = this.guiding; if(g?.holding){ g.holding = false; g.pause = 0; } }
   private nextLeg(){
     const g = this.guiding!;
     g.i++;
@@ -286,7 +290,9 @@ export class Tanu {
         // at a stop: facing the balloon while she waits, then on
         this.want.copy(B.clone().sub(this.pos).normalize());
         target = .3;
-        if(this.clock > g.pause && dB < WAIT_FAR) this.nextLeg();
+        if(!g.holding && this.clock > g.pause && dB < WAIT_FAR) this.nextLeg();
+        // waiting at a stop, now and then she breathes, so she's easy to find among the photos
+        if(g.holding && this.clock > this.nextBreath) { this.nextBreath = this.clock + 14 + this.rng()*8; this.plume(70); }
       } else {
         // the balloon fell behind: she stops and looks back for it, and goes on once it's near again
         if(!g.waiting && dB > WAIT_FAR) g.waiting = true;
@@ -336,7 +342,7 @@ export class Tanu {
       if(p.u >= 1){
         this.path = null; p.done?.();
         const g = this.guiding;
-        if(g){ const leg = g.legs[g.i]; g.pause = this.clock + leg.wait; this.signal(); leg.onArrive?.(); }
+        if(g){ const leg = g.legs[g.i]; g.pause = this.clock + leg.wait; g.holding = !!leg.hold; this.signal(); leg.onArrive?.(); }
       }
     } else {
       // her body carries her: it goes mostly where she's heading, but can lead it a little towards where she means

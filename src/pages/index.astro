@@ -259,7 +259,14 @@ import Layout from '../layouts/Layout.astro';
       #meet-form button { font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; }
       .meet-hint { margin: .7rem 0 0; opacity: .7; }
       @media (max-width: 600px) { #meet { left: 1rem; right: 1rem; width: auto; top: 5rem; } }
-      .t-btn .meeting, .t-btn .letgo, .t-btn .asking { display: none; }
+      .t-btn .meeting, .t-btn .letgo, .t-btn .asking, .t-btn .tanustop { display: none; }
+      body.tanustop:not(.selecting) #t-b3 :is(.flying, .at-piece, .meeting) { display: none !important; }
+      body.tanustop:not(.selecting) #t-b3 .tanustop { display: inline; }
+      /* at Tanu's stop: the way on, in her coral, low in the middle (out of the photos' way) */
+      #tanu-go { position: fixed; left: 50%; bottom: calc(4.2rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 13; padding: .6rem 1rem; border: 1px solid rgba(255,127,110,.55); background: rgba(8,8,16,.6); color: #ff7f6e; font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; }
+      #tanu-go[hidden] { display: none; }
+      #tanu-go:hover { background: rgba(255,127,110,.14); }
+      body.still #tanu-go, body.aboard #tanu-go { display: none; }
       body.asking:not(.focus):not(.selecting) :is(#t-b1, #t-b2) .flying { display: none; }
       body.asking:not(.focus):not(.selecting) :is(#t-b1, #t-b2) .asking { display: inline; }
       /* Tanu's offer: which years she'll take you to (her coral, as her name in the sky) */
@@ -562,12 +569,13 @@ import Layout from '../layouts/Layout.astro';
     <ol id="tanu-opts"></ol>
     <p class="meet-hint" id="tanu-hint"></p>
   </div>
+  <button id="tanu-go" hidden>go on, Tanu <span class="kb-only">· T</span></button>
   <button id="t-fly" aria-label="fly the balloon">fly</button>
   <div id="t-zone" aria-hidden="true"></div><div id="t-base" aria-hidden="true"></div><div id="t-knob" aria-hidden="true"></div>
   <button class="t-btn" id="t-b0" aria-hidden="true" tabindex="-1"><span class="flying">burner</span><span class="letgo">let<br>go</span><span class="at-piece">slide<br>show</span></button>
   <button class="t-btn" id="t-b1" aria-hidden="true" tabindex="-1"><span class="flying">pause</span><span class="asking">go</span><span class="choosing">open</span><span class="at-piece">next</span></button>
   <button class="t-btn" id="t-b2" aria-hidden="true" tabindex="-1"><span class="flying">land</span><span class="asking">back</span><span class="choosing">resume</span><span class="at-piece">fly on</span></button>
-  <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="meeting">gas</span><span class="choosing">still</span><span class="at-piece">word</span></button>
+  <button class="t-btn" id="t-b3" aria-hidden="true" tabindex="-1"><span class="flying">word</span><span class="meeting">gas</span><span class="tanustop">go on</span><span class="choosing">still</span><span class="at-piece">word</span></button>
   <div id="cockpit">
     <button class="close" id="msg-close">leave balloon ✕</button>
     <div id="msg-box">
@@ -1324,7 +1332,7 @@ import Layout from '../layouts/Layout.astro';
     // other years.
     type AskItem = { label: string; sub: string; years: string[]; range?: number };
     let ask: { level: 0 | 1; items: AskItem[]; sel: number; release: () => void; ranges: AskItem[] } | null = null;
-    let trip: { years: string[]; label: string; auto: boolean } | null = null;
+    let trip: { years: string[]; label: string; auto: boolean; at?: string } | null = null;
     let tanuArmed = true, tanuCool = 0; // after an offer she needs you to have drawn away (and a moment) before the next
     const askEl = $('tanu-ask'), askOpts = $('tanu-opts');
     function yearsOfArchive(){
@@ -1420,7 +1428,7 @@ import Layout from '../layouts/Layout.astro';
       let via: THREE.Vector3[] = [];
       months.forEach((m, i) => {
         const y = m.slice(0, 4), fresh = i === 0 || months[i-1].slice(0, 4) !== y;
-        if(fresh){ legs.push({ via, stop: at(m), wait: 6, onArrive: () => tanuArrived(y) }); via = []; }
+        if(fresh){ legs.push({ via, stop: at(m), wait: 6, hold: true, onArrive: () => tanuArrived(y) }); via = []; } // she waits there until you say go on
         else via.push(at(m));
       });
       if(via.length){ const last = via.pop()!; legs.push({ via, stop: last, wait: 1, onArrive: () => tanuCall(.5) }); } // on through the last year's barrios
@@ -1434,6 +1442,18 @@ import Layout from '../layouts/Layout.astro';
         if(was && pilot && tanu){ tanu.stay(40); tanuArmed = false; tanuCool = performance.now() + 5000; }
       });
     }
+    // "go on, Tanu": from the stop (or from a photo you were looking at there) she sets off again and takes you along
+    const tanuStop = () => !!(trip && tanu?.atStop);
+    function goOnTanu(){
+      if(!trip || !tanu?.atStop) return;
+      if(focused >= 0) flyOn(); // from a photo: the burners roar and you're back in the air behind her
+      if(pilot?.selecting) endSelection();
+      trip.auto = true;
+      tanu.proceed();
+      tanuCall(.5);
+      playNote(NOTES[2]); setTimeout(() => playNote(NOTES[4]), 160);
+    }
+    $('tanu-go').addEventListener('click', e => { e.stopPropagation(); goOnTanu(); });
     function endTrip(){
       if(!trip) return;
       trip = null;
@@ -1442,6 +1462,7 @@ import Layout from '../layouts/Layout.astro';
     }
     function tanuArrived(year: string){
       tanuCall(1);
+      if(trip) trip.at = year;
       const title = $('arrival');
       title.querySelector('p')!.textContent = 'Tanu brought you to';
       title.querySelector('h2')!.textContent = year;
@@ -1481,6 +1502,8 @@ import Layout from '../layouts/Layout.astro';
       if(!tanu) return;
       if(ask && (!pilot || focused >= 0 || boarded || pilot.home || follow)) closeAsk();
       if(trip && (!pilot || pilot.home || follow || pilot.auto)) endTrip();
+      const stop = tanuStop();
+      if(stop !== document.body.classList.contains('tanustop')){ document.body.classList.toggle('tanustop', stop); $('tanu-go').hidden = !stop; }
       if(!pilot) return;
       const d = tanu.position.distanceTo(pilot.pos);
       if(!tanuArmed && d > 34 && now > tanuCool) tanuArmed = true;
@@ -2634,7 +2657,7 @@ import Layout from '../layouts/Layout.astro';
         if(tap(0)){ scanning = !wasScanning; syncScan(); lockedAt = now; } // 1: auto slideshow on/off
         if(tap(1)) stepFocus(1);
         if(tap(2)) flyOn();
-        if(tap(3)) board();
+        if(tap(3)){ if(tanuStop()) goOnTanu(); else board(); } // at Tanu's stop ▲ says go on
         return;
       }
       if(!pilot){
@@ -2661,7 +2684,7 @@ import Layout from '../layouts/Layout.astro';
       if(pilot.nearGalaxy >= 0 && worlds[pilot.nearGalaxy]?.link.galaxy?.open && gas >= CROSS_COST && tap(1)){ enterGalaxy(worlds[pilot.nearGalaxy], true); return; } // at a galaxy: in you go
       if(tap(1)) startSelection();
       if(tap(2)) exitPilot();
-      if(tap(3)){ if(meet) giveGas(); else board(); } // meeting someone, ▲ / the word button gives them a gallon
+      if(tap(3)){ if(meet) giveGas(); else if(tanuStop()) goOnTanu(); else board(); } // meeting someone, ▲ / the word button gives them a gallon
     }
     function enterPilot(){
       if(!balloon || !controls) return;
@@ -3063,6 +3086,7 @@ import Layout from '../layouts/Layout.astro';
       if(follow && pad.held[0] && !pad.prev[0]) stopFollow('you fly on your own'); // the burner takes the helm back
       const towed = !!(trip?.auto && tanu);
       if(trip?.auto && pad.held[0] && !pad.prev[0]) trip.auto = false; // the burner takes the helm: from now on you follow her yourself
+      if(trip?.auto && tanuStop() && !p.selecting && (pad.x || pad.y)) trip.auto = false; // at a stop the stick flies you round the barrio; "go on" tows you again
       if((p.auto || follow || towed) && (pad.x || pad.y)){
         p.lookYaw = Math.max(-Math.PI, Math.min(Math.PI, p.lookYaw - pad.x*dt*1.7));
         p.lookPitch = Math.max(-.5, Math.min(1.1, p.lookPitch - pad.y*dt*1.1));
@@ -3287,6 +3311,7 @@ import Layout from '../layouts/Layout.astro';
         const xibLevel = xib && inXibalba(p.pos) ? Math.max(0, Math.min(8, Math.floor((xib.top - p.pos.y)/LEVEL_H + .5))) : -1;
         const ag = p.auto ? worlds[p.auto.k]?.link : null;
         $('gas-msg').textContent = ask ? 'Tanu offers you years'
+          : trip && tanu?.atStop ? `Tanu waits at ${trip.at} · ${kb ? 'E look at the memories · W A S D fly round · T go on, Tanu' : document.body.classList.contains('touch') ? 'pause to look · go on when you are ready' : '● right look at the memories · stick fly round · ▲ go on, Tanu'}`
           : trip ? (tanu?.waiting ? `Tanu waits for you · ${trip.label}` : trip.auto ? `Tanu guides you · ${trip.label} · ${kb ? 'W A S D look around · space takes the helm' : 'stick looks around · ● left burner takes the helm'}` : `follow Tanu · ${trip.label}`)
           : ag ? (p.auto!.sun ? `sailing to ${ag.label}'s galaxy · by the Sun first, for gas` : `sailing to ${ag.label}'s galaxy`) + (kb ? ' · W A S D look around · space takes the helm' : ' · stick looks around · ● left burner takes the helm')
           : withHim ? `${xib!.j.name || 'papá'} · en su viaje · tramo ${xibAt ? xibAt.i + 1 : 9} de 9`
@@ -3456,7 +3481,8 @@ import Layout from '../layouts/Layout.astro';
         case 'End': touched(); focusOn(pieces.length-1); e.preventDefault(); break;
         case 'i': openIndex(); break;
         case 'h': startTour(); break;
-        case 't': board(); break;
+        case 't': if(tanuStop()) goOnTanu(); else board(); break;
+        case 'g': goOnTanu(); break;
         case 'p': if(pilot && focused < 0) enterStill(); break;
         case 'c': if(meet){ openTalk(); e.preventDefault(); } break;
         case 'g': if(meet) giveGas(); break;
