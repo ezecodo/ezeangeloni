@@ -99,7 +99,9 @@ export const SKIN_FRAG = /* glsl */`
     vec3 T = q1perp*st0.x + q0perp*st1.x, B = q1perp*st0.y + q0perp*st1.y;
     float det = max(dot(T, T), dot(B, B));
     float k = det == 0. ? 0. : inversesqrt(det);
-    return normalize(T*(mapN.x*k) + B*(mapN.y*k) + N*mapN.z);
+    vec3 r = T*(mapN.x*k) + B*(mapN.y*k) + N*mapN.z;
+    // never let one odd pixel be NaN: the bloom would spread it into a black frame over the whole screen
+    return dot(r, r) > 1e-8 ? normalize(r) : N;
   }
   void main(){
     vec3 N = normalize(vNormal), V = normalize(vView);

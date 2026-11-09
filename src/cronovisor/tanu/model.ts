@@ -112,8 +112,11 @@ export async function loadWhale(url: string): Promise<WhaleModel> {
   const zeros = (k: number) => new Array((total - n)*k).fill(0);
   const posAll = grow(pos, extra.pos, 3), norAll = grow(nor, extra.nor, 3);
   const aSAll = grow(aS, extra.s), aKindAll = grow(aKind, new Array(total - n).fill(3)), aTAll = grow(aT, zeros(1)), aCAll = grow(aC, extra.c), aSideAll = grow(aSide, extra.side);
-  const uvSrc = src.getAttribute('uv') as THREE.BufferAttribute | undefined;
-  const uvAll = uvSrc ? grow(new Float32Array(uvSrc.array), zeros(2), 2) : null;
+  // (read point by point: the model's attributes are interleaved, so `.array` is the whole shared buffer; copying
+  // it as UVs gave garbage coordinates, the relief turned some pixels NaN and the bloom blacked out whole frames)
+  const uvSrc = src.getAttribute('uv') as THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined;
+  let uvAll: Float32Array | null = null;
+  if (uvSrc) { uvAll = new Float32Array(total*2); for (let i = 0; i < n; i++) { uvAll[i*2] = uvSrc.getX(i); uvAll[i*2 + 1] = uvSrc.getY(i); } }
   const indexAll = [...(src.index ? Array.from(src.index.array) : Array.from({ length: n }, (_, i) => i)), ...extra.idx];
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(posAll, 3));

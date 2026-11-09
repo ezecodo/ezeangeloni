@@ -2840,7 +2840,7 @@ import Layout from '../layouts/Layout.astro';
       pilot.speed = 0;
       playNote(NOTES[0]/2);
     }
-    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get controls(){ return controls; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, get tanu(){ return tanu; }, visit: (k: number) => visitWorld(k) };
+    if(import.meta.env.DEV) (window as any).__cv = { get pilot(){ return pilot; }, get clouds(){ return gasClouds; }, get gas(){ return gas; }, set gas(v: number){ gas = v; }, get worlds(){ return worlds; }, get camera(){ return camera; }, get controls(){ return controls; }, get sun(){ return sun; }, get pieces(){ return pieces; }, get xib(){ return xib; }, get tanu(){ return tanu; }, get renderer(){ return renderer; }, visit: (k: number) => visitWorld(k) };
     function updatePilot(dt: number, now: number){
       if(!pilot || !balloon) return 0;
       const p = pilot;
