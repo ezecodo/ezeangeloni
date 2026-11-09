@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>taller — Cronovisor</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono&family=Cormorant+Garamond:ital,wght@1,300&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; background: #080810; color: #f0ede8; font-family: 'DM Mono', monospace; overflow: hidden; }
+  canvas { display: block; }
+  aside { position: fixed; left: 0; top: 0; bottom: 0; width: 230px; padding: 1.4rem; box-sizing: border-box; background: rgba(8,8,16,.82); border-right: 1px solid rgba(240,237,232,.12); z-index: 2; }
+  h1 { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300; font-size: 2.6rem; margin: 0 0 1.4rem; }
+  button { display: block; width: 100%; text-align: left; background: none; border: none; border-left: 2px solid transparent; color: rgba(240,237,232,.55); font: inherit; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; padding: .55rem .7rem; cursor: pointer; }
+  button:hover { color: #f0ede8; }
+  button.on { color: #ff6eb4; border-left-color: #ff6eb4; }
+  #about { position: fixed; left: 250px; bottom: 1.2rem; right: 1.4rem; font-size: 10px; letter-spacing: .1em; color: rgba(240,237,232,.45); z-index: 2; line-height: 1.7; }
+</style>
+</head>
+<body>
+<aside><h1>taller</h1><nav id="list"></nav></aside>
+<p id="about"></p>
+<script type="module" src="./main.ts"></script>
+</body>
+</html>

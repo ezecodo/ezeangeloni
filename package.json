@@ -8,7 +8,8 @@
     "prebuild": "node scripts/copy-emulator.mjs",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "taller": "node taller/selknam-figure/build.mjs && vite --config taller/vite.config.mjs"
   },
   "dependencies": {
     "@emulatorjs/core-fbneo": "^4.2.3",
@@ -17,5 +18,8 @@
     "@emulatorjs/emulatorjs": "^4.2.3",
     "astro": "^5.17.1",
     "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1"
   }
 }
