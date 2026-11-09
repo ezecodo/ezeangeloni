@@ -7,6 +7,7 @@
 // their calls exist already and say so.
 import * as THREE from 'three';
 import { buildWhale, FLUKE_AT, BLOWHOLE_AT } from './whale';
+import { loadWhale } from './model';
 import { Dust } from './trail';
 
 export type Emotion = 'calm' | 'curious' | 'joyful' | 'nostalgic';
@@ -19,12 +20,14 @@ export interface TanuHost {
   radius(): number;                  // how far the galaxy reaches
   reduced: boolean;                  // prefers-reduced-motion
   lowPower(): boolean;
+  model?: string;                    // a sculpted body (GLB) to wear instead of the procedural one; she waits hidden until it's in
 }
 
 const LENGTH = 22;                   // the balloon is about 6 tall
-const CRUISE = 4, TRAVEL = 7.5;      // units a second: slow, as a whale
+const CRUISE = 6.5, TRAVEL = 10;     // units a second: unhurried, but alive (Eze, 2026-11-09: 4 and 7.5 felt "hiperlento")
 const CURIOUS_NEAR = 48, CURIOUS_LEAVE = 135, STAND = 21; // she notices, gives up, keeps this far from the basket
-const MAX_TURN = .55;                // radians a second
+const MAX_TURN = .5;                 // radians a second, at most (reached slowly)
+const MAX_PITCH = .42;               // the steepest she climbs or dives (radians)
 
 type Task = { run: () => Promise<void> };
 
@@ -36,13 +39,19 @@ export class Tanu {
   private body: THREE.Mesh;
   private skin: ReturnType<typeof buildWhale>['skin'];
   private dust: Dust;
+  private flukeAt = FLUKE_AT.clone();
+  private blowholeAt = BLOWHOLE_AT.clone();
   private pos = new THREE.Vector3();
   private fwd = new THREE.Vector3(1, 0, 0);
   private want = new THREE.Vector3(1, 0, 0);
   private speed = CRUISE;
   private roll = 0;
   private yawRate = 0;
+  private pitchRate = 0;
+  private turnRate = 0;              // how fast she's turning now: it builds up and dies down, a heavy body
+  private vel = new THREE.Vector3(); // where her body is actually going (it can lead her heading a little)
   private phase = 0;
+  private finClock = 0;              // the fins' own slow rhythm (faster while she hovers and sculls)
   private clock = 0;                 // her own time: the universe's, stopped when it stops
   private path: { curve: THREE.CatmullRomCurve3; u: number; len: number; speed: number; done?: () => void } | null = null;
   private looking: { target: () => THREE.Vector3 | null; until: number; done: () => void } | null = null;
@@ -59,6 +68,22 @@ export class Tanu {
     this.body = w.mesh; this.skin = w.skin;
     this.body.scale.setScalar(LENGTH);
     this.group.add(this.body);
+    if(host.model){
+      // the sculpted body: she appears once it's in; if it can't load, the procedural one swims instead
+      this.body.visible = false;
+      loadWhale(host.model).then(m => {
+        this.body.geometry.dispose();
+        this.body.geometry = m.geometry;
+        const u = this.skin.uniforms;
+        u.uFinRoot.value.copy(m.finRoot);
+        u.uEye.value.copy(m.eye);
+        u.uFlukeS.value = m.flukeS;
+        u.uFinRest.value = m.finRest;
+        if(m.normalMap){ u.uNormalMap.value = m.normalMap; u.uHasNormalMap.value = 1; }
+        this.flukeAt.copy(m.fluke); this.blowholeAt.copy(m.blowhole);
+      }).catch(e => console.warn('[tanu] the sculpted body did not load, the procedural one swims', e))
+        .finally(() => { this.body.visible = true; });
+    }
     this.dust = new Dust(host.reduced ? 160 : 520);
     const R = host.radius();
     const a = this.rng()*Math.PI*2;
@@ -85,7 +110,7 @@ export class Tanu {
       if(!z){ console.warn(`[tanu] no place called "${zoneId}"`); done(); return; }
       const to = z.at.clone().add(this.pos.clone().sub(z.at).setY(0).normalize().multiplyScalar(z.stand)); // stop short, on her side
       to.y = z.at.y + 4;
-      this.swimPath(to, THREE.MathUtils.clamp(this.pos.distanceTo(to)/22, TRAVEL, 14), done); // from far, she hurries a little
+      this.swimPath(to, THREE.MathUtils.clamp(this.pos.distanceTo(to)/20, TRAVEL, 16), done); // from far, she hurries a little
     }));
   }
   /** turn to look at the balloon (or a place) for a few seconds */
@@ -143,16 +168,20 @@ export class Tanu {
       if(this.state === 'curious' && dB > CURIOUS_LEAVE){ this.state = 'idle'; this.curiousAt = this.clock; }
     }
     let target = this.speed;
+    let course: THREE.Vector3 | null = null; // curious: the way to her spot, which her body may start along before she's turned
     if(this.state === 'curious' && B){
       // to a spot STAND from the basket, on her side, a little lower; once there she turns to face it and hovers
-      const goal = B.clone().add(this.pos.clone().sub(B).normalize().multiplyScalar(STAND)); goal.y = B.y - 3;
+      // (beside it, never under or over it: the way out from the basket is taken level)
+      const side = this.pos.clone().sub(B).setY(0);
+      if(side.lengthSq() < 1) side.set(-this.fwd.z, 0, this.fwd.x); // right under it: she moves off to one side
+      const goal = B.clone().add(side.normalize().multiplyScalar(STAND)); goal.y = B.y - 3;
       const toGoal = goal.clone().sub(this.pos), gd = toGoal.length();
       const face = B.clone().sub(this.pos).normalize();
       const near = THREE.MathUtils.smoothstep(gd, 2, 12);
       this.want.copy(face).lerp(toGoal.clone().normalize(), near).normalize();
       // she glides to that spot and stops there (never into the balloon); if it moves away she follows, slowly
-      const ahead = toGoal.dot(this.fwd);
-      target = THREE.MathUtils.clamp(ahead*.28, 0, dB > 70 ? 3 : 6);
+      course = gd > .5 ? toGoal.clone().normalize() : null;
+      target = THREE.MathUtils.clamp(gd*.3, 0, dB > 70 ? 4.5 : 8)*THREE.MathUtils.clamp(.35 + .65*this.fwd.dot(face), .25, 1); // slower while she's still turning
       if(dB < STAND*.8) target = 0; // too close already: she lets it drift off
     } else if(this.looking){
       const t = this.looking.target();
@@ -165,30 +194,51 @@ export class Tanu {
       const left = (1 - p.u)*p.len;
       target = p.speed*THREE.MathUtils.clamp(left/18, .25, 1); // easing in at the end of the way
     }
-    this.speed += (target - this.speed)*(1 - Math.exp(-dt*(this.state === 'curious' ? (target < this.speed ? 2.4 : 1.1) : .6))); // curious, she brakes in time
+    // speed eases (she brakes a little sooner than she speeds up)
+    this.speed += (target - this.speed)*(1 - Math.exp(-dt*(target < this.speed ? 1.5 : .7)));
+    // she climbs and dives at a gentle slope (at most ~24°): the course is softened before she turns to it, so
+    // there's no wall to hit; straight up or down, she keeps her own way round and only tilts
+    {
+      const h = Math.hypot(this.want.x, this.want.z);
+      const flat = h > 1e-3 ? new THREE.Vector2(this.want.x/h, this.want.z/h) : new THREE.Vector2(this.fwd.x, this.fwd.z).normalize();
+      const el = THREE.MathUtils.clamp(Math.atan2(this.want.y, h), -MAX_PITCH, MAX_PITCH);
+      this.want.set(flat.x*Math.cos(el), Math.sin(el), flat.y*Math.cos(el));
+    }
+    // turning: the turn builds up and dies down (a heavy body), and slows as she comes round
+    // (heading and slope turn separately, so a turn right round never swings through straight up)
+    const before = this.fwd.clone();
+    let yaw0 = Math.atan2(this.fwd.x, this.fwd.z), el0 = Math.asin(THREE.MathUtils.clamp(this.fwd.y, -1, 1));
+    const yawW = Math.atan2(this.want.x, this.want.z), elW = Math.asin(THREE.MathUtils.clamp(this.want.y, -1, 1));
+    const dYaw = Math.atan2(Math.sin(yawW - yaw0), Math.cos(yawW - yaw0)), dEl = elW - el0;
+    const ang = Math.hypot(dYaw*Math.cos(el0), dEl);
+    const wantRate = Math.min(MAX_TURN*(this.speed < 1.5 ? 1.15 : 1), ang*.8);
+    this.turnRate += (wantRate - this.turnRate)*(1 - Math.exp(-dt*.9));
+    if(ang > 1e-4){
+      const k = Math.min(1, this.turnRate*dt/ang);
+      yaw0 += dYaw*k; el0 = THREE.MathUtils.clamp(el0 + dEl*k, -MAX_PITCH - .05, MAX_PITCH + .05);
+      this.fwd.set(Math.sin(yaw0)*Math.cos(el0), Math.sin(el0), Math.cos(yaw0)*Math.cos(el0));
+    }
     if(this.path && this.state !== 'curious' && !this.looking){
-      const p = this.path;
+      const p = this.path, from = this.pos.clone();
       p.u = Math.min(1, p.u + this.speed*dt/p.len);
       const q = p.curve.getPointAt(p.u), tan = p.curve.getTangentAt(p.u);
       // the course is the curve's, the body follows a little behind, so turns are soft
       this.pos.lerp(q, 1 - Math.exp(-dt*3));
       this.want.copy(tan);
+      this.vel.copy(this.pos).sub(from).divideScalar(dt);
       if(p.u >= 1){ this.path = null; p.done?.(); }
     } else {
-      this.pos.addScaledVector(this.fwd, this.speed*dt);
+      // her body carries her: it goes mostly where she's heading, but can lead it a little towards where she means
+      // to go, so she starts rising as she begins to pitch up instead of turning first and moving after
+      const dir = course ? course.clone().lerp(this.fwd, .5).normalize() : this.fwd.clone();
+      this.vel.lerp(dir.multiplyScalar(this.speed), 1 - Math.exp(-dt*1.1));
+      this.pos.addScaledVector(this.vel, dt);
     }
-    // turning: at most MAX_TURN a second, a little faster when she's slow (she turns on the spot to look)
-    const before = this.fwd.clone();
-    const ang = this.fwd.angleTo(this.want);
-    if(ang > 1e-4){
-      const k = Math.min(1, MAX_TURN*(this.speed < 1.5 ? 1.3 : 1)*dt/ang);
-      this.fwd.lerp(this.want, k).normalize();
-    }
-    // she never quite points straight up or down
-    if(Math.abs(this.fwd.y) > .55){ this.fwd.y = Math.sign(this.fwd.y)*.55; this.fwd.normalize(); }
-    // banking into turns
+    // banking into turns, and the body bowing into them (sideways and up or down)
     const yaw = Math.atan2(before.x*this.fwd.z - before.z*this.fwd.x, before.x*this.fwd.x + before.z*this.fwd.z)/dt;
     this.yawRate += (yaw - this.yawRate)*(1 - Math.exp(-dt*2));
+    const pitch = (Math.asin(THREE.MathUtils.clamp(this.fwd.y, -1, 1)) - Math.asin(THREE.MathUtils.clamp(before.y, -1, 1)))/dt;
+    this.pitchRate += (pitch - this.pitchRate)*(1 - Math.exp(-dt*2));
     this.roll += (THREE.MathUtils.clamp(-this.yawRate*1.6, -.45, .45) - this.roll)*(1 - Math.exp(-dt*1.5));
     // the stroke: a few beats, then a glide (the beat fades and slows, the body coasts), never quite still;
     // harder when she speeds up, gentle when she hovers
@@ -196,12 +246,16 @@ export class Tanu {
     const accel = THREE.MathUtils.clamp((target - this.speed)*.6, 0, .5);
     const glide = .45 + .55*THREE.MathUtils.smoothstep(Math.sin(this.clock*.21) + Math.sin(this.clock*.083 + 1.7)*.6, -.6, .5);
     const power = Math.min(1, glide + accel);
-    this.phase += dt*Math.PI*2*(.07 + this.speed*.028)*(.55 + .45*power);
+    this.phase += dt*Math.PI*2*(.12 + this.speed*.033)*(.55 + .45*power); // a stroke every ~3 s at cruise
     const u = this.skin.uniforms;
     u.uAmp.value += ((.3 + Math.min(.75, this.speed*.13))*(.35 + .65*power)*red - u.uAmp.value)*(1 - Math.exp(-dt*.8));
     u.uPhase.value = this.phase;
-    u.uFin.value = this.clock*.45;
+    const hover = THREE.MathUtils.clamp(1 - this.speed/2.5, 0, 1);
+    u.uHover.value += (hover - u.uHover.value)*(1 - Math.exp(-dt*.8));
+    this.finClock += dt*(.45 + .55*u.uHover.value);
+    u.uFin.value = this.finClock;
     u.uTurn.value = THREE.MathUtils.clamp(this.yawRate*2, -1, 1);
+    u.uPitch.value = THREE.MathUtils.clamp(this.pitchRate*2.5, -1, 1);
     u.uBreath.value = Math.sin(this.clock*Math.PI*2/9);
     u.uTime.value = this.clock;
     // a slow blink now and then
@@ -219,14 +273,14 @@ export class Tanu {
     const back = this.fwd.clone().multiplyScalar(-.6);
     while(this.dustDebt >= 1){
       this.dustDebt--;
-      const at = this.tmp.copy(FLUKE_AT).add(new THREE.Vector3((this.rng() - .5)*.32, (this.rng() - .5)*.04, 0)).applyMatrix4(m);
+      const at = this.tmp.copy(this.flukeAt).add(new THREE.Vector3((this.rng() - .5)*.32, (this.rng() - .5)*.04, 0)).applyMatrix4(m);
       const v = back.clone().add(new THREE.Vector3(this.rng() - .5, this.rng() - .5, this.rng() - .5).multiplyScalar(.9));
       this.dust.emit(at, v, this.clock, 3 + this.rng()*4, .35 + this.rng()*.5);
     }
     // breathing out: a plume of star dust from the blowhole every half a minute or so
     if(this.clock > this.nextBreath){
       this.nextBreath = this.clock + 26 + this.rng()*20;
-      const at = this.tmp.copy(BLOWHOLE_AT).applyMatrix4(m).clone();
+      const at = this.tmp.copy(this.blowholeAt).applyMatrix4(m).clone();
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.group.quaternion);
       const n = this.host.lowPower() ? 30 : 70;
       for(let i = 0; i < n; i++){

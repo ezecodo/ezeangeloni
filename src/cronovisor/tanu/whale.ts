@@ -88,25 +88,44 @@ function blade(nu: number, nv: number, at: (u: number, v: number) => THREE.Vecto
   return toGeometry(p);
 }
 
-// the pectoral fins, a third of the body long, the leading edge knobbed (the humpback's tubercles)
+// The pectoral fins, as a humpback's (Eze, 2026-11-09, after a reference: "they don't look like a whale's"): born
+// low and forward, just behind the corner of the mouth, under the eye; they hang down first like an arm, bend at
+// an elbow and sweep back, a boomerang a third of the body long. A broad, flat paddle lying along the flank,
+// thick and fleshy at the root, the leading edge (in front going down, underneath going back) carrying big
+// rounded knobs, the tip rounded. `FIN_ROOT` is where it's hinged: it rows by turning about that point.
+export const FIN_S = .235;
+export function finRoot(side: number){
+  const r = radiusAt(FIN_S);
+  return new THREE.Vector3(side*r*.8, -r*.5, zAt(FIN_S));
+}
 function fin(side: number){
-  const S = .27, r = radiusAt(S);
-  const root = new THREE.Vector3(side*r*.86, -r*.42, zAt(S));
-  const dir = new THREE.Vector3(side*.7, -.55, -.42).normalize(); // hanging, as a humpback's
-  const fwd = new THREE.Vector3(0, 0, 1);
-  const chordDir = fwd.clone().addScaledVector(dir, -dir.dot(fwd)).normalize();
-  const nrm = new THREE.Vector3().crossVectors(dir, chordDir).normalize();
-  const LEN = .37;
-  const chord = (t: number) => .078*(1 - .58*t)*Math.sqrt(Math.max(0, 1 - Math.pow(t, 6)));
-  const bumps = (t: number) => t > .12 ? .0055*Math.max(0, Math.sin(t*44)) : 0;
-  return blade(26, 10,
+  const root = finRoot(side);
+  // the fin's spine: down and a little out, the elbow, then back and slightly down to a rounded tip
+  const spine = new THREE.CatmullRomCurve3([
+    root.clone(),
+    root.clone().add(new THREE.Vector3(side*.022, -.055, -.006)),
+    root.clone().add(new THREE.Vector3(side*.04, -.115, -.035)),   // the elbow
+    root.clone().add(new THREE.Vector3(side*.055, -.15, -.12)),
+    root.clone().add(new THREE.Vector3(side*.065, -.17, -.225)),   // the tip
+  ], false, 'centripetal');
+  const out = new THREE.Vector3(side, .18, 0).normalize();        // the paddle lies along the flank, facing out
+  const chord = (t: number) => (.05 + .03*Math.sin(Math.PI*Math.min(1, t*1.1)))*Math.sqrt(Math.max(0, 1 - Math.pow(t, 3.2))); // a rounded tip
+  // big rounded knobs along the leading edge, past the elbow
+  const knobs = (t: number) => t > .2 ? .009*Math.pow(Math.max(0, Math.sin((t - .2)*Math.PI*6.5)), .6)*(1 - t*.4) : 0;
+  const frame = (t: number) => {
+    const T = spine.getTangentAt(Math.min(.999, Math.max(.001, t)));
+    const lead = new THREE.Vector3().crossVectors(out, T).multiplyScalar(-side).normalize(); // forward going down, downward going back
+    const n = new THREE.Vector3().crossVectors(T, lead).normalize();
+    return { T, lead, n };
+  };
+  return blade(40, 12,
     (t, v) => {
-      const u = v - .5, c = chord(t);
-      return root.clone().addScaledVector(dir, t*LEN).addScaledVector(chordDir, u*c + (u > 0 ? bumps(t)*u*2 : 0));
+      const { lead } = frame(t), u = v - .4, c = chord(t);   // the bone runs near the leading edge
+      return spine.getPointAt(t).addScaledVector(lead, u*c + (v > .85 ? knobs(t)*(v - .85)/.15 : 0));
     },
-    () => nrm,
-    (t, v) => .011*(1 - t*.72)*(1 - Math.pow(2*v - 1, 2)) + .0008,
-    (t) => [S, 1, t, side]);
+    (t) => frame(t).n,
+    (t, v) => (.026*Math.pow(1 - t, 1.6) + .006)*Math.pow(Math.max(0, 1 - Math.pow((v - .55)/.55, 2)), .6) + .0008,
+    (t) => [FIN_S, 1, t, side]);
 }
 
 // the flukes: wide, swept back, a notch in the middle and a serrated trailing edge
@@ -129,6 +148,7 @@ export function buildWhale(){
   geo.computeBoundingSphere();
   geo.boundingSphere!.radius += .15; // room for the swimming wave
   const skin = makeSkin();
+  skin.uniforms.uFinRoot.value.copy(finRoot(1));
   const S = .13, r = radiusAt(S), th = 1.78; // the eyes: low on the sides, just behind the mouth's corner
   skin.uniforms.uEye.value.set(Math.sin(th)*r*1.06, Math.cos(th)*r*.84, zAt(S));
   const mesh = new THREE.Mesh(geo, skin.mat);

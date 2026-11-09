@@ -43,6 +43,8 @@ import Layout from '../layouts/Layout.astro';
       #btn-me { color: #ff6eb4; }
       #me-menu { position: absolute; right: 1.4rem; top: 3.2rem; display: flex; flex-direction: column; align-items: flex-end; gap: .7rem; padding: .9rem 1rem; background: rgba(8,8,16,.85); border: 1px solid rgba(240,237,232,.16); }
       #me-menu[hidden] { display: none; }
+      #credits { font-size: .58rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); max-width: 42rem; line-height: 1.8; margin-top: 1.4rem; }
+      #credits a { color: inherit; }
       #me-menu a, #me-menu button { opacity: .85; }
       #me-menu a:hover, #me-menu button:hover { opacity: 1; }
       #signin, #signed-as { margin-top: 3rem; padding-top: 1.4rem; border-top: 1px solid rgba(240,237,232,.12); max-width: 34rem; font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
@@ -602,6 +604,7 @@ import Layout from '../layouts/Layout.astro';
       <p>Currently available for freelance work. If you've got something interesting brewing, I'd love to hear about it.</p>
     </div>
     <p id="how-to-fly"><button id="tour-again">how to fly ↗</button></p>
+    <p id="credits">Tanu's body: <a href="https://sketchfab.com/3d-models/game-ready-humpback-whale-da07e3ff73914ff28d2b8cf9da794036" target="_blank" rel="noopener">“Game-ready Humpback Whale”</a> by Allie2k, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, painted and set swimming here.</p>
     <form id="signin" autocomplete="on">
       <label for="signin-pass">is this your galaxy? sign in</label>
       <div><input id="signin-pass" name="password" type="password" autocomplete="current-password" placeholder="your password" /><button>sign in</button></div>
@@ -1118,6 +1121,7 @@ import Layout from '../layouts/Layout.astro';
     let gasSpots: THREE.Vector3[] = [];
     let monthSpots = new Map<string, THREE.Vector3>(); // each barrio's heart, by month ('2019-07')
     // Tanu, the whale of the cosmos (src/cronovisor/tanu/): only in Eze's galaxy, not in the teaser
+    let tanuNear = false; // she's on screen and close: the universe draws at full rate so her swim stays smooth
     let tanu: Tanu | null = null, tanuFollow = false, tanuMark: HTMLElement | null = null, tanuFlight: unknown = null; // tanuFollow: the camera rides along with her
     // Months on a spiral that keeps its spacing however long the archive gets: about 30 apart along the curve
     // and between turns (an Archimedean spiral walked at constant speed), newest at the centre.
@@ -1259,6 +1263,7 @@ import Layout from '../layouts/Layout.astro';
         radius: () => galaxyR,
         reduced,
         lowPower: () => lowPower,
+        model: '/models/tanu-humpback.glb', // "Game-ready Humpback Whale" by Allie2k, CC BY (credited in the about sheet)
       });
       scene.add(tanu.group, tanu.wake);
       tanuMark = document.createElement('div');
@@ -3249,7 +3254,7 @@ import Layout from '../layouts/Layout.astro';
     // fewer frames when the picture is still, so the machine can rest.
     function frameBudget(now: number){
       if(!focusedWindow) return follow || crew.size || skyMoving ? 1000/30 : 1000/10; // another window has the focus: barely tick, unless flying with someone
-      const moving = flight || boarded || delivering || impactAt || (pilot && !pilot.selecting && focused < 0) || now-lastInput < 1200 || skyMoving;
+      const moving = flight || boarded || delivering || impactAt || (pilot && !pilot.selecting && focused < 0) || now-lastInput < 1200 || skyMoving || (tanuNear && !pilot?.selecting);
       if(moving) return 1000/60;
       if(focused >= 0 || pilot?.selecting) return 1000/24;           // a piece on screen, or the universe paused
       if(now-Math.max(lastInput, lastMove) > 20000) return 1000/30;                      // nobody around: the slow auto-rotate is enough at 30
@@ -3312,6 +3317,10 @@ import Layout from '../layouts/Layout.astro';
           if(d.length() > 70) d.setLength(70);
           camera.position.copy(controls.target).add(d);
           lastInput = now; // she's moving: keep the frame rate up
+        }
+        {
+          const d = camera.position.distanceTo(tanu.position), v = tanu.position.clone().project(camera);
+          tanuNear = d < 160 && v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
         }
         if(tanuMark){
           tanuMark.hidden = camera.position.distanceTo(tanu.position) < 75;
