@@ -28,6 +28,9 @@ export interface TanuHost {
 const LENGTH = 22;                   // the balloon is about 6 tall
 const CRUISE = 6.5, TRAVEL = 10;     // units a second: unhurried, but alive (Eze, 2026-11-09: 4 and 7.5 felt "hiperlento")
 const CURIOUS_NEAR = 48, CURIOUS_LEAVE = 135, STAND = 21; // she notices, gives up, keeps this far from the basket
+// Off for now (Eze, 2026-11-09: "a freer swim"): she no longer comes to the balloon on her own. Set true to bring
+// her curiosity back; asked from outside (swimTo('balloon'), her name in the sky while flying) she still comes.
+const CURIOUS = false;
 const MAX_TURN = .5;                 // radians a second, at most (reached slowly)
 const MAX_PITCH = .42;               // the steepest she climbs or dives (radians)
 
@@ -172,7 +175,7 @@ export class Tanu {
     const dB = B ? B.distanceTo(this.pos) : Infinity;
     // curiosity: her own, so only when nobody has asked her for anything
     if(!this.busy){
-      if(this.state === 'idle' && dB < CURIOUS_NEAR && this.clock - this.curiousAt > 20){ this.state = 'curious'; this.path = null; }
+      if(CURIOUS && this.state === 'idle' && dB < CURIOUS_NEAR && this.clock - this.curiousAt > 20){ this.state = 'curious'; this.path = null; }
       if(this.state === 'curious' && dB > CURIOUS_LEAVE){ this.state = 'idle'; this.curiousAt = this.clock; }
     }
     // on her own (not curious, not asked), she keeps clear of the camera: too near, she turns away and takes
