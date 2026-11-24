@@ -1,0 +1,23 @@
+<script>
+/* Cronovisor (ezeangeloni.xyz): La Fuerza's home inside a piece of the archive. Links leave for the real site in a new
+   tab; the keys go back to the universe (Esc, flying); "ready" once loaded. */
+(function () {
+  var SITE = 'https://lafuerzabcn.pages.dev';
+  var up = window.parent !== window ? window.parent : null;
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    var h = a.getAttribute('href');
+    if (!h || h.charAt(0) === '#') return;
+    e.preventDefault();
+    window.open(/^https?:/.test(h) || /^(mailto|tel):/.test(h) ? h : SITE + h.replace(/^\/obras\/la-fuerza/, ''), '_blank', 'noopener');
+  }, true);
+  ['keydown', 'keyup'].forEach(function (type) {
+    addEventListener(type, function (e) {
+      if (up) up.postMessage({ cvKey: { type: type, key: e.key, code: e.code, shiftKey: e.shiftKey, repeat: e.repeat } }, location.origin);
+    });
+  });
+  var ready = function () { if (up) up.postMessage({ cvReady: true }, location.origin); };
+  if (document.readyState === 'complete') ready(); else addEventListener('load', ready);
+})();
+</script>

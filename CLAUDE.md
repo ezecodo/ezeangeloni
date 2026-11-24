@@ -141,6 +141,39 @@ Code in `src/cronovisor/tanu/` (the first part of the Cronovisor outside `index.
 
 Next: B, the song (synthesised in Web Audio, no samples for now, by emotion: calm, curious, joyful, nostalgic) and spatial sound (PannerNode by distance to the balloon); C, `guide` (the balloon follows her wake, like an expedition) and `blow` (a small constellation); D, Tanu herself and the transformation through the galaxy's own net of light.
 
+## The dragon (2026-11-24)
+
+The oriental dragon designed for a restaurant client's table projection (`~/Desktop/dev/dragon-mesa`, a standalone 2D
+canvas prototype, in profile), flying free in Eze's galaxy besides Tanu, **in 3D** (his choice: a free-flying creature
+like Tanu; told the concerns, a client's design shown before the restaurant opens and a festive Chinese dragon beside
+Tanu, and he went ahead; first a 2D billboard, then rebuilt in 3D the same day). `src/cronovisor/dragon/dragon3d.ts`,
+made in code from primitives with the 2D design's proportions, parts and festive palette:
+- **Body:** a tube (`N` 90 rings × `M` 14 sides, rebuilt each frame) along the head's own history of positions, sampled
+  by distance (`hist`, `columna`), with the 2D anatomy (`perfil`) and a wave running head to tail, sideways and up-down.
+  Its skin is a shader (`PIEL_*`: crescent scales, a light stripe on the back, yellow belly with plates; `aS` along,
+  `aA` around, 0 the back, .5 the belly). Red flame fins on the back, a fan of flame at the tail.
+- **Legs:** each grows from a muscle mass, the shoulder or the haunch (`hombro`: an ellipsoid along the body, on its side
+  and bulging a little below, so the leg melts into the body; Eze found the bare cylinder sticking out unnatural), the arm
+  born inside it, thick and tapering; rounded elbow/knee (`codo`). Arm and forearm (tapered cylinders, elbow/knee by two-bone IK in the body's forward/up plane), a hand, five
+  toes with talons and a spur, flame tufts at the elbows; flight pose with a slight paddle and, every ~13 s, the reach
+  for the pearl.
+- **Head:** skull, snout, yellow bulbous nose with nostrils, cheeks, two eyes (white, iris, pupil, glint) with yellow
+  brows, open jaw on a hinge with teeth, a tongue, two horns that curl with a forward tine (tubes), a mane of flame cards
+  in a ring round the nape, a beard, whiskers (tubes rebuilt every third frame). The pearl in flames ahead.
+- **No lights in the scene:** every material lights itself (`pintura`: fixed light from above plus a rim), under the
+  bloom. **Performance:** the head's static parts are merged per material (`fusionar`), and flames, toes and talons are
+  `InstancedMesh`es fed from empty `Object3D`s hung where they belong (`pieza`); measured: ~0.5 ms CPU, and no change
+  in frame rate with it on screen. The lit shader handles `USE_INSTANCING`.
+- **Flights** (`newRoute`): now and then (25–60 s apart, the first ~8 s in) from outside the galaxy over two or three
+  barrio hearts (24 above them, over Tanu) and out the other side, at 12/s, fading in and out at the ends; on the
+  universe's clock. Fades with `calm` at a piece and with the galaxy crossings; `onScreen` keeps the frame budget at 60.
+  Eze's galaxy only, not in the teaser, not with reduced motion (`buildDragon`, from `buildTanu`).
+- Dev: `window.__dragon` (`.wait = 0` sends it out now; `.spine`, `.T` to ride along). Testing it, a joystick left
+  connected kept taking the balloon up: `navigator.getGamepads = () => []` in the tab.
+
+The table version stays 2D in dragon-mesa (the right look for a projection seen from above); changes there don't reach
+this one.
+
 ## The games room (family only, 2026-11-09)
 
 Eze wanted to play the game of his childhood with his brother. `/sala/` (`src/pages/sala.astro`, noindex, door: `sala de juegos ↗` in `#me-menu`, so only someone signed in sees it): a shelf of **your own** games and an emulator. The emulator is EmulatorJS (GPL-3, npm `@emulatorjs/emulatorjs` + cores `snes9x`, `genesis_plus_gx`, `fbneo` for arcade), copied into `public/emulator/` (git-ignored) by `scripts/copy-emulator.mjs` on `predev`/`prebuild`, its scripts joined into `emulator.min.js` (otherwise its loader falls back to debug mode, which asks a CDN for updates); served from the VPS, never a CDN; netplay off; footer credits it with its license.
@@ -341,7 +374,8 @@ A **work** (`WORKS` in `index.astro`, `kind: 'work'`, id `w-<slug>`, Eze's galax
 
 First one: **the radio of Tinto & Soda** (2026-11-12, the day it was born): the 70s radio-cassette whose dial tuned their site (carta, Soda, hours, where) and whose cassette is the carta (side A food, side B drinks; choosing a track fast-forwards the tape). The owner chose the photo version on 2026-11-17, so it lives only in tinto_soda's tag `variantes-presentacion` (`src/components/Radio.astro`). `tools/tinto-radio/build.sh` builds it alone (`radio-page.astro`: transparent, already lit, key forwarding) from that tag with the **current** carta and hours from tinto_soda's main, into `public/obras/tinto-radio/` (base `/obras/tinto-radio`, assets in `_a/`), and retakes `cover.webp` with headless Chrome. Rerun it when the bar's carta changes, if the radio should follow. Its fonts come from Google Fonts like the rest of the page. Link the iframe to `…/index.html` (astro dev doesn't serve a folder's index from `public/`). On a phone the scaled radio is small; it's built for a laptop.
 
-Second: **the lamp of Salamat Clot** (2026-11-20, `salamat-lampara`, linked from the Salamat planet like the radio from Tinto's): the opening scene of salamatclot.com (the real brick wall, the five bulbs lighting one by one, electric rays writing «Salamat Clot», the neon, the gauge "GLUTEN · ppm" coming down to 0, then "100% sin gluten."), its `Escena.astro` alone at 1000×525 (the photo's 1772×930, uncropped). `tools/salamat-lampara/build.sh` builds it from salamat's main (its `public/` left out) into `public/obras/salamat-lampara/` and shoots the cover with `cover.mjs` (Puppeteer from the cv project and the installed Chrome, in real time: headless Chrome's virtual time stalls the animation halfway). It's `fresh`: an animation that plays once, so it loads only on arrival and is unloaded once you leave, to play from the dark wall on every visit. A work's `frameH` is how tall its live page is drawn (the radio's 1050 lets its papers hang below).
+Second: **the lamp of Salamat Clot** (2026-11-20, `salamat-lampara`, linked from the Salamat planet like the radio from Tinto's): the opening scene of salamatclot.com (the real brick wall, the five bulbs lighting one by one, electric rays writing «Salamat Clot», the neon, the gauge "GLUTEN · ppm" coming down to 0, then "100% sin gluten."), its `Escena.astro` alone at 1000×525 (the photo's 1772×930, uncropped). `tools/salamat-lampara/build.sh` builds it from salamat's main (its `public/` left out) into `public/obras/salamat-lampara/` and shoots the cover with `cover.mjs` (Puppeteer from the cv project and the installed Chrome, in real time: headless Chrome's virtual time stalls the animation halfway). It's `fresh`: an animation that plays once, so it loads only on arrival and is unloaded once you leave, to play from the dark wall on every visit. Third: **the shutter of La Fuerza Café** (2026-11-10, `la-fuerza-persiana`, from the La Fuerza planet, `https://lafuerzabcn.pages.dev` until the café has its domain): its whole home page at 1280×800 (narrower, the hero stacks and the logo falls out of frame), opening with the pink shutter: the brandbook's icons one by one, the mural of the woman with the lion (signed @gabobenad, as on the real shutter), "Toca la estrella"; touched (or after 15 s, as on the site) it rolls up onto the hero. `tools/la-fuerza/build.sh` builds it from fuerza's main: it removes the shutter's same-origin check (the iframe is same-origin, so the site would skip it), keeps only the home, moves the site's `/svg/ /img/ /galeria/` paths under the base, and injects `inject.html` (links open the real site in a new tab, keys back to the universe, `cvReady`); cover by `cover.mjs` (width, height and wait are arguments). `fresh`. While testing, a joystick left connected stepped through pieces and flew on by itself: suspect the pad before the code.
+A work's `frameH` is how tall its live page is drawn (the radio's 1050 lets its papers hang below).
 
 
 A link may name a work (`work: 'tinto-radio'` on Tinto & Soda): its panel then shows `#world-work` ("La radio de Tinto & Soda · 2026·11 · Tanu takes you there →"), and moored there E / ● right does the same (`goWithTanu`). Tanu appears at once 28 ahead of the balloon, facing the way, out of a burst of star dust (`tanu.appear`: Eze didn't want to wait while she swam over), and tows it like a journey: in an arc up over the barrios and down (a straight line ran the chase camera through the plates in between), to just past the piece; she names it in `#arrival` and the piece opens from the basket. From the mouse view of the planet the balloon takes off first (`enterPilot`), so it's the same journey (~30 s from the planet).
