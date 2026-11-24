@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Dragón en la mesa · prueba de proyección</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 12px/1.4 ui-monospace, monospace; color: #888; }
+  canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; }
+  #ui { position: fixed; left: 12px; bottom: 10px; pointer-events: none; transition: opacity .4s; }
+  #ui b { color: #ccc; font-weight: 400; }
+  body.clean #ui { opacity: 0; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<div id="ui">
+  <b>O</b> contorno de la mesa · <b>P</b> platos de prueba · <b>N</b> nubes · <b>G</b> grabar un bucle (.webm) · <b>H</b> ocultar esto · <b>F</b> pantalla completa
+  <div id="msg"></div>
+</div>
+<script>
+/*
+ * Prueba de proyección: un dragón oriental cruza la mesa de lado a lado, DE PERFIL, como en los rollos pintados.
+ * Entra caminando, despega y se va volando:
+ * el cuerpo ondula arriba y abajo nadando en el aire, cuatro patas de garras abiertas reman, cabeza de hocico largo
+ * con la boca abierta, cuernos ramificados, melena y bigotes al viento, aletas en el lomo, vientre de placas y la cola
+ * en llama. Persigue la perla en llamas, entre nubes en espiral (xiangyun).
+ * Todo lo que no es mesa es negro (en proyección, negro = luz apagada): sólo se ilumina la mesa.
+ * Bucle perfecto: al empezar y al terminar el dragón está fuera de la mesa, así que en el USB no se nota el salto.
+ * Dragón provisional y original (hecho en código), hasta tener la referencia del cliente.
+ *
+ * Ajustes (en la URL): ?mesa=180x90 (cm) · ?seg=14 (segundos de una pasada) · ?color=festivo|oro|rojo|jade
+ */
+const Q = new URLSearchParams(location.search);
+const [MESA_W, MESA_H] = (Q.get('mesa') || '180x90').split('x').map(Number);
+const PERIODO = (Number(Q.get('seg')) || 14) * 1000;
+const PALETAS = {
+  // la de la referencia de Eze (dragón festivo chino): azul, con hocico, cuerno y vientre amarillos y melena roja
+  festivo: { cuerpo: '#3a9fd8', luz: '#a6e4ff', vientre: '#ffd35a', placa: '#d98a2a', trazo: '#1d5a8c', lejos: '#25679a', aleta: '#e8432e', cuerno: '#fff6e0', ojo: '#1f5f9e', aura: 'rgba(90,185,255,', perla: '#fff4d6', hocico: '#ffd03a', melena2: '#f6744a', boca: '#7a1418', lengua: '#e8432e' },
+  oro:  { cuerpo: '#e3a73a', luz: '#ffe7a0', vientre: '#f7e4b4', placa: '#b98a3a', aleta: '#e2452c', cuerno: '#fff3d6', ojo: '#ff3b1f', aura: 'rgba(255,180,70,', perla: '#fff4d6', hocico: '#ffd45a', melena2: '#ff8a4a', boca: '#5a1016', lengua: '#ef4a3c' },
+  rojo: { cuerpo: '#cf2f25', luz: '#ff9a74', vientre: '#f4d58c', placa: '#a77a2a', aleta: '#f0b43a', cuerno: '#fff1cf', ojo: '#ffd23a', aura: 'rgba(255,70,40,', perla: '#fff4d6', hocico: '#ffd45a', melena2: '#ffc24a', boca: '#3a0a0a', lengua: '#ff7a5a' },
+  jade: { cuerpo: '#2fae7c', luz: '#b8ffe0', vientre: '#e8f2c8', placa: '#6f9a4a', aleta: '#f0b43a', cuerno: '#fffbe8', ojo: '#ff5a2a', aura: 'rgba(80,255,180,', perla: '#fff4d6', hocico: '#ffd45a', melena2: '#ffc24a', boca: '#3a1010', lengua: '#ef4a3c' },
+};
+const P = { trazo: undefined, lejos: undefined, ...(PALETAS[Q.get('color')] || PALETAS.festivo) };
+P.trazo ??= P.placa; P.lejos ??= P.placa; // contornos y patas del lado de allá: si la paleta no dice, el color de las placas
+
+const cv = document.getElementById('c'), c = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+// La mesa ocupa el cuadro del proyector lo más grande posible, con su proporción real
+const k = Math.min(W*.94/MESA_W, H*.94/MESA_H);
+const mesa = { w: MESA_W*k, h: MESA_H*k, x: (W - MESA_W*k)/2, y: (H - MESA_H*k)/2, r: 6*k };
+const cm = k; // píxeles por centímetro
+
+let contorno = false, platos = false, nubes = false; // las nubes, apagadas por defecto (N las muestra)
+const N = 110;                // segmentos del cuerpo
+const LCUERPO = .7*mesa.w;    // largo del cuerpo, medido a lo largo de su curva
+// La cabeza entra justo fuera de la mesa por la izquierda (el cuerpo queda detrás de ella, fuera) y sale por la derecha
+// hasta que la cola también salió: así, cuando el bucle vuelve a empezar, no hay nada en la mesa y no se nota el salto
+const ENTRA = mesa.x - 34*cm, SALE_MAX = mesa.x + mesa.w + LCUERPO + 30*cm; // la cabeza (y la perla, delante) justo fuera; la salida se calcula abajo
+const GROSOR = 9*cm;          // grosor máximo del cuerpo
+const CABEZA = 18*cm;         // largo de la cabeza
+const TAU = Math.PI*2;
+const suave = (q) => q*q*(3 - 2*q);
+const lim = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// La historia de una pasada: entra CAMINANDO por la mesa, DESPEGA (la cabeza sube primero y el cuerpo la sigue por
+// donde ella pasó) y se va VOLANDO, ondulando en el aire. El recorrido es una curva fija en la mesa: el suelo, una
+// rampa y las olas del vuelo; el dragón se desliza por ella, cada segmento donde estuvo la cabeza. Camina despacio y
+// vuela rápido (h(u)); el cuerpo se arma por distancia a lo largo de la curva, así no se comprime al ir lento.
+const PATA = 11.4*cm;                       // largo de la pata (muslo + antebrazo)
+const SUELO = mesa.y + mesa.h*.86;          // la línea donde apoyan las garras de este lado
+const ANDAR_Y = SUELO - PATA*.98;           // altura del cuerpo caminando: erguido sobre sus patas, con porte
+const DESPEGA = [mesa.x + mesa.w*.45, mesa.x + mesa.w*.72]; // entre estas x deja el suelo
+// Por defecto, todo el recorrido volando (Eze: la caminata no convencía); `?andar` vuelve a la versión que entra
+// caminando y despega
+const ANDA = Q.has('andar');
+const vuelo = ANDA ? (x) => suave(lim((x - DESPEGA[0])/(DESPEGA[1] - DESPEGA[0]), 0, 1)) : () => 1;
+const PASO = 8*cm, APOYO = .62, CICLO_X = PASO/APOYO; // zancada, fracción del ciclo con la garra apoyada, avance por ciclo
+function curvaY(x){
+  const v = vuelo(x);
+  const andar = ANDAR_Y;   // sin vaivén: con él la cabeza cabeceaba (Eze: «como si fuera tonto»)
+  if(!ANDA){
+    // volando en diagonal, de la esquina de arriba a la izquierda a la de abajo a la derecha, ondulando
+    const f = (x - mesa.x)/mesa.w;
+    return mesa.y + mesa.h*(.14 + .72*f) + Math.sin(f*TAU*1.5)*mesa.h*.1 + Math.sin(f*TAU*.65 + 1)*mesa.h*.04;
+  }
+  const volar = mesa.y + mesa.h*.36 + Math.sin(x/mesa.w*TAU*1.7)*mesa.h*.13 + Math.sin(x/mesa.w*TAU*.6 + 1)*mesa.h*.05;
+  return andar + (volar - andar)*v;
+}
+// largo de arco acumulado a lo largo de la curva (una tabla, de píxel en píxel)
+const X0 = ENTRA - LCUERPO - 40*cm, X1 = SALE_MAX + 40*cm;
+const ARCO = new Float64Array(Math.ceil(X1 - X0) + 1);
+for(let j = 1; j < ARCO.length; j++) ARCO[j] = ARCO[j-1] + Math.hypot(1, curvaY(X0 + j) - curvaY(X0 + j - 1));
+function enArco(sArc){ // el punto de la curva a esa distancia
+  let lo = 0, hi = ARCO.length - 1;
+  while(hi - lo > 1){ const m = (lo + hi) >> 1; if(ARCO[m] < sArc) lo = m; else hi = m; }
+  const f = (sArc - ARCO[lo])/((ARCO[hi] - ARCO[lo]) || 1), x = X0 + lo + f;
+  return [x, curvaY(x)];
+}
+const arcoDe = (x) => { const j = lim(Math.floor(x - X0), 0, ARCO.length - 2), f = x - X0 - j; return ARCO[j] + (ARCO[j+1] - ARCO[j])*f; };
+// dónde va la cabeza en cada momento: camina despacio y vuela 2,5 veces más rápido, acelerando al despegar
+// (tabla del tiempo que lleva llegar a cada x, normalizada a la pasada, y su inversa)
+// el bucle vuelve a empezar en cuanto la última punta de la cola salió de la mesa (por la derecha o por abajo),
+// contando lo que la onda del cuerpo la mueve, su grosor y su brillo
+const SALE = (() => {
+  const pad = GROSOR*.75 + 8*cm, fuera = ([x, y]) => x > mesa.x + mesa.w + pad || y > mesa.y + mesa.h + pad || y < mesa.y - pad;
+  for(let x = mesa.x + mesa.w*.5; x < SALE_MAX; x += 4){
+    const sc = arcoDe(x);
+    let todo = true;
+    for(let k = 0; k <= 30 && todo; k++) todo = fuera(enArco(sc - k/30*LCUERPO));
+    if(todo) return x + 10*cm; // y la llama de la cola
+  }
+  return SALE_MAX;
+})();
+const RAPIDO = 2.5;
+const TIEMPO = new Float64Array(Math.ceil(SALE - ENTRA) + 1);
+for(let j = 1; j < TIEMPO.length; j++) TIEMPO[j] = TIEMPO[j-1] + 1/(1 + (RAPIDO - 1)*vuelo(ENTRA + j));
+for(let j = 1; j < TIEMPO.length; j++) TIEMPO[j] /= TIEMPO[TIEMPO.length - 1];
+function cabezaX(u){
+  let lo = 0, hi = TIEMPO.length - 1;
+  while(hi - lo > 1){ const m = (lo + hi) >> 1; if(TIEMPO[m] < u) lo = m; else hi = m; }
+  return ENTRA + lo + (u - TIEMPO[lo])/((TIEMPO[hi] - TIEMPO[lo]) || 1);
+}
+// grosor a lo largo del cuerpo: cuello, lomo, y una cola larga que se afina
+// Anatomía (no un cono): cuello fino tras la cabeza, pecho y hombros potentes donde nacen las patas delanteras, cintura,
+// ancas musculosas en las traseras, y desde ahí la cola larga que se afina
+const bulto = (f, donde, alto, ancho) => alto*Math.exp(-Math.pow((f - donde)/ancho, 2));
+function perfil(f){
+  let base = f < .45 ? .74 : .74*(1 - Math.pow((f - .45)/.55, 1.15)*.88);
+  if(f < .07) base -= (.07 - f)/.07*.2;  // el cuello
+  return base + bulto(f, .12, .26, .055) - bulto(f, .26, .06, .04) + bulto(f, .4, .2, .05);
+}
+
+let pts = [];
+// en cada segmento: hacia adelante (hacia la cabeza) y "arriba" del dragón (su lomo)
+function marco(i){
+  const a = pts[Math.min(N, i+1)], b = pts[Math.max(0, i-1)];
+  let fx = b[0] - a[0], fy = b[1] - a[1];
+  const l = Math.hypot(fx, fy) || 1; fx /= l; fy /= l;
+  return { fx, fy, ux: fy, uy: -fx }; // arriba = adelante girado 90° (en pantalla, y hacia abajo)
+}
+const en = (i, a, b) => { const m = marco(i); return [pts[i][0] + m.fx*a + m.ux*b, pts[i][1] + m.fy*a + m.uy*b]; };
+
+function dibujar(t){
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+  const u0 = (t % PERIODO)/PERIODO, sCab = arcoDe(cabezaX(u0));
+  pts = [];
+  for(let i = 0; i <= N; i++) pts.push(enArco(sCab - i/N*LCUERPO));
+  // caminando, el cuello va erguido y la cabeza alta, como un león; al despegar se estira hacia adelante
+  const NL = Math.round(N*.12);
+  for(let i = 0; i < NL; i++){ const f = 1 - i/NL; pts[i][1] -= 6*cm*f*f*(1 - vuelo(pts[i][0])); }
+  // una onda que recorre el cuerpo de la cabeza a la cola, como en los rollos pintados: el cuello casi quieto, cada vez
+  // más amplia hacia la cola; ONDAS por pasada (entero), así el bucle sigue perfecto
+  const ONDAS = 6, base = pts.map(p => [...p]);
+  for(let i = 1; i <= N; i++){
+    const a = base[Math.max(0, i-1)], b = base[Math.min(N, i+1)], dx = a[0] - b[0], dy = a[1] - b[1], l = Math.hypot(dx, dy) || 1;
+    const env = suave(lim(i/(N*.3), 0, 1))*(1 - .35*i/N);   // crece tras el cuello y se calma un poco en la punta
+    const off = GROSOR*.75*env*Math.sin(TAU*(1.3*i/N) - TAU*ONDAS*(t % PERIODO)/PERIODO)*vuelo(base[i][0]);
+    pts[i][0] = base[i][0] + (dy/l)*off; pts[i][1] = base[i][1] - (dx/l)*off;
+  }
+  c.save();
+  c.beginPath(); c.roundRect(mesa.x, mesa.y, mesa.w, mesa.h, mesa.r); c.clip(); // sólo la mesa
+  if(platos) dibujarPlatos();
+  if(nubes) dibujarNubes(t);
+  {
+    luzDelSuelo();
+    huellas();
+    perla(sCab, t);
+    patas(t, true);     // las del lado de allá, en sombra
+    cuerpo(t);
+    cabeza(t);
+    patas(t, false);    // las de este lado: por delante de la cabeza y la melena (así se ve el brazo que alcanza la perla)
+  }
+  c.restore();
+  if(contorno){
+    c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 2; c.setLineDash([12, 10]);
+    c.beginPath(); c.roundRect(mesa.x, mesa.y, mesa.w, mesa.h, mesa.r); c.stroke(); c.setLineDash([]);
+  }
+}
+
+function cuerpo(t){
+  const arriba = [], abajo = [], vientre = [];
+  for(let i = 1; i <= N; i++){
+    const g = GROSOR*perfil(i/N)/2;
+    arriba.push(en(i, 0, g)); abajo.push(en(i, 0, -g)); vientre.push(en(i, 0, -g*.15));
+  }
+  // la cola en llama, detrás del cuerpo
+  colaLlama(t);
+  // aletas del lomo: puntas como llamas, inclinadas hacia la cola
+  c.save(); c.fillStyle = P.aleta; c.shadowColor = P.aura + '.5)'; c.shadowBlur = 14;
+  for(let i = 6; i < N - 6; i += 3){
+    const g = GROSOR*perfil(i/N)/2, h = g*(.75 + .25*Math.sin(i*1.7));
+    const sway = Math.sin(t*.006 - i*.3)*.25;
+    const [ax, ay] = en(i, 1.6*cm, g*.8), [bx, by] = en(i, -2.2*cm, g*.8), [px, py] = en(i, -2.6*cm - h*(.4 + sway), g + h);
+    c.beginPath(); c.moveTo(ax, ay); c.quadraticCurveTo(...en(i, 0, g + h*.6), px, py); c.lineTo(bx, by); c.fill();
+  }
+  c.restore();
+  // el cuerpo
+  c.save();
+  c.shadowColor = P.aura + '.55)'; c.shadowBlur = 36;
+  c.beginPath(); c.moveTo(...en(0, 0, GROSOR*perfil(0)/2));
+  arriba.forEach(p => c.lineTo(...p)); abajo.slice().reverse().forEach(p => c.lineTo(...p)); c.lineTo(...en(0, 0, -GROSOR*perfil(0)/2));
+  c.closePath(); c.fillStyle = P.cuerpo; c.fill();
+  c.restore();
+  // el vientre: banda clara con placas atravesadas
+  c.save();
+  c.beginPath(); vientre.forEach((p, j) => j ? c.lineTo(...p) : c.moveTo(...p)); abajo.slice().reverse().forEach(p => c.lineTo(...p)); c.closePath();
+  c.fillStyle = P.vientre; c.fill(); c.clip();
+  c.strokeStyle = P.placa; c.lineWidth = 1.5;
+  for(let i = 2; i < N; i += 2){
+    const g = GROSOR*perfil(i/N)/2;
+    c.beginPath(); c.moveTo(...en(i, 0, -g*.15)); c.lineTo(...en(i, -.5*cm, -g)); c.stroke();
+  }
+  c.restore();
+  // escamas: medias lunas en filas sobre el lomo
+  c.save(); c.strokeStyle = P.luz; c.lineWidth = 1.4; c.globalAlpha = .75;
+  for(let i = 3; i < N - 2; i += 2){
+    const m = marco(i), g = GROSOR*perfil(i/N)/2, r = g*.26, a0 = Math.atan2(m.fy, m.fx);
+    for(const fila of [.25, .62]){
+      const desp = (i/2 % 2) ? r*.9 : 0;
+      const [x, y] = en(i, desp, g*fila);
+      c.beginPath(); c.arc(x, y, r, a0 + Math.PI*.5, a0 + Math.PI*1.5); c.stroke();
+    }
+  }
+  c.restore();
+  // volumen: luz sobre el lomo, para que se lea redondo
+  c.save();
+  c.beginPath();
+  for(let i = 1; i <= N; i++){ const g = GROSOR*perfil(i/N)/2; c.lineTo(...en(i, 0, g*.95)); }
+  for(let i = N; i >= 1; i--){ const g = GROSOR*perfil(i/N)/2; c.lineTo(...en(i, 0, g*.5)); }
+  c.closePath(); c.fillStyle = P.luz; c.globalAlpha = .16; c.fill();
+  c.globalAlpha = .4; c.strokeStyle = P.luz; c.lineWidth = 2;
+  c.beginPath(); for(let i = 2; i <= N - 2; i++){ const g = GROSOR*perfil(i/N)/2; c.lineTo(...en(i, 0, g*.9)); } c.stroke();
+  c.restore();
+  // masas musculares: el hombro y el anca, que asoman por debajo del contorno
+  for(const pt of PATAS) musculo(Math.round(pt.f*N), pt.delantera);
+}
+function musculo(i, delantera){
+  const m = marco(i), g = GROSOR*perfil(i/N)/2;
+  const [cx, cy] = en(i, delantera ? .4*cm : -.6*cm, -g*.12), ang = Math.atan2(m.fy, m.fx);
+  const rx = g*(delantera ? 1.15 : 1.25), ry = g*.92;
+  c.save();
+  c.translate(cx, cy); c.rotate(ang);
+  // en este marco: x adelante, y hacia abajo de la pantalla = hacia el vientre (por eso arriba es -y)
+  c.shadowColor = P.aura + '.4)'; c.shadowBlur = 18;
+  c.fillStyle = P.cuerpo; c.beginPath(); c.ellipse(0, 0, rx, ry, 0, 0, TAU); c.fill();
+  c.shadowBlur = 0;
+  c.fillStyle = P.luz; c.globalAlpha = .22; c.beginPath(); c.ellipse(-rx*.1, -ry*.3, rx*.75, ry*.5, 0, 0, TAU); c.fill(); // brillo arriba
+  c.globalAlpha = .65; c.strokeStyle = P.trazo; c.lineWidth = 2.2;   // contorno del músculo, abajo y atrás
+  c.beginPath(); c.ellipse(0, 0, rx, ry, 0, Math.PI*.05, Math.PI*.95); c.stroke();
+  c.globalAlpha = .45; c.lineWidth = 1.4;                              // fibras
+  for(const k of [-.35, 0, .35]){ c.beginPath(); c.moveTo(rx*(k - .3), -ry*.55); c.quadraticCurveTo(rx*(k + .05), 0, rx*(k + .25), ry*.6); c.stroke(); }
+  c.restore();
+}
+
+// Patas: patas de tigre con garras de águila (dos de las «nueve semejanzas» del dragón chino).
+// CAMINANDO, cada garra se planta en la mesa y se queda quieta mientras el cuerpo avanza sobre ella (apoyo), luego se
+// levanta y se adelanta (vuelo de la pata), en diagonal como un tigre: delantera de un lado con trasera del otro.
+// VOLANDO, postura de vuelo: delanteras estiradas adelante con la garra abierta, traseras atrás junto a la cola, con un
+// remo lento. El paso de una a otra va por pata, según su altura: las delanteras dejan el suelo primero.
+// El codo y la rodilla salen solos (cinemática inversa de dos huesos): en la delantera el codo atrás, en la trasera la
+// rodilla adelante.
+const CICLOS_V = 6;  // remadas en vuelo por pasada: entero, así el bucle sigue perfecto
+const GARRAS = Math.max(3, Math.min(5, Number(Q.get('garras')) || 5)); // 5: el dragón imperial; 4 los príncipes; 3 el japonés
+const PATAS = [ // en qué parte del cuerpo, si es delantera, y su desfase en la marcha
+  { f: .15, delantera: true, fase: 0 },
+  { f: .4, delantera: false, fase: .5 },
+];
+// la marcha: dónde está la garra en la mesa (x), cuánto se levanta, y si está apoyada
+function marcha(hipX, fase){
+  const p = ((hipX/CICLO_X + fase) % 1 + 1) % 1;
+  if(p < APOYO) return { x: hipX - (p/APOYO)*PASO + PASO/2, alza: 0, apoyada: true };
+  const q = (p - APOYO)/(1 - APOYO);
+  return { x: hipX - PASO/2 + suave(q)*PASO, alza: Math.sin(q*Math.PI)*2.6*cm, apoyada: false };
+}
+// El gesto de alcanzar la perla: entre el 34 y el 64 % de la pasada (la perla delante, el dragón en mitad de la mesa),
+// dos alcances lentos; fuera de ahí, nada. La pata del lado de allá, un poco desfasada
+function gesto(t, lejos){
+  const u = (t % PERIODO)/PERIODO, a = .34, b = .64;
+  if(u < a || u > b) return { e: 0, fase: 0 };
+  const q = (u - a)/(b - a);
+  return { e: Math.pow(Math.sin(q*Math.PI), 2), fase: q*TAU*2 - (lejos ? .6 : 0) };
+}
+function patas(t, lejos){
+  for(const pt of PATAS){
+    const i = Math.round(pt.f*N), g = GROSOR*perfil(pt.f)/2, m = marco(i);
+    const fase = pt.fase + (lejos ? .5 : 0);
+    const esc = lejos ? .9 : 1, a = PATA*.53*esc, b = PATA*.47*esc, R = a + b;
+    const A = en(i, lejos ? 1.2*cm : 0, -g*.4); // hombro o cadera
+    const aCuerpo = (X, Y) => [(X - A[0])*m.fx + (Y - A[1])*m.fy, (X - A[0])*m.ux + (Y - A[1])*m.uy]; // pantalla → marco del cuerpo
+    const B = (x, y) => [A[0] + m.fx*x + m.ux*y, A[1] + m.fy*x + m.uy*y];                           // marco del cuerpo → pantalla
+    const v = vuelo(A[0]);
+    // caminando: la garra en la mesa
+    const mc = marcha(A[0], fase), suelo = SUELO - (lejos ? 1.6*cm : 0);
+    const [wx, wy] = aCuerpo(mc.x, suelo - mc.alza);
+    // volando: casi quietas, con un balanceo muy leve; y a mitad del vuelo, un gesto: estira los brazos hacia la perla
+    // (dos veces, abriendo y cerrando las garras como si casi la agarrara) y las traseras dan un pequeño impulso
+    const r = Math.sin(t/PERIODO*TAU*CICLOS_V + fase*TAU);
+    const ges = gesto(t, lejos), alc = ges.e*(.5 - .5*Math.cos(ges.fase)); // 0..1: cuánto está alcanzando ahora
+    const fx = pt.delantera ? (.62 + .04*r + .3*alc)*R : (-.86 - .02*r + .1*alc)*R;
+    const fy = pt.delantera ? (-.5 + .04*r + .42*alc)*R : (-.26 + .02*r - .12*alc)*R;
+    let tx = wx + (fx - wx)*v, ty = wy + (fy - wy)*v;
+    let d = Math.hypot(tx, ty);
+    if(d > R*.98){ tx *= R*.98/d; ty *= R*.98/d; d = R*.98; }
+    const th = Math.atan2(ty, tx), al = Math.acos(lim((a*a + d*d - b*b)/(2*a*d), -1, 1));
+    const ang = pt.delantera ? th - al : th + al;           // codo atrás / rodilla adelante
+    const ex = Math.cos(ang)*a, ey = Math.sin(ang)*a;
+    const E = B(ex, ey), F = B(tx, ty), fa = Math.atan2(ty - ey, tx - ex);
+    c.save();
+    c.globalAlpha = lejos ? .55 : 1; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.shadowColor = P.aura + '.45)'; c.shadowBlur = lejos ? 0 : 16;
+    const color = lejos ? P.lejos : P.cuerpo;
+    c.strokeStyle = color;
+    miembro(A, E, g*1.15, g*1.1, g*.55, color);   // muslo / brazo, con su músculo
+    miembro(E, F, g*.62, g*.66, g*.36, color);    // antebrazo / pierna, fino hacia la muñeca
+    c.shadowBlur = 0;
+    // mechón de llama en el codo, flotando hacia atrás
+    c.strokeStyle = P.aleta; c.lineWidth = 2.6;
+    for(let j = 0; j < 4; j++){
+      const w = Math.sin(t*.008 + j + (lejos ? 2 : 0))*.5*cm;
+      const [qx, qy] = B(ex - 1.6*cm - j*.3*cm, ey + (j - 1.5)*.4*cm + w), [rx, ry] = B(ex - 3.2*cm - j*.5*cm, ey + (j - 1.5)*.7*cm - w);
+      c.beginPath(); c.moveTo(...E); c.quadraticCurveTo(qx, qy, rx, ry); c.stroke();
+    }
+    // garras: apoyadas, planas y abiertas sobre la mesa; en el aire al caminar, recogidas; volando, abiertas
+    // adelante (delanteras) o cerradas hacia la cola (traseras)
+    const caminaAbre = mc.apoyada ? .8 : .1, caminaBase = mc.apoyada ? Math.atan2(m.ux, m.fx) : fa; // apoyada: hacia adelante, plana sobre la mesa
+    // las delanteras se abren al estirarse y se cierran al recoger (agarrando el aire)
+    const vueloAbre = pt.delantera ? (ges.e > .02 ? .25 + .7*alc : .85) : .2, vueloBase = pt.delantera ? -.45 + .5*alc : Math.PI + .25;
+    const abierta = caminaAbre + (vueloAbre - caminaAbre)*v, base = caminaBase + (vueloBase - caminaBase)*v;
+    garra(B, tx, ty, base, abierta, esc, g, color, mc.apoyada && v < .5);
+    c.restore();
+  }
+}
+
+// Garra de águila (una de las «nueve semejanzas»): una mano con dedos escamosos de dos falanges, cada uno con su uña en
+// media luna, gruesa en la base y afilada, y un espolón hacia atrás. Abierta, los dedos se separan y se estiran; cerrada,
+// se doblan en puño y las uñas se clavan. En el marco del cuerpo (x adelante, y arriba); B lo pasa a pantalla.
+function garra(B, tx, ty, base, abierta, esc, g, color, plana){
+  const dir = (a, l) => [Math.cos(a)*l, Math.sin(a)*l];
+  const abre = (plana ? .2 : .16) + .26*abierta;         // cuánto se separan los dedos
+  const dobla = .25 + (1 - abierta)*1.05;                 // cuánto se doblan (y se clavan las uñas)
+  const uña = (x, y, a, largo, ancho) => {                // media luna: base ancha, punta curva hacia abajo
+    const [dx, dy] = dir(a, largo), px = -Math.sin(a)*ancho, py = Math.cos(a)*ancho;
+    const [cx, cy] = dir(a - .55, largo*.62), [tx2, ty2] = dir(a - 1.05, largo);
+    c.fillStyle = P.cuerno;
+    c.beginPath(); c.moveTo(...B(x + px, y + py));
+    c.quadraticCurveTo(...B(x + cx + px*.6, y + cy + py*.6), ...B(x + tx2, y + ty2));
+    c.quadraticCurveTo(...B(x + cx*.7 - px*.2, y + cy*.7 - py*.2), ...B(x - px, y - py));
+    c.closePath(); c.fill();
+    c.strokeStyle = P.trazo; c.globalAlpha *= .6; c.lineWidth = 1.2; c.stroke(); c.globalAlpha /= .6;
+  };
+  const dedo = (a, l1, l2, grosor, largoUña) => {
+    const [ax, ay] = dir(a, l1), j1 = [tx + ax, ty + ay];
+    const a2 = a - dobla, [bx, by] = dir(a2, l2), j2 = [j1[0] + bx, j1[1] + by];
+    c.strokeStyle = color; c.lineCap = 'round';
+    c.lineWidth = grosor; c.beginPath(); c.moveTo(...B(tx, ty)); c.lineTo(...B(...j1)); c.stroke();
+    c.lineWidth = grosor*.78; c.beginPath(); c.moveTo(...B(...j1)); c.lineTo(...B(...j2)); c.stroke();
+    // anillos de escama en el nudillo y la falange
+    c.strokeStyle = P.luz; c.globalAlpha *= .55; c.lineWidth = 1.3;
+    for(const [p0, an, w] of [[j1, a, grosor], [[(j1[0] + j2[0])/2, (j1[1] + j2[1])/2], a2, grosor*.78]]){
+      const px = -Math.sin(an)*w*.45, py = Math.cos(an)*w*.45;
+      c.beginPath(); c.moveTo(...B(p0[0] + px, p0[1] + py)); c.lineTo(...B(p0[0] - px, p0[1] - py)); c.stroke();
+    }
+    c.globalAlpha /= .55;
+    uña(j2[0], j2[1], a2 - dobla*.35, largoUña, grosor*.42);
+  };
+  // la mano
+  c.fillStyle = color; c.beginPath(); c.ellipse(...B(tx, ty), g*.42, g*.34, 0, 0, TAU); c.fill();
+  c.fillStyle = P.luz; c.globalAlpha *= .25; c.beginPath(); c.ellipse(...B(tx, ty - g*.06), g*.24, g*.16, 0, 0, TAU); c.fill(); c.globalAlpha /= .25;
+  // el espolón, hacia atrás
+  dedo(base + Math.PI*.82, 1.4*cm*esc, 1*cm*esc, 1.3*cm*esc, 2*cm*esc);
+  // los dedos, abiertos en abanico
+  for(let j = 0; j < GARRAS; j++){
+    const lado = j - (GARRAS - 1)/2, l = 1 - Math.abs(lado)*.12; // los del medio, más largos
+    dedo(base + lado*abre, 2.2*cm*esc*l, 1.7*cm*esc*l, 1.45*cm*esc, 2.6*cm*esc*l);
+  }
+}
+
+// un miembro con forma de músculo: ancho arriba, con un bulto, y fino abajo; con su brillo en el borde de arriba
+function miembro(P0, P1, w0, wb, w1, color){
+  const dx = P1[0] - P0[0], dy = P1[1] - P0[1], l = Math.hypot(dx, dy) || 1, nx = -dy/l, ny = dx/l;
+  const at = (t, w, s) => [P0[0] + dx*t + nx*w*s/2, P0[1] + dy*t + ny*w*s/2];
+  c.fillStyle = color;
+  c.beginPath(); c.moveTo(...at(0, w0, 1)); c.quadraticCurveTo(...at(.35, wb*1.25, 1), ...at(1, w1, 1));
+  c.lineTo(...at(1, w1, -1)); c.quadraticCurveTo(...at(.4, wb*1.1, -1), ...at(0, w0, -1)); c.closePath(); c.fill();
+  c.beginPath(); c.arc(...P0, w0/2, 0, TAU); c.fill();
+  c.beginPath(); c.arc(...P1, w1/2, 0, TAU); c.fill();
+  const sh = c.shadowBlur; c.shadowBlur = 0;
+  c.save(); c.strokeStyle = P.luz; c.globalAlpha *= .35; c.lineWidth = 1.6;
+  const lado = ny < 0 ? 1 : -1; // el borde que mira hacia arriba de la pantalla
+  c.beginPath(); c.moveTo(...at(.1, w0*.8, lado)); c.quadraticCurveTo(...at(.4, wb*1.05, lado), ...at(.9, w1*.8, lado)); c.stroke();
+  c.restore(); c.shadowBlur = sh;
+}
+
+// En proyección no hay sombras (el negro es luz apagada): el dragón se apoya en la mesa con LUZ. Un resplandor cálido
+// bajo el cuerpo mientras camina, que se apaga al despegar.
+function luzDelSuelo(){
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for(let i = 4; i <= N; i += 6){
+    const [x] = pts[i], v = vuelo(x);
+    if(v > .98) continue;
+    const r = GROSOR*perfil(i/N)*1.6, g = c.createRadialGradient(x, SUELO, 0, x, SUELO, r*1.4);
+    g.addColorStop(0, P.aura + (.08*(1 - v)).toFixed(3) + ')'); g.addColorStop(1, P.aura + '0)');
+    c.fillStyle = g; c.beginPath(); c.ellipse(x, SUELO, r*1.4, r*.35, 0, 0, TAU); c.fill();
+  }
+  c.restore();
+}
+// cada pisada deja una huella de luz que se apaga a medida que el dragón se aleja de ella
+function huellas(){
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for(const pt of PATAS) for(const lejos of [false, true]){
+    const i = Math.round(pt.f*N), m = marco(i), g = GROSOR*perfil(pt.f)/2;
+    const hipX = pts[i][0] + m.ux*(-g*.4), fase = pt.fase + (lejos ? .5 : 0), y = SUELO - (lejos ? 1.6*cm : 0);
+    // las pisadas ya dadas: el apoyo k empieza cuando la cadera pasa por (k - fase)·CICLO_X
+    const kAhora = Math.floor(hipX/CICLO_X + fase);
+    for(let kk = kAhora; kk > kAhora - 14; kk--){
+      const x = (kk - fase)*CICLO_X + PASO/2, lejania = hipX - x;
+      if(lejania < -PASO || vuelo(x) > .5) continue;
+      const a = Math.exp(-Math.max(0, lejania)/(40*cm))*(lejos ? .45 : .8)*(1 - vuelo(x)*2);
+      if(a < .02) continue;
+      const gr = c.createRadialGradient(x, y, 0, x, y, 2.6*cm);
+      gr.addColorStop(0, P.aura + (.5*a).toFixed(3) + ')'); gr.addColorStop(1, P.aura + '0)');
+      c.fillStyle = gr; c.beginPath(); c.ellipse(x, y, 2.6*cm, 1*cm, 0, 0, TAU); c.fill();
+      c.fillStyle = P.luz; c.globalAlpha = a*.6; // la marca de las garras
+      for(let j = 0; j < GARRAS; j++){ c.beginPath(); c.ellipse(x + 1.2*cm + (j - (GARRAS - 1)/2)*.15*cm, y + (j - (GARRAS - 1)/2)*.35*cm, .5*cm, .12*cm, 0, 0, TAU); c.fill(); }
+      c.globalAlpha = 1;
+    }
+  }
+  c.restore();
+}
+
+// La cabeza, en el estilo de los dragones festivos chinos: formas gordas y redondeadas, hocico grande y bulboso, ojo
+// grande con su brillo y una ceja como llama, cuerno robusto que se enrosca, melena de llamas en capas alrededor de la
+// nuca (que además tapa la unión con el cuello: antes quedaba un hueco negro entre las mandíbulas y el cuerpo), boca
+// abierta con dientes redondeados y colmillos, y una lengua larga que ondula. Original, inspirada en ese estilo.
+function cabeza(t){
+  // estable: su orientación sale del cuello entero, así no cabecea; caminando mira al frente, apenas alzada
+  const [x0, y0] = pts[0], cu = pts[8];
+  const vc = vuelo(x0), aCuello = Math.atan2(y0 - cu[1], x0 - cu[0]), aCabeza = (1 - vc)*(-8*Math.PI/180) + vc*aCuello;
+  const hx = Math.cos(aCabeza), hy = Math.sin(aCabeza);
+  const m = { fx: hx, fy: hy, ux: hy, uy: -hx }, S = CABEZA;
+  // coordenadas de la cabeza: x adelante, y arriba, en largos de cabeza, con el origen en la punta del cuello
+  const L = (x, y) => [x0 + m.fx*x*S + m.ux*y*S, y0 + m.fy*x*S + m.uy*y*S];
+  const ola = (j) => Math.sin(t*.005 + j);
+  // una forma cerrada y suave que pasa cerca de esos puntos
+  const blob = (ps) => {
+    c.beginPath();
+    const mid = (a, b) => [(a[0] + b[0])/2, (a[1] + b[1])/2];
+    c.moveTo(...L(...mid(ps[ps.length - 1], ps[0])));
+    ps.forEach((p, j) => c.quadraticCurveTo(...L(...p), ...L(...mid(p, ps[(j + 1) % ps.length]))));
+    c.closePath();
+  };
+  const linea = (ps) => { c.beginPath(); c.moveTo(...L(...ps[0])); for(let j = 1; j + 1 < ps.length; j += 2) c.quadraticCurveTo(...L(...ps[j]), ...L(...ps[j+1])); };
+  // una llama: de su base hacia una dirección, con la punta que ondea
+  const llama = (bx, by, ang, largo, ancho, color, j) => {
+    const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx, w = ola(j)*largo*.18;
+    c.fillStyle = color;
+    c.beginPath(); c.moveTo(...L(bx + px*ancho, by + py*ancho));
+    c.quadraticCurveTo(...L(bx + dx*largo*.55 + px*ancho*1.3, by + dy*largo*.55 + py*ancho*1.3), ...L(bx + dx*largo + px*w, by + dy*largo + py*w));
+    c.quadraticCurveTo(...L(bx + dx*largo*.45 - px*ancho*.6, by + dy*largo*.45 - py*ancho*.6), ...L(bx - px*ancho, by - py*ancho));
+    c.closePath(); c.fill();
+  };
+  const v = vc, abre = .1 + .16*v + .05*v*Math.sin(t*.003); // caminando, la boca entreabierta; al volar, un rugido
+  // la mandíbula de abajo gira sobre su bisagra
+  const BIS = [.26, -.02], gira = (p) => { const a = -abre*1.25, dx = p[0] - BIS[0], dy = p[1] - BIS[1]; return [BIS[0] + dx*Math.cos(a) - dy*Math.sin(a), BIS[1] + dx*Math.sin(a) + dy*Math.cos(a)]; };
+  c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+  c.shadowColor = P.aura + '.5)'; c.shadowBlur = 24;
+
+  // 1. melena: llamas en dos capas alrededor de la nuca, hacia atrás (tapan la unión con el cuello)
+  for(let j = 0; j < 9; j++){
+    const a = Math.PI*(.42 + j*.135), l = .62 + (j % 3)*.14;
+    llama(.0, .05, a, l, .13, P.aleta, j);
+  }
+  c.shadowBlur = 0;
+  for(let j = 0; j < 7; j++){
+    const a = Math.PI*(.5 + j*.15), l = .42 + (j % 2)*.12;
+    llama(.05, .05, a, l, .09, P.melena2, j + 20);
+  }
+  // barba de llamas bajo la mandíbula
+  for(let j = 0; j < 4; j++) llama(...gira([.35 + j*.1, -.27]), Math.PI*(1.25 + j*.04), .28 + (j % 2)*.08, .06, j % 2 ? P.melena2 : P.aleta, j + 40);
+
+  // 2. cuerno robusto, que se enrosca en la punta, con una rama adelante
+  c.shadowBlur = 14;
+  c.strokeStyle = P.hocico;
+  c.lineWidth = .1*S; linea([[.24, .5], [.12, .86], [-.2, 1.0]]); c.stroke();
+  c.lineWidth = .075*S; linea([[-.2, 1.0], [-.42, 1.08], [-.44, 1.24]]); c.stroke();
+  c.lineWidth = .06*S; linea([[-.44, 1.24], [-.42, 1.36], [-.3, 1.32]]); c.stroke();
+  c.lineWidth = .06*S; linea([[.1, .84], [.2, 1.0], [.32, 1.06]]); c.stroke();
+  c.shadowBlur = 0; c.strokeStyle = P.cuerno; c.globalAlpha = .7; c.lineWidth = .025*S;
+  linea([[.2, .55], [.1, .84], [-.18, .96]]); c.stroke(); c.globalAlpha = 1;
+
+  // 3. interior de la boca y la lengua
+  const punta = gira([.98, -.14]), medio = gira([.55, -.12]);
+  c.fillStyle = P.boca; blob([[.25, .0], [.7, .06], [1.0, .06], punta, medio]); c.fill();
+  // la lengua: sale de la boca, se enrosca hacia abajo y vuelve a subir, fina hacia la punta bífida (una curva suave)
+  const bez = (q, a, b, cc, d) => { const r = 1 - q; return [r*r*r*a[0] + 3*r*r*q*b[0] + 3*r*q*q*cc[0] + q*q*q*d[0], r*r*r*a[1] + 3*r*r*q*b[1] + 3*r*q*q*cc[1] + q*q*q*d[1]]; };
+  const l0 = [.45, -.06], l1 = [.95, gira([.95, -.1])[1] + .02], l2 = [1.25, -.42 - abre*.3 + ola(5)*.06], l3 = [1.36, -.18 + ola(6)*.06];
+  c.strokeStyle = P.lengua; c.lineCap = 'round';
+  let prev = l0;
+  for(let k = 1; k <= 24; k++){
+    const q = k/24, p2 = bez(q, l0, l1, l2, l3);
+    c.lineWidth = (.065*(1 - q) + .014)*S; c.beginPath(); c.moveTo(...L(...prev)); c.lineTo(...L(...p2)); c.stroke(); prev = p2;
+  }
+  const dir = Math.atan2(l3[1] - bez(.92, l0, l1, l2, l3)[1], l3[0] - bez(.92, l0, l1, l2, l3)[0]);
+  c.lineWidth = .014*S; c.beginPath();
+  c.moveTo(...L(...l3)); c.lineTo(...L(l3[0] + Math.cos(dir + .45)*.07, l3[1] + Math.sin(dir + .45)*.07));
+  c.moveTo(...L(...l3)); c.lineTo(...L(l3[0] + Math.cos(dir - .45)*.07, l3[1] + Math.sin(dir - .45)*.07)); c.stroke();
+
+  // 4. mandíbula de abajo, maciza, y sus dientes
+  c.shadowBlur = 18;
+  c.fillStyle = P.cuerpo; blob([[.2, -.02], [.6, -.08], [.93, -.1], [1.02, -.2], [.9, -.32], [.5, -.34], [.15, -.3], [-.08, -.18]].map(gira)); c.fill();
+  c.shadowBlur = 0;
+  c.fillStyle = P.luz; c.globalAlpha = .35; blob([[.3, -.2], [.7, -.24], [.9, -.22], [.6, -.3], [.3, -.28]].map(gira)); c.fill(); c.globalAlpha = 1;
+  c.fillStyle = '#fffaf0';
+  for(const [x, alto] of [[.55, .07], [.66, .06], [.77, .06], [.88, .11]]){ // de abajo, con su colmillo adelante
+    const b1 = gira([x - .035, -.1]), b2 = gira([x + .035, -.1]), tp = gira([x, -.1 + alto]);
+    c.beginPath(); c.moveTo(...L(...b1)); c.quadraticCurveTo(...L(tp[0] - .01, tp[1]), ...L(...tp)); c.quadraticCurveTo(...L(tp[0] + .01, tp[1]), ...L(...b2)); c.fill();
+  }
+
+  // 5. el cráneo y el hocico
+  c.shadowBlur = 28; c.shadowColor = P.aura + '.55)';
+  c.fillStyle = P.cuerpo;
+  blob([[-.16, .2], [-.06, .48], [.18, .62], [.42, .6], [.6, .48], [.8, .42], [.98, .4], [1.06, .2], [.98, .06], [.62, .04], [.34, .0], [.06, -.14], [-.14, -.04]]);
+  c.fill(); c.shadowBlur = 0;
+  // brillo de la frente y del lomo del hocico
+  c.fillStyle = P.luz; c.globalAlpha = .3; blob([[.15, .52], [.4, .56], [.62, .45], [.85, .38], [.6, .4], [.35, .46]]); c.fill();
+  // mejilla clara, como un remolino
+  c.globalAlpha = .5; blob([[-.02, -.02], [.16, .2], [.32, .14], [.3, .02], [.14, -.08]]); c.fill(); c.globalAlpha = 1;
+  c.strokeStyle = P.trazo; c.lineWidth = .018*S; c.globalAlpha = .7;
+  linea([[.02, .06], [.14, .18], [.28, .1]]); c.stroke(); c.globalAlpha = 1;
+  // dientes de arriba, colgando del labio, con colmillos
+  c.fillStyle = '#fffaf0';
+  for(const [x, alto] of [[.48, .1], [.6, .06], [.7, .06], [.8, .06], [.9, .12]]){
+    c.beginPath(); c.moveTo(...L(x - .035, .05)); c.quadraticCurveTo(...L(x - .01, .05 - alto), ...L(x, .05 - alto)); c.quadraticCurveTo(...L(x + .01, .05 - alto), ...L(x + .035, .05)); c.fill();
+  }
+  // el hocico: grande y bulboso, con su orificio y un brillo
+  c.fillStyle = P.hocico; c.shadowBlur = 16; c.shadowColor = P.aura + '.6)';
+  blob([[.86, .36], [1.02, .44], [1.16, .34], [1.16, .14], [1.02, .08], [.88, .16]]); c.fill(); c.shadowBlur = 0;
+  c.fillStyle = P.boca; c.beginPath(); c.ellipse(...L(1.07, .25), .035*S, .028*S, 0, 0, TAU); c.fill();
+  c.fillStyle = '#fff'; c.globalAlpha = .6; c.beginPath(); c.ellipse(...L(.98, .38), .03*S, .018*S, 0, 0, TAU); c.fill(); c.globalAlpha = 1;
+  // labio de arriba, claro, del hocico a la comisura
+  c.strokeStyle = P.hocico; c.lineWidth = .05*S; linea([[.98, .08], [.6, .06], [.32, .02]]); c.stroke();
+
+  // 6. el ojo: grande, con su brillo, que parpadea; y la ceja como una llama encima
+  const parpado = (t % 5300) < 150 ? .12 : 1;
+  const [ex, ey] = L(.46, .38), ang = Math.atan2(m.fy, m.fx);
+  c.save();
+  c.fillStyle = '#fffaf0'; c.beginPath(); c.ellipse(ex, ey, .12*S, .095*S*parpado, ang, 0, TAU); c.fill();
+  if(parpado > .5){
+    const [ix, iy] = L(.49, .38);
+    c.fillStyle = P.ojo; c.shadowColor = P.ojo; c.shadowBlur = 16; c.beginPath(); c.arc(ix, iy, .07*S, 0, TAU); c.fill();
+    c.shadowBlur = 0; c.fillStyle = '#120808'; c.beginPath(); c.arc(...L(.5, .38), .038*S, 0, TAU); c.fill();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(...L(.475, .41), .017*S, 0, TAU); c.fill();
+  }
+  c.strokeStyle = P.trazo; c.lineWidth = .014*S; c.beginPath(); c.ellipse(ex, ey, .12*S, .095*S*parpado, ang, 0, TAU); c.stroke();
+  c.restore();
+  c.fillStyle = P.hocico; c.shadowBlur = 10; c.shadowColor = P.aura + '.5)';
+  blob([[.3, .48], [.42, .56], [.6, .54], [.66, .46], [.5, .5], [.36, .5], [.1, .62], [-.08, .7], [.12, .56]]); c.fill();
+  c.shadowBlur = 0;
+
+  // 7. bigotes largos y dorados desde el labio, ondeando hacia atrás
+  c.strokeStyle = P.hocico; c.globalAlpha = .9;
+  const bigote = (pts2) => { for(let j = 0; j < pts2.length - 2; j += 2){ c.lineWidth = (.028 - j*.005)*S; linea([pts2[j], pts2[j+1], pts2[j+2]]); c.stroke(); } };
+  bigote([[.92, .12], [.6, .5 + ola(0)*.2], [-.2, .55 + ola(1)*.25], [-.9, .85 + ola(2)*.25], [-1.6, .6 + ola(3)*.25]]);
+  bigote([[.9, .06], [.55, -.45 + ola(4)*.15], [-.2, -.4 + ola(5)*.25], [-.9, -.7 + ola(6)*.25], [-1.5, -.5 + ola(7)*.25]]);
+  c.globalAlpha = 1;
+  c.restore();
+}
+
+// la cola termina en un abanico de llama
+function colaLlama(t){
+  const m = marco(N), [x, y] = pts[N];
+  c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
+  for(let j = 0; j < 9; j++){
+    const a = (j - 4)*.17 + Math.sin(t*.007 + j)*.12, l = (5 + (j % 3)*2)*cm;
+    const bx = -m.fx, by = -m.fy; // hacia atrás
+    const ex = x + (bx*Math.cos(a) - by*Math.sin(a))*l, ey = y + (bx*Math.sin(a) + by*Math.cos(a))*l;
+    c.strokeStyle = j % 2 ? P.aleta : P.luz; c.globalAlpha = .6; c.lineWidth = 3.5 - (j % 3);
+    c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo((x + ex)/2 + m.ux*Math.sin(t*.01 + j)*1.5*cm, (y + ey)/2 + m.uy*Math.sin(t*.01 + j)*1.5*cm, ex, ey); c.stroke();
+  }
+  c.restore();
+}
+
+// la perla en llamas, flotando delante: el dragón la persigue
+function perla(sCab, t){
+  const [px, py0] = enArco(sCab + 26*cm), py = py0 - 7*cm + Math.sin(t*.004)*1.2*cm, r = 3*cm;
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for(let j = 0; j < 10; j++){ // llamas alrededor, girando
+    const a = j/10*TAU + t*.002, l = r*(1.6 + .35*Math.sin(t*.01 + j*1.3));
+    c.strokeStyle = j % 2 ? P.aleta : P.luz; c.globalAlpha = .55; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(px + Math.cos(a)*r, py + Math.sin(a)*r);
+    c.quadraticCurveTo(px + Math.cos(a + .4)*l*.8, py + Math.sin(a + .4)*l*.8, px + Math.cos(a + .7)*l, py + Math.sin(a + .7)*l); c.stroke();
+  }
+  c.globalAlpha = 1;
+  const g = c.createRadialGradient(px - r*.3, py - r*.3, 0, px, py, r);
+  g.addColorStop(0, '#fff'); g.addColorStop(.5, P.perla); g.addColorStop(1, P.aleta);
+  c.fillStyle = g; c.shadowColor = P.aura + '1)'; c.shadowBlur = 40;
+  c.beginPath(); c.arc(px, py, r, 0, TAU); c.fill();
+  c.restore();
+}
+
+// nubes en espiral (xiangyun), tenues, quietas en su sitio con un leve vaivén (periódico: el bucle sigue perfecto)
+const NUBES = Array.from({ length: 6 }, (_, j) => ({ x: (.1 + j*.16 + (j % 2)*.04), y: j % 2 ? .22 : .82, s: .8 + (j % 3)*.25 }));
+function dibujarNubes(t){
+  c.save(); c.strokeStyle = P.luz; c.globalAlpha = .16; c.lineWidth = 3; c.lineCap = 'round';
+  for(const [j, n] of NUBES.entries()){
+    const cx = mesa.x + mesa.w*n.x + Math.sin(t/PERIODO*TAU + j)*2*cm, cy = mesa.y + mesa.h*n.y, r = 4*cm*n.s;
+    for(const [dx, rr, dir] of [[0, 1, 1], [r*1.5, .7, -1], [-r*1.3, .6, 1]]){ // tres rizos
+      c.beginPath();
+      for(let a = 0; a < TAU*1.6; a += .1){ const q = rr*r*(1 - a/(TAU*1.9)); c.lineTo(cx + dx + Math.cos(a*dir)*q, cy + Math.sin(a*dir)*q*.8); }
+      c.stroke();
+    }
+    c.beginPath(); c.moveTo(cx - r*2.4, cy + r*.85); c.quadraticCurveTo(cx, cy + r*1.3, cx + r*2.6, cy + r*.8); c.stroke();
+  }
+  c.restore();
+}
+
+function dibujarPlatos(){ // sólo para ver cómo convive con los platos
+  const n = Math.max(2, Math.round(MESA_W/60));
+  c.save(); c.fillStyle = '#1b1b1b'; c.strokeStyle = '#2c2c2c'; c.lineWidth = 3;
+  for(let j = 0; j < n; j++) for(const fila of [.2, .8]){
+    const x = mesa.x + mesa.w*(j + .5)/n, y = mesa.y + mesa.h*fila;
+    c.beginPath(); c.arc(x, y, 13*cm, 0, TAU); c.fill(); c.stroke();
+  }
+  c.restore();
+}
+
+// ── el bucle ──
+const t0 = performance.now();
+let grabando = null;
+function frame(now){
+  const t = grabando ? now - grabando.desde : now - t0;
+  dibujar(t);
+  if(grabando && t >= PERIODO){ grabando.rec.stop(); grabando = null; }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// Graba exactamente una pasada: el archivo, puesto en bucle en el proyector, no tiene salto
+function grabar(){
+  if(grabando) return;
+  const msg = document.getElementById('msg');
+  const tipo = ['video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
+  const rec = new MediaRecorder(cv.captureStream(60), { mimeType: tipo, videoBitsPerSecond: 16e6 });
+  const partes = [];
+  rec.ondataavailable = e => partes.push(e.data);
+  const conContorno = contorno; contorno = false; // lo que se graba es lo que se proyecta
+  rec.onstop = () => {
+    contorno = conContorno;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(partes, { type: 'video/webm' }));
+    a.download = `dragon-mesa-${MESA_W}x${MESA_H}-${PERIODO/1000}s.webm`;
+    a.click();
+    msg.textContent = 'listo: el .webm está en Descargas (para el USB, pasarlo a .mp4: ver README)';
+  };
+  rec.start();
+  grabando = { rec, desde: performance.now() };
+  msg.textContent = `grabando una pasada (${PERIODO/1000} s)…`;
+}
+
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if(k === 'o') contorno = !contorno;
+  if(k === 'p') platos = !platos;
+  if(k === 'n') nubes = !nubes;
+  if(k === 'g') grabar();
+  if(k === 'h') document.body.classList.toggle('clean');
+  if(k === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+});
+</script>
+</body>
+</html>
