@@ -1,0 +1,42 @@
+---
+/**
+ * La radio de Tinto & Soda, sola, para el Cronovisor de ezeangeloni.xyz: se
+ * ve dentro de un iframe encima de su pieza (noviembre 2026). Fondo
+ * transparente, así la radio flota en el espacio; ya encendida (sin la luz
+ * del cartel, que acá no está). Las teclas que la radio no usa se le pasan
+ * al universo (Esc, pilotear), y avisa cuando está lista para mostrarse.
+ */
+import Base from '../layouts/Base.astro';
+import Radio from '../components/Radio.astro';
+---
+
+<Base title="La radio de Tinto & Soda · Cronovisor">
+  <main class="cv-radio">
+    <Radio />
+  </main>
+</Base>
+
+<style is:global>
+  html, body { background: transparent !important; }
+  body { min-height: 0; overflow-x: hidden; }
+  .cv-radio { display: flex; justify-content: center; padding: 0 0 24px; }
+  /* encendida desde el principio */
+  .rd, .rd-papeles, .rd-temas-movil { animation: none !important; }
+</style>
+
+<script>
+  const up = window.parent !== window ? window.parent : null;
+  const own = (t: EventTarget | null) => {
+    const el = t as HTMLElement | null;
+    return !!el?.closest?.('button, a, input, textarea, select, [role="slider"]');
+  };
+  for (const type of ['keydown', 'keyup'] as const)
+    window.addEventListener(type, (e) => {
+      if (!up) return;
+      if (e.key !== 'Escape' && own(e.target)) return; // la radio la usa (Enter, espacio, flechas en la rueda)
+      up.postMessage({ cvKey: { type, key: e.key, code: e.code, shiftKey: e.shiftKey, repeat: e.repeat } }, location.origin);
+    });
+  const ready = () => up?.postMessage({ cvReady: true }, location.origin);
+  if (document.readyState === 'complete') ready();
+  else window.addEventListener('load', ready);
+</script>

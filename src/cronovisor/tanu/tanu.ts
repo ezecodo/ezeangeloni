@@ -176,6 +176,18 @@ export class Tanu {
   }
   /** stop whatever she was asked to do (and anything queued): she goes back to her own swim */
   cancel(){ this.gen++; this.settle?.(); }
+  /** she appears at once (out of a burst of star dust) at `at`, facing `toward` level: dropping whatever she was
+   *  doing, ready to lead the way (Eze, 2026-11-24: from a planet she shouldn't make you wait while she swims over) */
+  appear(at: THREE.Vector3, toward: THREE.Vector3){
+    this.cancel();
+    const f = toward.clone().sub(at).setY(0);
+    if(f.lengthSq() > 1e-6){ f.normalize(); this.fwd.copy(f); this.want.copy(f); }
+    this.pos.copy(at);
+    this.vel.set(0, 0, 0);
+    this.turnRate = this.yawRate = this.pitchRate = this.roll = 0;
+    this.place();
+    this.signal();
+  }
   /** the sign she gives: a big plume of star dust from the blowhole */
   signal(){ this.plume(150); this.nextBreath = this.clock + 20 + this.rng()*15; }
   /** is this point (the balloon's envelope) touching her body? Her body as a capsule along her length */

@@ -65,6 +65,12 @@ import Layout from '../layouts/Layout.astro';
       #act { position: absolute; right: 1.4rem; bottom: calc(var(--dial) + 3.6rem); width: 112px; height: 112px; border-radius: 50%; background: var(--ink); color: #080810; font-size: .68rem; transition: transform .2s; }
       #act:hover { transform: scale(1.06); }
       #act[hidden] { display: none; }
+      #work-visit { position: absolute; right: 1.4rem; bottom: calc(var(--dial) + 3.6rem); width: 112px; height: 112px; border-radius: 50%; background: var(--ink); color: #080810; font-size: .54rem; letter-spacing: .06em; overflow-wrap: anywhere; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 14px; text-decoration: none; line-height: 1.5; transition: transform .2s; pointer-events: auto; }
+      #work-visit:hover { transform: scale(1.06); }
+      #work-visit[hidden] { display: none; }
+      #work-box { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 8; visibility: hidden; opacity: 0; transition: opacity .35s, visibility 0s .35s; }
+      #work-box.on { visibility: visible; opacity: 1; transition: opacity .35s; }
+      #work-frame { position: absolute; left: 0; top: 0; border: 0; background: transparent; transform-origin: 0 0; color-scheme: normal; }
       .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
       #locked { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 1rem; background: radial-gradient(ellipse at center, rgba(40,24,60,.5), rgba(8,8,16,.92) 60%); padding: 2rem; }
@@ -174,6 +180,9 @@ import Layout from '../layouts/Layout.astro';
       #world-visit { display: inline-block; font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: #6ef9f5; text-decoration: none; padding: .6rem .9rem; border: 1px solid rgba(110,249,245,.45); background: rgba(8,8,16,.55); }
       #world-visit:hover { background: rgba(110,249,245,.12); }
       #world-visit[hidden] { display: none; }
+      #world-work { display: block; margin-top: .8rem; font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: #ff7f6e; padding: .6rem .9rem; border: 1px solid rgba(255,127,110,.5); background: rgba(8,8,16,.55); text-align: left; }
+      #world-work:hover { background: rgba(255,127,110,.12); }
+      #world-work[hidden] { display: none; }
       /* knocking at a private galaxy's door */
       .knock { display: flex; flex-direction: column; gap: .45rem; margin-top: .2rem; }
       .knock[hidden], .knock [hidden] { display: none; }
@@ -463,6 +472,7 @@ import Layout from '../layouts/Layout.astro';
     </header>
     <div id="me-menu" hidden><a href="/admin/" id="me-admin">admin ↗</a><a href="/taller/">taller ↗</a><a href="/sala/">sala de juegos ↗</a><button id="me-out">sign out</button></div>
     <button id="act" hidden>play set</button>
+    <a id="work-visit" hidden target="_blank" rel="noopener"></a>
     <div id="meta">
       <span id="lamp"></span>
       <span id="meta-id"></span>
@@ -507,6 +517,7 @@ import Layout from '../layouts/Layout.astro';
     <p id="world-desc"></p>
     <p id="world-tags"></p>
     <a id="world-visit" target="_blank" rel="noopener"></a>
+    <button id="world-work" hidden></button>
 <form class="knock" id="knock" hidden>
       <label for="knock-name">ask to be let in</label>
       <span><input id="knock-name" autocomplete="name" maxlength="40" placeholder="your name"><button type="submit">knock</button></span>
@@ -530,6 +541,7 @@ import Layout from '../layouts/Layout.astro';
   <button id="balloon-tag">leave a word</button>
   <div id="cands" aria-hidden="true"></div>
   <div id="blast-light" aria-hidden="true"></div>
+  <div id="work-box"><iframe id="work-frame" title="" tabindex="0"></iframe></div>
   <div id="selector" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <p id="still-msg" aria-live="polite">still · <span class="kb">any key</span><span class="pad">any button</span><span class="tch">tap</span> goes on</p>
   <div id="pilot-hud" aria-hidden="true"><span class="flying"><span class="tch">piloting · left thumb drive · burner climbs</span><span class="pad">piloting · stick drive · ● left burner, climb · ● right pause · ▲ land · ▲ leave a word</span><span class="kb">piloting · W S drive · A D turn · space burner, climb · E pause · P still · Q land · T leave a word</span><span class="wind"><b id="wind-arrow">↑</b><span id="wind-txt"></span></span><span class="gas" id="gas-msg"></span><span class="crew" id="crew-msg"></span></span><span class="choosing"><span class="tch">universe paused · left thumb choose · still holds the picture</span><span class="pad">universe paused · stick choose · ● right open · ▲ resume · ▲ still</span><span class="kb">universe paused · arrows choose · E open · Q resume · P still</span></span><span class="at-piece"><span class="tch">left thumb back to your selection</span><span class="pad">stick back to your selection · ● left slideshow · ● right next · ▲ fly on</span><span class="kb">arrows back to your selection · space slideshow · E next · Q fly on</span></span></div>
@@ -766,7 +778,7 @@ import Layout from '../layouts/Layout.astro';
     interface TrackPoint { at: number; label: string; }
     interface SetMeta { slug: string; title: string; date: string; audio: string; artwork?: string; tracklist?: TrackPoint[]; duration?: number; bpm?: number; musicalKey?: string; }
     interface Station {
-      kind: 'home' | 'photo' | 'text' | 'set';
+      kind: 'home' | 'photo' | 'text' | 'set' | 'work';
       n: number;            // archive number, oldest = 1 (shifts when something is dated into the past)
       id: string;           // stable share link: photo file name, t+hash of a frase, s-slug of a set
       legacy?: number;      // the old #NNN link, counted without pieces uploaded later into the past
@@ -774,9 +786,30 @@ import Layout from '../layouts/Layout.astro';
       text: string;         // frase, caption or set title
       src?: string;
       set?: SetMeta;
+      work?: Work;
       tint: string;
       flood: boolean;       // full-colour plate instead of type on the void
     }
+    // Works: something Eze made that lives in the archive as a piece you can use, not a picture of it. Its plate is
+    // a picture of it (`cover`, with alpha: it floats in space); opened, the live thing (`embed`, a page of this site)
+    // takes the plate's place, in an iframe scaled to it (`placeWork`). Eze's galaxy only, like the sets.
+    // The radio: Tinto & Soda's 70s radio-cassette, whose dial tuned their web (carta, Soda, hours, where) and whose
+    // cassette was the carta, side A food, side B drinks. Retired from their site on 2026-11-17 (the owner chose the
+    // photos version; it's kept in tinto_soda's git tag `variantes-presentacion`); built on its own into
+    // public/obras/tinto-radio/ (see CLAUDE.md, "Works"). Dated the day it was born.
+    // W×H: the plate (and the page's viewport when the cover was shot); frameH: how tall the live page is drawn (more
+    // than H when things hang below, like the radio's papers); fresh: it plays once from the start (an animation), so
+    // it loads only on arrival and starts again on every visit
+    interface Work { slug: string; date: string; title: string; cover: string; embed: string; url: string; W: number; H: number; frameH: number; fresh?: boolean; }
+    const WORKS: Work[] = [
+      { slug: 'tinto-radio', date: '2026-11-12', title: 'La radio de Tinto & Soda', cover: '/obras/tinto-radio/cover.webp',
+        embed: '/obras/tinto-radio/index.html', url: 'https://www.tintoysodabcn.com', W: 1000, H: 720, frameH: 1050 },
+      // Salamat Clot's opening scene (2026-11-20, made the day of the visit to the bar): the real brick wall with the
+      // lamp of golden pipes, the five bulbs lighting one by one, electric rays writing «Salamat Clot», the neon, the
+      // gauge "GLUTEN · ppm" coming down to 0, then the headline. Built from salamat's main (tools/salamat-lampara).
+      { slug: 'salamat-lampara', date: '2026-11-20', title: 'La lámpara de Salamat Clot', cover: '/obras/salamat-lampara/cover.webp',
+        embed: '/obras/salamat-lampara/index.html', url: 'https://salamatclot.com', W: 1000, H: 525, frameH: 525, fresh: true },
+    ];
     let stations: Station[] = [{ kind:'home', n:0, id:'', date:'', text:'', tint:'#c77dff', flood:false }];
     let total = 0;
 
@@ -857,22 +890,24 @@ import Layout from '../layouts/Layout.astro';
     }
     function buildStations(frases: Frase[], sets: SetMeta[]){
       if(DEV_FAKE) frases = [...frases, ...fakeFrases(frases, DEV_FAKE)];
-      const out = stationsOf(frases, sets, BASE);
+      const out = stationsOf(frases, sets, BASE, GAL ? [] : WORKS);
       total = out.length;
       stations = [stations[0], ...out]; // newest at the centre: distance is time
     }
     // A galaxy's pieces from its frases and sets, newest first, with no side effects: this galaxy's, and a
     // neighbour's, so it can be drawn from afar exactly as it will be when you get there.
-    function stationsOf(frases: Frase[], sets: SetMeta[], base: string): Station[] {
+    function stationsOf(frases: Frase[], sets: SetMeta[], base: string, works: Work[] = []): Station[] {
       const merged = [
-        ...frases.filter(f => f.imagen || f.texto).map(f => ({ date: f.fecha || '', f, s: null as SetMeta | null })),
-        ...sets.map(s => ({ date: s.date || '', f: null, s })),
+        ...frases.filter(f => f.imagen || f.texto).map(f => ({ date: f.fecha || '', f, s: null as SetMeta | null, w: null as Work | null })),
+        ...sets.map(s => ({ date: s.date || '', f: null, s, w: null })),
+        ...works.map(w => ({ date: w.date, f: null, s: null, w })),
       ].sort((a,b) => a.date.localeCompare(b.date));
       // Links used to be the archive number. Pieces dated into the past (uploaded later, `subida`) shift it,
       // so old #NNN links are resolved by counting without them.
       let legacy = 0;
       const out: Station[] = merged.map((m, i) => {
         const n = i + 1, tint = COLORS[n % COLORS.length];
+        if(m.w) return { kind:'work', n, id:'w-'+m.w.slug, date:m.date, text:m.w.title, src:m.w.cover, work:m.w, tint, flood:false }; // not in the old numbering
         const back = !!(m.f?.subida && m.f.subida > m.date);
         const old = back ? undefined : ++legacy;
         if(m.s) return { kind:'set', n, id:'s-'+m.s.slug, legacy:old, date:m.date, text:m.s.title, src:m.s.artwork, set:m.s, tint:'#ff6eb4', flood:!m.s.artwork };
@@ -1004,8 +1039,8 @@ import Layout from '../layouts/Layout.astro';
     // Log time: a piece changes fast at first and slowly after, like attention does.
     const DAY = 864e5;
     const NOW = Date.now() + (parseFloat(new URLSearchParams(location.search).get('days') || '0') || 0)*DAY; // ?days=365 previews the future
-    const SPAN: Record<string, number> = { set:200, photo:365, text:520 }; // the massive live fast, as in real stars
-    const MASS: Record<string, number> = { set:1.5, photo:1, text:.75 };
+    const SPAN: Record<string, number> = { set:200, photo:365, text:520, work:520 }; // the massive live fast, as in real stars
+    const MASS: Record<string, number> = { set:1.5, photo:1, text:.75, work:1.3 };
     const STAGES = [
       { at:0,   name:'protostar',     color:'#ff9a6b', size:6.5, bright:.8,  beat:1.5, core:.1,  cloud:1, spike:0, ring:0 },
       { at:.25, name:'young star',    color:'#a9d6ff', size:7,   bright:2,   beat:.5,  core:.16, cloud:0, spike:1, ring:0 },
@@ -1230,7 +1265,7 @@ import Layout from '../layouts/Layout.astro';
     }
     function setSize(p: Piece, aspect: number){
       const home = p.st.kind === 'home';
-      const big = p.st.kind === 'set' ? 1.4 : 1;
+      const big = p.st.kind === 'set' ? 1.4 : p.st.kind === 'work' ? 1.5 : 1;
       if(home){ p.w = p.h = 24; }
       else if(aspect >= 1){ p.w = 8.4*big; p.h = p.w/aspect; }
       else { p.h = 8*big; p.w = p.h*aspect; }
@@ -1253,7 +1288,7 @@ import Layout from '../layouts/Layout.astro';
         scene.add(mesh);
         billboards.push(mesh);
         const p: Piece = { st, i, mesh, mat, w:4, h:4, opacity:0, reveal:0, grow:1, beat:0, bright:1, starMix:1 };
-        setSize(p, st.src ? .75 : 1);
+        setSize(p, st.work ? st.work.W/st.work.H : st.src ? .75 : 1);
         if(st.kind === 'set'){
           p.halo = new THREE.Mesh(new THREE.RingGeometry(.98, 1, 96), new THREE.MeshBasicMaterial({ color:0xff6eb4, transparent:true, opacity:.7, depthWrite:false }));
           p.halo.position.copy(mesh.position);
@@ -1736,7 +1771,7 @@ import Layout from '../layouts/Layout.astro';
     let flight: Flight | null = null;
     const look = new THREE.Vector3();
     const overviewPos = new THREE.Vector3();
-    const hint = $('hint'), lamp = $('lamp'), metaId = $('meta-id'), metaCap = $('meta-cap'), nowEl = $('now'), act = $('act');
+    const hint = $('hint'), lamp = $('lamp'), metaId = $('meta-id'), metaCap = $('meta-cap'), nowEl = $('now'), act = $('act'), workVisit = $('work-visit') as HTMLAnchorElement;
     const btnScan = $('btn-scan'), btnBack = $('btn-back'), balloonTag = $('balloon-tag'), cockpit = $('cockpit');
     function anyOpen(){ return !!document.querySelector('.sheet.open'); }
 
@@ -2506,6 +2541,7 @@ import Layout from '../layouts/Layout.astro';
     let still: { choosing: boolean; drawn: boolean } | null = null; // drawn: its last frame (no wind streaks, no blur) is on the canvas
     let PILOT_R = 150;
     const SUN_HEAT = 105; // inside this the Sun's heat pushes the balloon away
+    const MOOR_SPEED = 14; // a planet moors you only below this (TOP is 22)
     const PILOT_Y = 70, TOP = 22, REVERSE = -7, CLIMB = 12, SINK = -3.5, WIND_PUSH = .25;
     // The keyboard drives the same virtual pad, so everything below works the same without a joystick:
     // WASD always (that's how you take off, and ↑ too from the overview); arrows, space, E/Enter, Q/Backspace only once you're flying,
@@ -2682,6 +2718,7 @@ import Layout from '../layouts/Layout.astro';
       }
       if(pilot.home){ if(tap(2)) exitPilot(); return; } // the wind has the balloon now
       if(pilot.nearGalaxy >= 0 && worlds[pilot.nearGalaxy]?.link.galaxy?.open && gas >= CROSS_COST && tap(1)){ enterGalaxy(worlds[pilot.nearGalaxy], true); return; } // at a galaxy: in you go
+      if(pilot.dock >= 0 && worlds[pilot.dock]?.link.work && !GAL && tap(1)){ goWithTanu(worlds[pilot.dock].link.work!); return; } // moored at its planet: Tanu takes you to its work
       if(tap(1)) startSelection();
       if(tap(2)) exitPilot();
       if(tap(3)){ if(meet) giveGas(); else if(tanuStop()) goOnTanu(); else board(); } // meeting someone, ▲ / the word button gives them a gallon
@@ -2755,6 +2792,40 @@ import Layout from '../layouts/Layout.astro';
       el.style.height = `${h}px`;
       el.style.transform = `translate(${x-w/2}px, ${y-h/2}px)`;
     }
+    // An opened work: once you've arrived, the live thing takes its plate's place (the plate is a picture of it at the
+    // same size, so the swap doesn't show), scaled to the plate; what hangs below it (the radio's papers) floats under.
+    // Its keys (Esc, flying) come back through postMessage: the iframe has the keyboard once it's clicked.
+    const workBox = $('work-box'), workFrame = $('work-frame') as HTMLIFrameElement;
+    let workReady = '', workLive = -1, workOnAt = 0;
+    function placeWork(){
+      const st = focused > 0 ? stations[focused] : null, w = st?.work, p = w && pieces[focused];
+      const arrived = !!(w && p && !flight && !crossAnim && p.starMix < .2);
+      const on = arrived && workReady === w!.embed;
+      if(w && (!w.fresh || arrived) && workFrame.dataset.src !== w.embed){ workFrame.dataset.src = w.embed; workReady = ''; workFrame.title = w.title; workFrame.src = w.embed; }
+      if(workBox.classList.contains('on') !== on){
+        workBox.classList.toggle('on', on);
+        workLive = on ? focused : -1; workOnAt = performance.now();
+        if(!on && document.activeElement === workFrame) workFrame.blur();
+        // an animation: unloaded once it has faded out, so the next visit plays it from the start
+        const was = workFrame.dataset.src;
+        if(!on && was && WORKS.some(x => x.fresh && x.embed === was)) setTimeout(() => {
+          if(workBox.classList.contains('on') || workFrame.dataset.src !== was) return;
+          workFrame.dataset.src = ''; workReady = ''; workFrame.src = 'about:blank';
+        }, 450);
+      }
+      if(!on || !w || !p) return;
+      const { x, y, w: bw, h: bh } = rectOf(p, 0), k = bw/w.W;
+      workBox.style.width = `${bw}px`; workBox.style.height = `${bh}px`;
+      workBox.style.transform = `translate(${x-bw/2}px, ${y-bh/2}px)`;
+      workFrame.style.width = `${w.W}px`; workFrame.style.height = `${w.frameH}px`;
+      workFrame.style.transform = `scale(${k})`;
+    }
+    window.addEventListener('message', e => {
+      if(e.source !== workFrame.contentWindow || e.origin !== location.origin) return;
+      if(e.data?.cvReady) workReady = workFrame.dataset.src || '';
+      const kk = e.data?.cvKey;
+      if(kk && (kk.type === 'keydown' || kk.type === 'keyup')) window.dispatchEvent(new KeyboardEvent(kk.type, { key: kk.key, code: kk.code, shiftKey: kk.shiftKey, repeat: kk.repeat, bubbles: true, cancelable: true }));
+    });
     function placeSelector(){
       const on = !!pilot?.selecting && focused < 0;
       selector.classList.toggle('on', on && pilot!.sel >= 0);
@@ -3091,7 +3162,16 @@ import Layout from '../layouts/Layout.astro';
         p.lookYaw = Math.max(-Math.PI, Math.min(Math.PI, p.lookYaw - pad.x*dt*1.7));
         p.lookPitch = Math.max(-.5, Math.min(1.1, p.lookPitch - pad.y*dt*1.1));
       } else { p.lookYaw *= Math.exp(-dt*.8); p.lookPitch *= Math.exp(-dt*.8); } // let go: back behind the balloon, slowly
-      const near = p.home || p.selecting || p.auto ? -1 : worlds.findIndex(w => w.home && !w.link.galaxy && w.mesh.position.distanceTo(p.pos) < w.size*1.7);
+      // a planet moors you only if you mean it (Eze, 2026-11-24: with four of them it stopped him in almost any direction):
+      // close (1.15 of its size, not 1.7), heading at it, not much above or below, and slowed down (under ~2/3 of top
+      // speed); fly past, over or under, or at full speed, and it lets you go by
+      const fwdH = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
+      const near = p.home || p.selecting || p.auto || trip ? -1 : worlds.findIndex(w => {
+        if(!w.home || w.link.galaxy) return false;
+        const to = w.mesh.position.clone().sub(p.pos);
+        if(to.length() > w.size*1.15 || Math.abs(to.y) > w.size*.8 || p.speed > MOOR_SPEED || p.speed < -.5) return false;
+        return to.setY(0).normalize().dot(fwdH) > .55;
+      });
       // galaxies aren't moored at: you see whose it is as you approach, and fly into its heart to cross over
       p.nearGalaxy = p.home || p.selecting ? -1 : worlds.findIndex(w => w.home && w.link.galaxy && w.mesh.position.distanceTo(p.pos) < w.size*1.7);
       if(p.undock >= 0 && near !== p.undock) p.undock = -1; // out of its reach: it can moor there again
@@ -3318,7 +3398,7 @@ import Layout from '../layouts/Layout.astro';
           : xibLevel >= 0 ? `Xibalbá · ${xibLevel + 1} · ${LEVELS[xibLevel]}`
           : xib && Math.hypot(p.pos.x - xib.c.x, p.pos.z - xib.c.z) < 260 && p.pos.y < xib.c.y - 90 ? `under the Sun · let go of the burner to go down to ${xib.j.name || 'him'}`
           : mw?.galaxy ? `${mw.label}'s galaxy · ${!mw.galaxy.open ? 'closed: knock at its door with the mouse' : gas < CROSS_COST ? 'you need 2 gallons to cross' : 'fly into its heart to cross over'}`
-          : p.dock >= 0 ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on`
+          : p.dock >= 0 ? `moored at ${mw!.label || 'a world'} · ${kb ? 'W S A D or space' : 'push the stick or the burner'} to sail on${mw!.work && !GAL ? ` · ${kb ? 'E' : '● right'} Tanu takes you to its work` : ''}`
           : p.home ? (p.home.landed ? 'home · filling the tank' : 'out of gas · the wind is taking you home')
           : p.drawing >= 0 ? 'drawing gas from the nebula'
           : gas < GAS_LOW ? 'low gas · nebulae lie in the past'
@@ -3387,6 +3467,8 @@ import Layout from '../layouts/Layout.astro';
         : `Nº ${String(st.n).padStart(3,'0')}/${total} · ${st.date.replaceAll('-','·')} · ${pieces[i]?.stage || ''}`;
       metaCap.textContent = home ? 'pasado observado · futuro soberano' : (st.kind === 'text' || st.flood) && focused === i ? '' : st.text;
       act.hidden = !(st.kind === 'set' && focused === i);
+      workVisit.hidden = !(st.work && focused === i);
+      if(st.work){ workVisit.href = st.work.url; workVisit.textContent = `${new URL(st.work.url).host.replace(/^www\./, '')} ↗`; }
       nowEl.textContent = home ? 'Eze Angeloni, Cronovisor' : `${st.date}: ${st.text || 'foto sin título'}`;
     }
 
@@ -3642,7 +3724,7 @@ import Layout from '../layouts/Layout.astro';
         const home = p.st.kind === 'home';
         const near = 1-Math.min(1, Math.max(0, (d-22)/42));
         const isOn = p.i === focused, isHov = p.i === hovered;
-        const farReveal = p.st.kind === 'photo' ? .64 : .1;
+        const farReveal = p.st.kind === 'photo' || p.st.kind === 'work' ? .64 : .1;
         const revealT = home || isOn || isHov ? 1 : farReveal + near*(1-farReveal);
         let opacityT = 1;
         if(focused >= 0) opacityT = isOn ? 1 : Math.abs(p.i-focused) === 1 ? .05 : .012;
@@ -3659,7 +3741,7 @@ import Layout from '../layouts/Layout.astro';
         p.starMix += (starT-p.starMix)*ease;
         p.mesh.scale.set(p.w*p.grow, p.h*p.grow, 1);
         p.mat.uniforms.uReveal.value = p.reveal;
-        p.mat.uniforms.uOpacity.value = p.opacity*(1-p.starMix)*(1 - arriveFade);
+        p.mat.uniforms.uOpacity.value = p.opacity*(1-p.starMix)*(1 - arriveFade)*(p.i === workLive && performance.now()-workOnAt > 400 ? 0 : 1); // under a live work, once it's faded in
         // what can't be seen isn't drawn: far away a piece is only its star, at a piece the others are only faint
         // planes. (Hidden meshes still answer the raycaster, so hovering and clicking a star works as before.)
         if(!p.gone){
@@ -3692,6 +3774,7 @@ import Layout from '../layouts/Layout.astro';
       else if(faded.size) undimScene();
       if(!reduced && !frozen){ stars.rotation.y += dt*.004; nebula.rotation.y += dt*.0015; }
       placeSelector();
+      placeWork();
       if(still) still.drawn = true; // this is the picture that holds
       if(composer && bloom && lens){
         bloom.strength = BLOOM*(1-calm) + logoPulse*.8;
@@ -4112,6 +4195,7 @@ import Layout from '../layouts/Layout.astro';
     // Hovering names one; clicking flies there and opens what it is beside the planet (`#world-info`), with the only
     // button that leaves for the site. Piloting, coming close to one opens the same, as pieces reveal themselves.
     interface SiteLink { label: string; url: string; image?: string; font?: 'malvinas' | 'serif' | 'mono'; description?: string; tags?: string[];
+      work?: string; // a work of the archive that belongs to it (`WORKS` slug): its panel offers to go there with Tanu
       galaxy?: { slug: string; public: boolean; open: boolean; home?: boolean }; }
     const DEFAULT_LINKS: SiteLink[] = [
       { label: 'Fábrica de trapos', url: 'https://trapos.xyz', font: 'malvinas',
@@ -4120,6 +4204,12 @@ import Layout from '../layouts/Layout.astro';
       { label: 'ila', url: 'https://www.ila-web.de', image: '/img/ila.png',
         description: 'La nueva casa digital de ila, la revista sobre América Latina que se publica en Alemania desde 1975. Migré más de 2.000 artículos desde Drupal 7 a una base propia y construí el sitio bilingüe, en alemán y español: el archivo de todas las ediciones, búsqueda por región y tema, un mapa de artículos, suscripciones y un panel editorial con traducción automática.',
         tags: ['Next.js', 'Prisma', 'MySQL', 'DeepL', 'DE · ES'] },
+      { label: 'Tinto & Soda', url: 'https://www.tintoysodabcn.com', image: '/img/tintoysoda.svg', work: 'tinto-radio',
+        description: 'La web de Tinto & Soda, una vermutería de barrio en Barcelona: vinos, vermut y tapas, y Soda, la perrita de la casa. Arriba, un cartel de caja de luz que se enciende como un tubo fluorescente; debajo, la carta escrita a máquina en catalán, castellano, inglés, italiano y francés, con un único QR en las mesas. El bar cambia la carta desde el teléfono, con el panel de Oido Web, mi plataforma para bares, y la web se vuelve a publicar sola. Antes de esta versión hubo una radio de los setenta cuyo dial sintonizaba la web: vive en esta galaxia, en noviembre de 2026.',
+        tags: ['Astro', 'Cloudflare Pages', 'Oido Web', 'CA · ES · EN · IT · FR'] },
+      { label: 'Salamat Clot', url: 'https://salamatclot.com', image: '/img/salamat.svg', work: 'salamat-lampara',
+        description: 'La web de Salamat Clot, un bar-restaurante de El Clot, en Barcelona, con cocina 100 % sin gluten y muchas opciones veganas. Quien no tolera el gluten lee cada etiqueta, así que la web habla ese idioma: rigor y calma. Empieza en la pared de ladrillo del local: se encienden las cinco bombillas de la lámpara, unos rayos escriben «Salamat Clot» en neón y la aguja del manómetro, con una esfera nueva en partes por millón de gluten, baja hasta el cero. La carta, en castellano, catalán e inglés, la publica el bar desde el panel de Oido Web.',
+        tags: ['Astro', 'SVG', 'Cloudflare Pages', 'Oido Web', 'ES · CA · EN'] },
     ];
     interface World { link: SiteLink; mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; home: THREE.Vector3 | null; phase: number; seed: number; size: number;
       beacon?: THREE.Sprite; mark?: HTMLElement; period?: number;
@@ -4127,7 +4217,51 @@ import Layout from '../layouts/Layout.astro';
     let linkList: SiteLink[] = [];
     let worlds: World[] = [];
     let worldAt = -1, hoverWorld = -1, worldShown = -1;
-    const worldInfo = $('world-info'), visitEl = $('world-visit') as HTMLAnchorElement;
+    const worldInfo = $('world-info'), visitEl = $('world-visit') as HTMLAnchorElement, workBtn = $('world-work') as HTMLButtonElement;
+    workBtn.addEventListener('click', e => { e.stopPropagation(); goWithTanu(workBtn.dataset.work || ''); });
+    // From a planet to its work in the archive, with Tanu (Eze, 2026-11-24). She appears at once ahead of the balloon,
+    // out of a burst of star dust and facing the way (`tanu.appear`: Eze didn't want to wait while she swam over),
+    // and tows it to just past the piece (the balloon trails 28 behind her, so it ends right before the piece); she
+    // names it like a year and the piece opens from the basket. From the mouse view of the planet the balloon takes off
+    // first, so it's the same journey.
+    function goWithTanu(slug: string){
+      const i = stations.findIndex(s => s.work?.slug === slug);
+      if(i <= 0) return;
+      if(focused >= 0) backOutNow();
+      if(worldAt >= 0){ worldAt = -1; btnBack.hidden = true; }
+      if(!pilot && balloon?.mode === 'cruise' && !flight && !boarded) enterPilot();
+      if(!tanu || !pilot){ focusOn(i); return; }
+      touched();
+      const st = stations[i], at = pieces[i].mesh.position.clone();
+      if(trip) endTrip();
+      if(pilot.dock >= 0){ pilot.undock = pilot.dock; pilot.dock = -1; }
+      const dir = at.clone().sub(pilot.pos).setY(0).normalize();
+      const stop = at.clone().addScaledVector(dir, 16);
+      stop.y = Math.max(-PILOT_Y + 6, Math.min(PILOT_Y - 6, at.y));
+      tanu.appear(pilot.pos.clone().addScaledVector(dir, 28).add(new THREE.Vector3(0, 1, 0)), stop);
+      trip = { years: [], label: st.text, auto: true };
+      document.body.classList.add('guided');
+      tanuCall(.8);
+      playNote(NOTES[2]); setTimeout(() => playNote(NOTES[4]), 180);
+      // over the barrios, not through them: an arc up from the balloon and down to the piece (a straight line ran the
+      // chase camera through the plates in between)
+      const lift = Math.min(PILOT_Y - 6, Math.max(pilot.pos.y, stop.y) + 34);
+      const via = [.3, .7].map(t => pilot!.pos.clone().lerp(stop, t).setY(lift));
+      tanu.guide([{ via, stop, wait: 1.2, onArrive: () => {
+        tanuCall(1);
+        const title = $('arrival');
+        title.querySelector('p')!.textContent = 'Tanu brought you to';
+        title.querySelector('h2')!.textContent = st.text;
+        title.classList.add('show');
+        clearTimeout(tanuTitleT);
+        tanuTitleT = setTimeout(() => title.classList.remove('show'), 4200);
+      } }]).then(() => {
+        const was = trip;
+        trip = null;
+        document.body.classList.remove('guided');
+        if(was && pilot && tanu){ tanu.stay(30); tanuArmed = false; tanuCool = performance.now() + 5000; if(focused < 0) focusOn(i, 1300); }
+      });
+    }
     const host = (url: string) => { try { return new URL(url).host.replace(/^www\./, ''); } catch { return url; } };
     // the planet: a disc lit in the link's colour with its logo or name, crossed by a tilted ring
     function worldCard(l: SiteLink, tint: string, img?: HTMLImageElement){
@@ -4616,7 +4750,7 @@ import Layout from '../layouts/Layout.astro';
           x.mat.needsUpdate = true;
           x.size = galaxySize(sh);
           // its real stars, where they'll be when you get there
-          const sts = [stations[0], ...stationsOf(f.frases || [], st.sets || [], base)];
+          const sts = [stations[0], ...stationsOf(f.frases || [], st.sets || [], base, g.home ? WORKS : [])];
           const L = layoutOf(sts);
           fieldData.set(key, { sts, out: L.out, R: L.R, frases: f.frases || [], sets: st.sets || [] });
           attachField(x);
@@ -4712,6 +4846,10 @@ import Layout from '../layouts/Layout.astro';
       if(worldShown === k) return;
       worldShown = k;
       const l = worlds[k].link;
+      // a planet whose work lives in the archive (Tinto & Soda's radio): Tanu takes you there
+      const wi = l.work && !GAL ? stations.findIndex(s => s.work?.slug === l.work) : -1;
+      workBtn.hidden = wi < 0;
+      if(wi >= 0){ workBtn.dataset.work = l.work!; workBtn.textContent = `${stations[wi].text} · ${stations[wi].date.slice(0, 7).replace('-', '·')} · Tanu takes you there →`; }
       if(l.galaxy){
         const g = l.galaxy;
         $('world-kicker').textContent = g.home ? 'where it all began' : g.open ? 'a neighbouring galaxy' : 'a private galaxy';
@@ -5256,10 +5394,10 @@ import Layout from '../layouts/Layout.astro';
 
     // The owner, at one of their pieces, can take it out of the archive (to a private trash on the server).
     const removeBtn = $('remove-piece') as HTMLButtonElement;
-    setInterval(() => { const st = focused > 0 ? stations[focused] : null; removeBtn.hidden = !(mine && st && st.kind !== 'set' && !flight); }, 300);
+    setInterval(() => { const st = focused > 0 ? stations[focused] : null; removeBtn.hidden = !(mine && st && st.kind !== 'set' && st.kind !== 'work' && !flight); }, 300);
     removeBtn.addEventListener('click', async () => {
       const st = stations[focused];
-      if(!st || st.kind === 'set') return;
+      if(!st || st.kind === 'set' || st.kind === 'work') return;
       if(!confirm(`Take this out of your galaxy?\n\n${st.text || 'a photo'} · ${st.date}\n\n(It goes to a private trash on the server.)`)) return;
       const imagen = st.kind === 'photo' && st.src ? st.src.slice(BASE.length) : '';
       const r = await fetch('/api/frases/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Auth': ownerPass }, body: JSON.stringify({ imagen, texto: st.kind === 'text' ? st.text : undefined, fecha: st.date }) }).catch(() => null);

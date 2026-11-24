@@ -1,0 +1,44 @@
+---
+/**
+ * La escena de la portada de Salamat Clot, sola, para el Cronovisor de
+ * ezeangeloni.xyz: la pared de ladrillo, las cinco bombillas, los rayos que
+ * escriben «Salamat Clot», el neón, el manómetro de gluten que baja a 0 y el
+ * titular. Se ve en un iframe encima de su pieza (noviembre 2026), a toda la
+ * ventana (1772×930, sin recorte a 1000×525). Las teclas que la escena no usa
+ * se le pasan al universo (Esc, pilotear), y avisa cuando está lista.
+ */
+import '../styles/global.css';
+import Escena from '../components/Escena.astro';
+import { UI } from '../i18n/ui';
+const p = UI.es.portada;
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Salamat Clot · la lámpara · Cronovisor</title>
+  </head>
+  <body>
+    <Escena titulo={p.titulo as [string, string]} alt={p.escenaAlt} pantallaCompleta />
+  </body>
+</html>
+
+<style is:global>
+  html, body { margin: 0; background: #0b0807; overflow: hidden; }
+  .escena--completa { height: 100vh !important; min-height: 0 !important; }
+</style>
+
+<script>
+  const up = window.parent !== window ? window.parent : null;
+  for (const type of ['keydown', 'keyup'] as const)
+    window.addEventListener(type, (e) => {
+      if (!up) return;
+      up.postMessage({ cvKey: { type, key: e.key, code: e.code, shiftKey: e.shiftKey, repeat: e.repeat } }, location.origin);
+    });
+  const ready = () => up?.postMessage({ cvReady: true }, location.origin);
+  if (document.readyState === 'complete') ready();
+  else window.addEventListener('load', ready);
+</script>
