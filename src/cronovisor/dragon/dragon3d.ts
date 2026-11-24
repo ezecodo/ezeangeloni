@@ -20,7 +20,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export interface DragonHost {
-  spots(): THREE.Vector3[];   // los corazones de los barrios, por donde pasa
+  spots(): THREE.Vector3[];   // los corazones de los barrios, por donde pasa, del más viejo al más nuevo
   radius(): number;           // el radio de la galaxia
   reduced: boolean;           // movimiento reducido: no vuela
 }
@@ -43,61 +43,103 @@ const GARRAS = 5;
 const VEL = 12, ARRIBA = 24;
 const bulto = (f: number, donde: number, alto: number, ancho: number) => alto*Math.exp(-Math.pow((f - donde)/ancho, 2));
 function perfil(f: number){
-  let base = f < .45 ? .74 : .74*(1 - Math.pow((f - .45)/.55, 1.15)*.88);
-  if(f < .07) base -= (.07 - f)/.07*.2;
-  return base + bulto(f, .12, .26, .055) - bulto(f, .26, .06, .04) + bulto(f, .4, .2, .05);
+  const base = f < .45 ? .74 : .74*(1 - Math.pow((f - .45)/.55, 1.15)*.88);
+  // el cuello: un poco más fino a media altura y ensanchándose hacia la cabeza, hasta el tamaño del cráneo (antes se
+  // afinaba justo antes de la cabeza y el cráneo quedaba como una bola pegada; Eze pidió continuidad)
+  return base - bulto(f, .075, .1, .035) + bulto(f, 0, .2, .045) + bulto(f, .12, .26, .055) - bulto(f, .26, .06, .04) + bulto(f, .4, .2, .05);
 }
 
 // ── materiales: se iluminan solos ───────────────────────────────────────────────────────────────────────────────────
+// No hay luces en la escena (ni en el Cronovisor ni en la mesa): cada material lleva su luz, en el espacio de la vista.
+// Una luz principal cálida desde arriba a la izquierda, un relleno frío y suave desde abajo, un brillo especular
+// (Blinn-Phong, que corre por el cuerpo cuando se mueve) y un borde de luz. Todo bajo el umbral del bloom, y a prueba de
+// NaN (un NaN que llegue al bloom ennegrece la pantalla entera).
+const LUZ_COMUN = `
+  vec3 luz(vec3 base, vec3 n, vec3 v, float brillo, float dureza, float borde){
+    vec3 L1 = normalize(vec3(-.35, .8, .5)), L2 = normalize(vec3(.4, -.7, .3));
+    float d1 = max(dot(n, L1), 0.), d2 = max(dot(n, L2), 0.);
+    vec3 h = normalize(L1 + v);
+    float sp = pow(max(dot(n, h), 0.), dureza)*brillo;
+    float rim = pow(1. - max(dot(n, v), 0.), 2.5)*borde;
+    vec3 c = base*(.44 + .62*d1*vec3(1., .97, .9) + .22*d2*vec3(.6, .75, 1.)) + vec3(1., .96, .86)*sp*.45 + vec3(.55, .8, 1.)*rim;
+    return min(c*.9, vec3(.94));   // luminoso (se proyecta sobre madera), sin pasar el umbral del bloom
+  }
+  vec3 relieve(vec3 n, float h, vec3 pos){
+    vec3 sx = dFdx(pos), sy = dFdy(pos), r1 = cross(sy, n), r2 = cross(n, sx);
+    float det = dot(sx, r1);
+    vec3 g = sign(det)*(dFdx(h)*r1 + dFdy(h)*r2);
+    vec3 m = abs(det)*n - g;
+    return dot(m, m) > 1e-12 ? normalize(m) : n;
+  }`;
 const LUZ_VERT = `
-  varying vec3 vN; varying vec3 vV;
+  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying vec3 vO;
   void main(){
-    vec4 p = vec4(position, 1.); vec3 nn = normal;
+    vec4 p = vec4(position, 1.); vec3 nn = normal; vO = position;
     #ifdef USE_INSTANCING
       p = instanceMatrix*p; nn = mat3(instanceMatrix)*nn;   // las piezas instanciadas (dedos, uñas)
     #endif
-    vec4 mv = modelViewMatrix*p; vN = normalize(normalMatrix*nn); vV = -mv.xyz; gl_Position = projectionMatrix*mv;
+    vec4 mv = modelViewMatrix*p; vN = normalize(normalMatrix*nn); vV = -mv.xyz; vP = mv.xyz; gl_Position = projectionMatrix*mv;
   }`;
 const LUZ_FRAG = `
-  uniform vec3 uColor; uniform float uOpacity; uniform float uRim;
-  varying vec3 vN; varying vec3 vV;
+  uniform vec3 uColor; uniform float uOpacity; uniform float uRim; uniform float uBrillo; uniform float uDureza; uniform float uEsc; uniform vec3 uLuzEsc;
+  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying vec3 vO;
+  ${LUZ_COMUN}
   void main(){
     vec3 n = normalize(vN); if(!gl_FrontFacing) n = -n;
-    float l = .42 + .58*max(dot(n, normalize(vec3(-.35, .8, .5))), 0.);
-    float rim = pow(1. - max(dot(n, normalize(vV)), 0.), 2.5);
-    gl_FragColor = vec4((uColor*l + vec3(.55, .8, 1.)*rim*uRim)*.86, uOpacity);
+    vec3 base = uColor;
+    if(uEsc > 0.){ // escamas en la cabeza y las patas: cúpulas en media luna, como en el cuerpo
+      vec2 g = vec2(vO.x + vO.z*.6, vO.y - vO.z*.3)*uEsc;
+      g.x += step(1., mod(floor(g.y), 2.))*.5;
+      vec2 f = fract(g) - vec2(.5, .3);
+      float d = length(f), h = (1. - smoothstep(0., .48, d))*(.6 + .4*step(0., f.y));
+      n = relieve(n, h*.01, vP);
+      base = mix(base*(.92 + .16*h), uLuzEsc, smoothstep(.05, 0., abs(d - .42))*step(0., f.y)*.4);
+    }
+    vec3 col = luz(base, n, normalize(vV), uBrillo, uDureza, uRim);
+    if(any(isnan(col))) discard; // un NaN nunca llega al bloom
+    gl_FragColor = vec4(col, uOpacity);
   }`;
-function pintura(color: number, rim = .35, doble = false){
+// brillo: cuánto brilla (0 mate, 1 pulido); dureza: cuán chico el brillo (cuernos y uñas pulidos, ojos vidriosos)
+function pintura(color: number, rim = .35, doble = false, brillo = .35, dureza = 28, escamas = 0){
   return new THREE.ShaderMaterial({ vertexShader: LUZ_VERT, fragmentShader: LUZ_FRAG, transparent: true,
     side: doble ? THREE.DoubleSide : THREE.FrontSide,
-    uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: 1 }, uRim: { value: rim } } });
+    uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: 1 }, uRim: { value: rim }, uBrillo: { value: brillo }, uDureza: { value: dureza },
+      uEsc: { value: escamas }, uLuzEsc: { value: new THREE.Color(C.luz) } } });
 }
-// la piel del cuerpo: aS a lo largo (0 cabeza, 1 cola), aA alrededor (0 lomo, .5 vientre)
+// la piel del cuerpo: aS a lo largo (0 cabeza, 1 cola), aA alrededor (0 lomo, .5 vientre). Las escamas y las placas
+// tienen relieve (bump mapping sin tangentes, con derivadas de pantalla): cada escama es una cúpula que capta la luz
 const PIEL_VERT = `
   attribute float aS; attribute float aA;
-  varying vec3 vN; varying vec3 vV; varying float vS; varying float vA;
-  void main(){ vS = aS; vA = aA; vec4 mv = modelViewMatrix*vec4(position, 1.); vN = normalize(normalMatrix*normal); vV = -mv.xyz; gl_Position = projectionMatrix*mv; }`;
+  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying float vS; varying float vA;
+  void main(){ vS = aS; vA = aA; vec4 mv = modelViewMatrix*vec4(position, 1.); vP = mv.xyz; vN = normalize(normalMatrix*normal); vV = -mv.xyz; gl_Position = projectionMatrix*mv; }`;
 const PIEL_FRAG = `
   uniform vec3 uCuerpo, uLuz, uVientre, uPlaca; uniform float uOpacity;
-  varying vec3 vN; varying vec3 vV; varying float vS; varying float vA;
+  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying float vS; varying float vA;
+  ${LUZ_COMUN}
   void main(){
     vec3 n = normalize(vN);
     float aVientre = abs(vA - .5);                      // 0 en el centro del vientre
     float vientre = smoothstep(.2, .16, aVientre);
-    // placas del vientre: bandas atravesadas
-    float placa = smoothstep(.06, 0., abs(fract(vS*60.) - .5) - .38);
-    // escamas en media luna sobre el lomo y los flancos
+    // placas del vientre: bandas atravesadas, abombadas
+    float fp = fract(vS*60.);
+    float placa = smoothstep(.06, 0., abs(fp - .5) - .38);
+    float hPlaca = sin(fp*3.14159)*.9;
+    // escamas en media luna sobre el lomo y los flancos, cada una una cúpula
     vec2 g = vec2(vS*150., vA*22.);
     g.x += step(1., mod(floor(g.y), 2.))*.5;
     vec2 f = fract(g) - vec2(.5, .3);
-    float esc = smoothstep(.05, 0., abs(length(f) - .42))*step(0., f.y);
-    vec3 col = uCuerpo;
-    col = mix(col, uLuz, esc*.55*(1. - vientre));
-    col = mix(col, uLuz, smoothstep(.12, 0., min(vA, 1. - vA))*.35);   // franja de luz sobre el lomo
+    float d = length(f);
+    float esc = smoothstep(.05, 0., abs(d - .42))*step(0., f.y);
+    float hEsc = (1. - smoothstep(0., .48, d))*(.6 + .4*step(0., f.y));
+    float h = mix(hEsc*.9, hPlaca, vientre);
+    n = relieve(n, h*.012, vP);
+    vec3 col = uCuerpo*(.92 + .16*hEsc);
+    col = mix(col, uLuz, esc*.5*(1. - vientre));
+    col = mix(col, uLuz, smoothstep(.12, 0., min(vA, 1. - vA))*.3);   // franja de luz sobre el lomo
     col = mix(col, mix(uVientre, uPlaca, placa*.8), vientre);
-    float l = .42 + .58*max(dot(n, normalize(vec3(-.35, .8, .5))), 0.);
-    float rim = pow(1. - max(dot(n, normalize(vV)), 0.), 2.5);
-    gl_FragColor = vec4((col*l + vec3(.55, .8, 1.)*rim*.35)*.86, uOpacity);
+    col = luz(col, n, normalize(vV), mix(.45, .25, vientre), mix(36., 18., vientre), .32);
+    if(any(isnan(col))) discard; // un NaN nunca llega al bloom
+    gl_FragColor = vec4(col, uOpacity);
   }`;
 
 // una llama dibujada (para la melena, las aletas, la cola, la barba, los codos y la perla)
@@ -112,9 +154,34 @@ function texturaLlama(base: string, punta: string){
 // orienta una llama (o cualquier carta): su +y hacia `y`, su ancho (+x) lo más cerca posible de `xHint`
 const _m4 = new THREE.Matrix4();
 function orienta(o: THREE.Object3D, y: THREE.Vector3, xHint: THREE.Vector3){
-  const Y = y.clone().normalize(), X = xHint.clone().addScaledVector(Y, -xHint.dot(Y)).normalize(), Z = X.clone().cross(Y);
+  const Y = y.clone().normalize();
+  let X = xHint.clone().addScaledVector(Y, -xHint.dot(Y));
+  if(X.lengthSq() < 1e-6) X = Math.abs(Y.x) < .9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1), X.addScaledVector(Y, -X.dot(Y)); // alineados: cualquier perpendicular
+  X.normalize();
+  const Z = X.clone().cross(Y);
   o.quaternion.setFromRotationMatrix(_m4.makeBasis(X, Y, Z));
 }
+// un tubo que se afina a lo largo de una curva (de r0 en la base a r1 en la punta, cerrado en la punta): las astas
+function tuboAfinado(curva: THREE.Curve<THREE.Vector3>, seg: number, lados: number, r0: number, r1: number){
+  const marcos = curva.computeFrenetFrames(seg, false), pos: number[] = [], nor: number[] = [], idx: number[] = [];
+  for(let i = 0; i <= seg; i++){
+    const t = i/seg, p = curva.getPointAt(t), r = r0 + (r1 - r0)*Math.pow(t, .8);
+    for(let j = 0; j <= lados; j++){
+      const a = j/lados*TAU, n = marcos.normals[i].clone().multiplyScalar(Math.cos(a)).addScaledVector(marcos.binormals[i], Math.sin(a));
+      pos.push(p.x + n.x*r, p.y + n.y*r, p.z + n.z*r); nor.push(n.x, n.y, n.z);
+    }
+  }
+  for(let i = 0; i < seg; i++) for(let j = 0; j < lados; j++){ const a = i*(lados + 1) + j, b = a + lados + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  const punta = curva.getPointAt(1), tg = curva.getTangentAt(1), c = pos.length/3; // la punta, cerrada
+  pos.push(punta.x + tg.x*r1, punta.y + tg.y*r1, punta.z + tg.z*r1); nor.push(tg.x, tg.y, tg.z);
+  for(let j = 0; j < lados; j++){ const a = seg*(lados + 1) + j; idx.push(a, a + 1, c); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length/3*2).fill(0), 2));
+  g.setIndex(idx);
+  return g;
+}
+
 // Para no dibujar cientos de piezas sueltas (llamas, dedos, uñas), cada clase es un InstancedMesh: las piezas son
 // Object3D vacíos colgados donde corresponde (para heredar las transformaciones de la cabeza o la perla) y en cada
 // cuadro sus matrices pasan a la instancia. Las piezas fijas de la cabeza se funden en una malla por material.
@@ -132,15 +199,16 @@ function fusionar(g: THREE.Object3D){
   for(const [m, geos] of porMat){ const merged = mergeGeometries(geos, false); if(merged) g.add(new THREE.Mesh(merged, m)); }
 }
 
-export class Dragon {
-  readonly mesh = new THREE.Group();          // todo el dragón (el nombre `mesh` como el 2D, para la escena)
+// ── El cuerpo del dragón: todo lo que se dibuja, sin saber por dónde vuela. Quien lo usa le da, en cada cuadro, la curva
+// por la que pasa (`pose`: una función que llena la columna con puntos cada `paso`, de la cabeza hacia la cola), y él
+// la ondula, arma su piel, sus patas, su cabeza y su perla. Lo usan el Cronovisor (`Dragon`, abajo: vuela rutas por la
+// galaxia) y la mesa del restaurante (src/pages/dragon.astro: la diagonal de esquina a esquina, en bucle).
+export const LARGO = L;
+export class DragonCuerpo {
+  readonly mesh = new THREE.Group();          // todo el dragón
   private mats: (THREE.ShaderMaterial | THREE.MeshBasicMaterial)[] = [];
-  private clock = 0;
-  private route: THREE.CatmullRomCurve3 | null = null;
-  private len = 1; private u = 0; private wait = 8;
-  private hist: THREE.Vector3[] = [];         // dónde estuvo la cabeza, de la más nueva a la más vieja
-  private spine: THREE.Vector3[] = Array.from({ length: N + 1 }, () => new THREE.Vector3());
-  private T: THREE.Vector3[] = []; private U: THREE.Vector3[] = []; private Sd: THREE.Vector3[] = [];
+  readonly spine: THREE.Vector3[] = Array.from({ length: N + 1 }, () => new THREE.Vector3());
+  readonly T: THREE.Vector3[] = []; readonly U: THREE.Vector3[] = []; readonly Sd: THREE.Vector3[] = [];
   // cuerpo
   private body: THREE.Mesh; private bodyPos: Float32Array; private bodyNor: Float32Array;
   private fins: THREE.Object3D[] = []; private tail: THREE.Object3D[] = [];
@@ -148,17 +216,15 @@ export class Dragon {
   // patas
   private legs: { f: number; delantera: boolean; lado: number; fase: number; brazo: THREE.Mesh; ante: THREE.Mesh; mano: THREE.Mesh; hombro: THREE.Mesh; codo: THREE.Mesh; dedos: THREE.Object3D[]; unas: THREE.Object3D[]; mechon: THREE.Object3D[] }[] = [];
   // cabeza
-  private head = new THREE.Group(); private jaw = new THREE.Group(); private mane: THREE.Object3D[] = []; private whiskers: THREE.Mesh[] = []; private frame = 0;
+  private head = new THREE.Group(); private jaw = new THREE.Group(); private mane: THREE.Object3D[] = []; private whiskers: THREE.Mesh[] = []; private ojos: THREE.Group[] = []; private bigotes: THREE.Vector3[][] = []; private tPrev = 0; private tBig = 0; private roll = new Float32Array(N + 1); private frame = 0; private ultimaCabeza = new THREE.Vector3(1e9, 0, 0);
   private tongue = new THREE.Group();
-  private pearl = new THREE.Group(); private pearlFlames: THREE.Object3D[] = [];
+  private pearl = new THREE.Group(); private pearlFlames: THREE.Object3D[] = []; private halo!: THREE.Sprite; private chispas!: THREE.Points;
   // una pieza de una clase instanciada, colgada de `padre`
   private pieza(clase: string, geo: THREE.BufferGeometry, mat: THREE.Material, padre: THREE.Object3D){
     const e = this.inst.get(clase) ?? this.inst.set(clase, { geo, mat, piezas: [] }).get(clase)!;
     const o = new THREE.Object3D(); e.piezas.push(o); padre.add(o); return o;
   }
-  onScreen = false;
-
-  constructor(private host: DragonHost){
+  constructor(){
     const mat = <T extends THREE.ShaderMaterial | THREE.MeshBasicMaterial>(m: T) => { this.mats.push(m); return m; };
     // ── el cuerpo: un tubo de N+1 anillos de M lados
     const verts = (N + 1)*(M + 1);
@@ -180,7 +246,12 @@ export class Dragon {
     this.body.frustumCulled = false;
     this.mesh.add(this.body);
 
-    const plano = new THREE.PlaneGeometry(1, 1); plano.translate(0, .5, 0); // la base en el origen, la punta hacia +y
+    // la llama: no un plano, una lengua de fuego que se curva hacia atrás a lo largo y se ahueca a lo ancho, así no
+    // desaparece cuando se la ve de canto
+    const plano = new THREE.PlaneGeometry(1, 1, 4, 10); plano.translate(0, .5, 0); // la base en el origen, la punta hacia +y
+    { const pp = plano.attributes.position as THREE.BufferAttribute;
+      for(let v = 0; v < pp.count; v++){ const x = pp.getX(v), y = pp.getY(v); pp.setZ(v, -.35*y*y + .22*x*x); }
+      plano.computeVertexNormals(); }
     const llamaMat = (tex: THREE.Texture) => mat(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, color: new THREE.Color(.86, .86, .86) }));
     const LL: Record<string, THREE.MeshBasicMaterial> = { rojo: llamaMat(texturaLlama('#b8241a', '#ff6a3a')), naranja: llamaMat(texturaLlama('#e8432e', '#ffc06a')), clara: llamaMat(texturaLlama('#ff8a4a', '#fff0c0')) };
     const rojo = 'rojo', naranja = 'naranja', clara = 'clara';
@@ -190,9 +261,13 @@ export class Dragon {
     for(let j = 0; j < 7; j++) this.tail.push(carta(j % 2 ? naranja : clara));
 
     // ── patas: brazo y antebrazo (cilindros que se afinan), mano, cinco dedos con su uña, mechón de llama en el codo
-    const azul = mat(pintura(C.cuerpo)), azulLejos = mat(pintura(0x2f86bd)), unaMat = mat(pintura(C.cuerno, .15));
+    const azul = mat(pintura(C.cuerpo, .35, false, .4, 30, 26)), azulLejos = mat(pintura(0x2f86bd, .35, false, .4, 30, 26)), unaMat = mat(pintura(C.cuerno, .15, false, .9, 70)); // uñas pulidas
     const cil = (r0: number, r1: number) => { const g = new THREE.CylinderGeometry(r1, r0, 1, 10); g.translate(0, .5, 0); return g; }; // de la base (y=0) a la punta (y=1)
-    const dedoGeo = cil(1, .8), unaGeo = new THREE.ConeGeometry(1, 1, 8); unaGeo.translate(0, .5, 0);
+    const dedoGeo = cil(1, .8), unaGeo = new THREE.ConeGeometry(1, 1, 10, 6); unaGeo.translate(0, .5, 0);
+    { // la uña, curva en gancho (como la de un águila): se dobla hacia -x a medida que sube
+      const up = unaGeo.attributes.position as THREE.BufferAttribute;
+      for(let v = 0; v < up.count; v++){ const y = up.getY(v); up.setX(v, up.getX(v) - .55*y*y); }
+      unaGeo.computeVertexNormals(); }
     for(const [f, delantera, fase] of [[.15, true, 0], [.4, false, .5]] as [number, boolean, number][]) for(const lado of [1, -1]){
       const m = lado > 0 ? azul : azulLejos, g = GROSOR*perfil(f)/2;
       // el brazo nace grueso, dentro de la masa del hombro (o del anca), y se afina; el codo, redondeado
@@ -215,52 +290,90 @@ export class Dragon {
       const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); o.rotation.z = rz; return o;
     };
     const esfera = (r: number) => new THREE.SphereGeometry(r, 20, 14);
-    const amarillo = mat(pintura(C.hocico, .25)), claro = mat(pintura(C.luz, .2)), boca = mat(pintura(C.boca, 0)), blanco = mat(pintura(C.diente, .1)),
-      iris = mat(pintura(C.ojo, .1)), negro = mat(pintura(0x120808, 0)), lengua = mat(pintura(C.lengua, .1));
-    H.add(pieza(esfera(.32), azul, .2, .3, 0, 1.3, 1, .95));               // cráneo
-    H.add(pieza(esfera(.22), azul, .68, .25, 0, 1.65, .78, .85));          // hocico
-    H.add(pieza(esfera(.14), amarillo, 1.02, .3, 0, 1, .9, 1.15));          // hocico bulboso
-    for(const z of [.07, -.07]) H.add(pieza(esfera(.03), boca, 1.12, .32, z));
+    const amarillo = mat(pintura(C.hocico, .25, false, .6, 40)), claro = mat(pintura(C.luz, .2)), boca = mat(pintura(C.boca, 0, false, .15, 12)),
+      blanco = mat(pintura(C.diente, .1, false, .7, 50)), iris = mat(pintura(C.ojo, .1, false, 1, 90)), negro = mat(pintura(0x120808, 0, false, 1, 90)),
+      lengua = mat(pintura(C.lengua, .1, false, .8, 45)), ojoBlanco = mat(pintura(C.diente, .05, false, 1, 90)); // ojos vidriosos, lengua húmeda
+    // Cabeza de dragón chino, no de perro (Eze, 2026-11-24: "se parece a la de un perro"): frente baja y plana con
+    // crestas, hocico largo y plano que se ensancha en la punta, narinas de león (dos orificios abultados que miran
+    // arriba) en vez de una bola, ojos grandes y saltones bajo cejas pesadas en ángulo, orejas de buey hacia atrás,
+    // aletas de llama en las mejillas, y una boca larga llena de dientes.
+    H.add(pieza(esfera(.3), azul, .14, .27, 0, 1.55, .72, .95));          // cráneo: bajo y largo, frente plana
+    // la nuca y la garganta: el cráneo baja por detrás y se funde con el cuello, y la garganta une la mandíbula al cuello
+    H.add(pieza(esfera(.3), azul, -.32, .17, 0, 1.5, .78, .9, .22));
+    H.add(pieza(esfera(.26), azul, -.62, .08, 0, 1.4, .82, .86, .12));
+    H.add(pieza(esfera(.22), azul, -.12, -.06, 0, 1.6, .62, .78, -.12));
+    H.add(pieza(esfera(.18), claro, -.1, -.12, 0, 1.6, .45, .62, -.12));   // la garganta, clara como el vientre
+    H.add(pieza(esfera(.2), azul, .78, .22, 0, 2.7, .62, 1.0));            // hocico: largo y plano
+    H.add(pieza(esfera(.17), azul, 1.24, .25, 0, 1.0, .72, 1.45));         // la punta del hocico, ancha
+    H.add(pieza(esfera(.1), azul, .72, .36, 0, 3.4, .32, .4, -.05));       // la cresta del lomo del hocico
+    H.add(pieza(esfera(.1), claro, .74, .39, 0, 3.0, .18, .22, -.05));
+    for(const z of [.085, -.085]){                                         // narinas de león: abultadas, mirando arriba
+      H.add(pieza(esfera(.075), amarillo, 1.3, .34, z, 1.15, .85, 1));
+      const hueco = pieza(esfera(.032), boca, 1.33, .4, z*1.05, 1, .55, 1); H.add(hueco);
+      const borde = pieza(new THREE.TorusGeometry(.04, .014, 6, 14), amarillo, 1.33, .395, z*1.05); borde.rotation.x = Math.PI/2; H.add(borde);
+    }
+    for(const k of [0, 1, 2]) H.add(pieza(esfera(.06), azul, .05 + k*.17, .46 - k*.03, 0, 1.4, .35, .5)); // crestas de la frente
     for(const z of [.21, -.21]){
-      H.add(pieza(esfera(.16), claro, .1, .14, z*1.05, 1.1, .9, .5));       // mejillas
-      H.add(pieza(esfera(.085), blanco, .45, .4, z*1.1));                    // ojo
-      H.add(pieza(esfera(.05), iris, .49, .41, z*1.32));
-      H.add(pieza(esfera(.028), negro, .5, .41, z*1.44));
-      H.add(pieza(esfera(.012), blanco, .48, .44, z*1.5));
-      H.add(pieza(esfera(.1), amarillo, .42, .52, z*1.05, 1.6, .38, .45, .15)); // ceja
+      H.add(pieza(esfera(.17), claro, .12, .12, z*1.08, 1.25, .85, .5));    // mejillas
+      // el ojo, aparte (no se funde): grande y saltón; parpadea
+      const ojo = new THREE.Group(); ojo.position.set(.44, .42, z*1.12);
+      ojo.add(pieza(esfera(.1), ojoBlanco, 0, 0, 0));
+      ojo.add(pieza(esfera(.06), iris, .045, .01, z*.25));
+      ojo.add(pieza(esfera(.034), negro, .06, .01, z*.38));
+      ojo.add(pieza(esfera(.014), blanco, .035, .045, z*.45));
+      // el párpado de arriba, caído sobre el tercio de arriba del ojo: la mirada feroz
+      const parp = pieza(new THREE.SphereGeometry(.108, 18, 10, 0, TAU, 0, 1.05), azul, 0, 0, 0); parp.rotation.z = -.3; ojo.add(parp);
+      this.ojos.push(ojo); H.add(ojo);
+      H.add(pieza(esfera(.13), azul, .4, .53, z*1.12, 1.9, .5, .6, .3));     // la ceja ósea, pesada y en ángulo
+      H.add(pieza(esfera(.1), amarillo, .44, .6, z*1.1, 1.8, .36, .45, .32)); // ceja
+      // oreja de buey, echada hacia atrás
+      const oreja = pieza(esfera(.11), azul, -.12, .44, z*1.35, 1.9, .5, .3, .6); oreja.rotation.y = z > 0 ? -.5 : .5; H.add(oreja);
+      const dentro = pieza(esfera(.08), claro, -.1, .44, z*1.42, 1.6, .35, .15, .6); dentro.rotation.y = oreja.rotation.y; H.add(dentro);
     }
-    H.add(pieza(esfera(.2), boca, .55, .06, 0, 2, .32, .62));               // interior de la boca
-    for(let k = 0; k < 4; k++) for(const z of [.11, -.11]){                 // dientes de arriba
-      const d = pieza(new THREE.ConeGeometry(.025, .09, 6), blanco, .55 + k*.13, .06, z*(1 - k*.12)); d.rotation.z = Math.PI; H.add(d);
+    H.add(pieza(esfera(.2), boca, .68, .08, 0, 2.9, .3, .66));             // el interior de la boca, largo
+    for(let k = 0; k < 6; k++) for(const z of [.13, -.13]){                // dientes de arriba, a lo largo de la boca
+      const d = pieza(new THREE.ConeGeometry(.024, .09, 6), blanco, .5 + k*.13, .07, z*(1.05 - k*.07)); d.rotation.z = Math.PI; H.add(d);
     }
-    // la mandíbula, que gira sobre su bisagra
-    this.jaw.position.set(.22, .02, 0);
-    this.jaw.add(pieza(esfera(.2), azul, .38, -.08, 0, 2.1, .45, .8));
-    this.jaw.add(pieza(esfera(.16), claro, .35, -.14, 0, 1.8, .3, .6));
-    for(let k = 0; k < 3; k++) for(const z of [.1, -.1]) this.jaw.add(pieza(new THREE.ConeGeometry(.022, .08, 6), blanco, .4 + k*.14, .0, z*(1 - k*.15)));
+    for(const z of [.14, -.14]){ const c = pieza(new THREE.ConeGeometry(.036, .22, 8), blanco, 1.08, .05, z*.9); c.rotation.z = Math.PI - .12; H.add(c); } // colmillos de adelante
+    // la mandíbula, que gira sobre su bisagra: larga, como el hocico
+    this.jaw.position.set(.2, .02, 0);
+    this.jaw.add(pieza(esfera(.2), azul, .5, -.08, 0, 2.95, .42, .85));
+    this.jaw.add(pieza(esfera(.16), claro, .48, -.14, 0, 2.6, .28, .62));
+    this.jaw.add(pieza(esfera(.12), azul, .95, -.1, 0, 1.4, .5, 1.15));   // el mentón, ancho como la punta del hocico
+    for(const z of [.13, -.13]){ const c = pieza(new THREE.ConeGeometry(.032, .18, 8), blanco, .92, .0, z); c.rotation.z = -.1; this.jaw.add(c); } // colmillos de abajo
+    for(let k = 0; k < 5; k++) for(const z of [.11, -.11]) this.jaw.add(pieza(new THREE.ConeGeometry(.022, .08, 6), blanco, .4 + k*.12, .0, z*(1.05 - k*.06)));
     fusionar(this.jaw);
     // la lengua: sale un poco y se enrosca hacia abajo
-    const lc = new THREE.CatmullRomCurve3([new THREE.Vector3(.3, 0, 0), new THREE.Vector3(.72, -.02, 0), new THREE.Vector3(.98, -.13, 0), new THREE.Vector3(1.06, -.05, 0), new THREE.Vector3(1.0, .0, 0)]);
+    const lc = new THREE.CatmullRomCurve3([new THREE.Vector3(.35, 0, 0), new THREE.Vector3(.85, -.02, 0), new THREE.Vector3(1.18, -.14, 0), new THREE.Vector3(1.27, -.05, 0), new THREE.Vector3(1.2, .0, 0)]);
     this.tongue.add(new THREE.Mesh(new THREE.TubeGeometry(lc, 24, .024, 6), lengua));
     this.jaw.add(this.tongue);
-    // cuernos que se enroscan, con una rama adelante
-    for(const z of [.17, -.17]){
-      const base = new THREE.CatmullRomCurve3([[.22, .5, z], [.08, .84, z*1.2], [-.22, 1.0, z*1.4], [-.43, 1.1, z*1.5]].map(p => new THREE.Vector3(...p)));
-      const punta = new THREE.CatmullRomCurve3([[-.43, 1.1, z*1.5], [-.46, 1.26, z*1.55], [-.4, 1.36, z*1.55], [-.3, 1.32, z*1.5]].map(p => new THREE.Vector3(...p)));
-      const rama = new THREE.CatmullRomCurve3([[.06, .82, z*1.2], [.18, .98, z*1.25], [.3, 1.05, z*1.3]].map(p => new THREE.Vector3(...p)));
-      H.add(new THREE.Mesh(new THREE.TubeGeometry(base, 16, .05, 8), amarillo));
-      H.add(new THREE.Mesh(new THREE.TubeGeometry(punta, 10, .035, 8), amarillo));
-      H.add(new THREE.Mesh(new THREE.TubeGeometry(rama, 8, .03, 8), amarillo));
+    // Los cuernos: astas de ciervo (una de las «nueve semejanzas»), no tubos con gancho (Eze, 2026-11-24: no
+    // convencían). Gruesas en la base y afinándose hasta la punta, barridas hacia atrás y abiertas hacia los costados,
+    // siguiendo la línea de la melena y del vuelo, con tres ramas que suben hacia adelante, y un anillo rugoso donde nacen.
+    const hueso = mat(pintura(0xf0ad32, .2, false, .6, 36)); // dorado cálido, pulido
+    const v3 = (p: number[]) => new THREE.Vector3(p[0], p[1], p[2]);
+    for(const z of [.16, -.16]){
+      const asta = new THREE.CatmullRomCurve3([[.14, .5, z], [.04, .74, z*1.22], [-.2, .94, z*1.5], [-.5, 1.04, z*1.78], [-.8, 1.02, z*1.95], [-1.02, .94, z*2.02]].map(v3));
+      H.add(new THREE.Mesh(tuboAfinado(asta, 28, 10, .062, .012), hueso));
+      H.add(pieza(new THREE.TorusGeometry(.066, .022, 8, 16), hueso, .13, .52, z).rotateX(Math.PI/2).rotateY(.4)); // el anillo rugoso de la base
+      // las ramas: nacen del asta y suben hacia adelante, cada una más corta
+      for(const [t, largo, abre] of [[.3, .3, .2], [.55, .26, .28], [.78, .2, .34]] as [number, number, number][]){
+        const o = asta.getPointAt(t), f = z > 0 ? 1 : -1;
+        const rama = new THREE.CatmullRomCurve3([o, o.clone().add(new THREE.Vector3(.04, largo*.55, f*abre*.25)), o.clone().add(new THREE.Vector3(.1, largo, f*abre*.45))]);
+        H.add(new THREE.Mesh(tuboAfinado(rama, 12, 8, .034 - t*.012, .008), hueso));
+      }
     }
     fusionar(H); // las piezas fijas de la cabeza: una malla por material
     H.add(this.jaw);
     // melena de llamas alrededor de la nuca, en dos capas, hacia atrás; y la barba bajo la mandíbula
-    for(let k = 0; k < 14; k++){
-      const f = carta(k % 2 ? rojo : naranja, H), a = (k/14)*TAU;
-      f.userData = { a, l: .55 + (k % 3)*.15 };
-      this.mane.push(f);
-    }
+    for(const [capa, n, largo, radio, color] of [[0, 16, .62, .26, rojo], [1, 13, .48, .22, naranja], [2, 9, .34, .17, clara]] as [number, number, number, number, string][])
+      for(let k = 0; k < n; k++){
+        const f = carta(color, H), a = (k + capa*.5)/n*TAU;
+        f.userData = { a, l: largo + (k % 3)*.12, r: radio, capa };
+        this.mane.push(f);
+      }
     for(let k = 0; k < 4; k++){ const f = carta(k % 2 ? naranja : rojo, this.jaw); f.userData = { barba: k }; this.mane.push(f); }
+    for(const z of [1, -1]) for(let k = 0; k < 3; k++){ const f = carta(k % 2 ? naranja : rojo, H); f.userData = { mejilla: k, z }; this.mane.push(f); } // aletas de llama en las mejillas
     this.head.scale.setScalar(S);
     this.mesh.add(this.head);
     // bigotes: los rehace cada tanto, ondeando
@@ -270,7 +383,20 @@ export class Dragon {
     const perla = new THREE.Mesh(esfera(.42), mat(new THREE.MeshBasicMaterial({ color: new THREE.Color(.95, .92, .82), transparent: true })));
     this.pearl.add(perla);
     for(let k = 0; k < 8; k++){ const f = carta(k % 2 ? naranja : clara, this.pearl); f.scale.set(.6, 1.3, 1); this.pearlFlames.push(f); }
-    this.mesh.add(this.pearl);
+    // su resplandor (un halo que late) y las chispas de fuego que se desprenden hacia atrás
+    const halo = document.createElement('canvas'); halo.width = halo.height = 128;
+    { const c = halo.getContext('2d')!, g = c.createRadialGradient(64, 64, 0, 64, 64, 64);
+      g.addColorStop(0, 'rgba(255,240,200,.9)'); g.addColorStop(.25, 'rgba(255,170,80,.45)'); g.addColorStop(1, 'rgba(255,90,30,0)');
+      c.fillStyle = g; c.fillRect(0, 0, 128, 128); }
+    const haloTex = new THREE.CanvasTexture(halo);
+    this.halo = new THREE.Sprite(mat(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(.85, .85, .85) })) as unknown as THREE.SpriteMaterial);
+    this.pearl.add(this.halo);
+    const nCh = 70, chPos = new Float32Array(nCh*3), chCol = new Float32Array(nCh*3);
+    const chGeo = new THREE.BufferGeometry();
+    chGeo.setAttribute('position', new THREE.BufferAttribute(chPos, 3)); chGeo.setAttribute('color', new THREE.BufferAttribute(chCol, 3));
+    this.chispas = new THREE.Points(chGeo, mat(new THREE.PointsMaterial({ size: .5, map: haloTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })) as unknown as THREE.PointsMaterial);
+    this.chispas.frustumCulled = false;
+    this.mesh.add(this.pearl, this.chispas);
 
     for(let i = 0; i <= N; i++){ this.T.push(new THREE.Vector3()); this.U.push(new THREE.Vector3()); this.Sd.push(new THREE.Vector3()); }
     for(const e of this.inst.values()){
@@ -282,41 +408,18 @@ export class Dragon {
   }
 
   get position(){ return this.head.position; }
-  get flying(){ return !!this.route; }
-
-  private newRoute(){
-    const R = this.host.radius(), spots = this.host.spots();
-    const a = Math.random()*TAU, out = (ang: number, h: number) => new THREE.Vector3(Math.cos(ang)*R*1.35, h, Math.sin(ang)*R*1.35);
-    const pts = [out(a, ARRIBA + 20)];
-    const pool = spots.slice().sort(() => Math.random() - .5).slice(0, 3).sort((p, q) => p.distanceTo(pts[0]) - q.distanceTo(pts[0]));
-    for(const s of pool) pts.push(new THREE.Vector3(s.x, s.y + ARRIBA + Math.random()*10, s.z));
-    pts.push(out(a + Math.PI + (Math.random() - .5)*1.2, ARRIBA + 30));
-    this.route = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
-    this.len = this.route.getLength();
-    this.u = 0;
-    // la historia: el cuerpo empieza estirado detrás de la cabeza, por donde venía
-    const back = this.route.getTangentAt(0).negate();
-    this.hist = Array.from({ length: 220 }, (_, k) => pts[0].clone().addScaledVector(back, k*.2));
-  }
 
   // la columna: N+1 puntos a lo largo de la historia de la cabeza, cada L/N, más la onda que recorre el cuerpo
-  private columna(t: number){
-    const paso = L/N;
-    let k = 0, acc = 0, prev = this.hist[0];
-    this.spine[0].copy(prev);
-    for(let i = 1; i <= N; i++){
-      const need = i*paso;
-      while(k + 1 < this.hist.length && acc + prev.distanceTo(this.hist[k + 1]) < need){ acc += prev.distanceTo(this.hist[k + 1]); k++; prev = this.hist[k]; }
-      const nx = this.hist[Math.min(k + 1, this.hist.length - 1)], dd = prev.distanceTo(nx) || 1;
-      this.spine[i].copy(prev).lerp(nx, lim((need - acc)/dd, 0, 1));
-    }
+  private columna(t: number, llenar: (out: THREE.Vector3[], paso: number) => void){
+    llenar(this.spine, L/N);
     // marcos: adelante (hacia la cabeza), arriba (el lomo, hacia el cielo) y el costado
-    const up = new THREE.Vector3(0, 1, 0);
+    this.marcos();
+    // cuánto gira el recorrido en cada punto (antes de la onda): el cuerpo se inclina hacia la curva, como un avión
+    const dt = lim(t - this.tPrev, 0, .1); this.tPrev = t;
+    const giro = new Float32Array(N + 1);
     for(let i = 0; i <= N; i++){
-      const a = this.spine[Math.max(0, i - 1)], b = this.spine[Math.min(N, i + 1)];
-      this.T[i].copy(a).sub(b).normalize();
-      this.U[i].copy(up).addScaledVector(this.T[i], -up.dot(this.T[i])).normalize();
-      this.Sd[i].crossVectors(this.T[i], this.U[i]).normalize();
+      const a = this.T[Math.max(0, i - 4)], b = this.T[Math.min(N, i + 4)];
+      giro[i] = lim((a.x - b.x)*this.Sd[i].x + (a.y - b.y)*this.Sd[i].y + (a.z - b.z)*this.Sd[i].z, -1, 1)*2.4;
     }
     // la onda: de lado y arriba-abajo, pequeña en el cuello y cada vez más amplia hacia la cola
     const k2 = TAU/(L*.55), w = t*2.2;
@@ -324,10 +427,33 @@ export class Dragon {
       const s = i/N*L, env = suave(lim(i/(N*.3), 0, 1))*(1 - .3*i/N);
       this.spine[i].addScaledVector(this.Sd[i], Math.sin(k2*s - w)*GROSOR*.9*env).addScaledVector(this.U[i], Math.sin(k2*s - w + 1.7)*GROSOR*.55*env);
     }
-    for(let i = 0; i <= N; i++){ // marcos de nuevo, sobre la columna ondulada
+    this.marcos(); // de nuevo, sobre la columna ondulada
+    // la inclinación: suavizada a lo largo del cuerpo y en el tiempo, y aplicada girando el lomo alrededor del eje
+    for(let i = 0; i <= N; i++){
+      let m = 0, n = 0;
+      for(let j = Math.max(0, i - 5); j <= Math.min(N, i + 5); j++){ m += giro[j]; n++; }
+      const meta = lim(m/n, -.6, .6);
+      this.roll[i] += (meta - this.roll[i])*(dt > 0 ? 1 - Math.exp(-dt*3) : 1);
+      const r = this.roll[i], c = Math.cos(r), sn = Math.sin(r), U = this.U[i].clone(), Sd = this.Sd[i];
+      this.U[i].multiplyScalar(c).addScaledVector(Sd, sn);
+      this.Sd[i].multiplyScalar(c).addScaledVector(U, -sn);
+    }
+  }
+  // Los marcos, a prueba de NaN: si el cuerpo queda casi vertical (subiendo o bajando a pique), proyectar el "arriba" del
+  // mundo da un vector nulo, y un solo NaN en la geometría deja la pantalla entera en negro (el bloom lo desparrama;
+  // pasó grabando el video). Entonces se usa el "arriba" del segmento anterior, o el del cuadro anterior.
+  private marcos(){
+    const up = new THREE.Vector3(0, 1, 0), tmp = new THREE.Vector3();
+    for(let i = 0; i <= N; i++){
       const a = this.spine[Math.max(0, i - 1)], b = this.spine[Math.min(N, i + 1)];
-      this.T[i].copy(a).sub(b).normalize();
-      this.U[i].copy(up).addScaledVector(this.T[i], -up.dot(this.T[i])).normalize();
+      tmp.copy(a).sub(b);
+      if(tmp.lengthSq() > 1e-10) this.T[i].copy(tmp).normalize();
+      else if(i) this.T[i].copy(this.T[i - 1]);
+      const ref = i ? this.U[i - 1] : (this.U[0].lengthSq() > .5 ? this.U[0] : up);
+      tmp.copy(up).addScaledVector(this.T[i], -up.dot(this.T[i]));
+      if(tmp.lengthSq() < .01) tmp.copy(ref).addScaledVector(this.T[i], -ref.dot(this.T[i]));
+      if(tmp.lengthSq() < 1e-6) tmp.set(1, 0, 0).addScaledVector(this.T[i], -this.T[i].x);
+      this.U[i].copy(tmp.normalize());
       this.Sd[i].crossVectors(this.T[i], this.U[i]).normalize();
     }
   }
@@ -335,7 +461,7 @@ export class Dragon {
   private dibujarCuerpo(t: number){
     const p = this.bodyPos, n = this.bodyNor, dir = new THREE.Vector3();
     for(let i = 0; i <= N; i++){
-      const r = GROSOR*perfil(i/N)/2;
+      const r = GROSOR*perfil(i/N)/2*(1 + .05*Math.sin(t*1.6)*bulto(i/N, .16, 1, .1)); // respira: el pecho se infla
       for(let j = 0; j <= M; j++){
         const a = j/M*TAU, k = (i*(M + 1) + j)*3;
         dir.copy(this.U[i]).multiplyScalar(Math.cos(a)).addScaledVector(this.Sd[i], Math.sin(a));
@@ -405,7 +531,7 @@ export class Dragon {
         const J = F.clone().addScaledVector(dir, largo);
         pon(dd, F, J, dd.userData.r);
         const dirU = T.clone().multiplyScalar(Math.cos(an - dobla)).addScaledVector(U, Math.sin(an - dobla)).add(abanico).normalize();
-        const u = lg.unas[k]; u.position.copy(J); u.quaternion.setFromUnitVectors(Y, dirU); u.scale.set(u.userData.r, largo*1.1, u.userData.r);
+        const u = lg.unas[k]; u.position.copy(J); orienta(u, dirU, U); u.scale.set(u.userData.r*1.15, largo*1.35, u.userData.r*1.15); // el gancho, hacia abajo
       });
       // mechón de llama en el codo, hacia atrás
       lg.mechon.forEach((fl, k) => {
@@ -418,16 +544,33 @@ export class Dragon {
 
   private dibujarCabeza(t: number){
     // estable: mira por la línea del cuello (no del último segmento), así no cabecea
-    const T = this.spine[0].clone().sub(this.spine[6]).normalize(), up = new THREE.Vector3(0, 1, 0);
-    const U = up.clone().addScaledVector(T, -up.dot(T)).normalize(), Sd = new THREE.Vector3().crossVectors(T, U);
+    const Tc = this.spine[0].clone().sub(this.spine[6]).normalize(), up = new THREE.Vector3(0, 1, 0);
+    // la perla zigzaguea delante, y la cabeza la sigue con la mirada (hasta un punto: el cuello manda)
+    let Uc = up.clone().addScaledVector(Tc, -up.dot(Tc)); if(Uc.lengthSq() < .01) Uc = this.U[0].clone(); Uc.normalize();
+    const Sc = new THREE.Vector3().crossVectors(Tc, Uc).normalize();
+    const perla = this.spine[0].clone().addScaledVector(Tc, S*2.15).addScaledVector(Sc, Math.sin(t*.8)*S*.55).addScaledVector(Uc, S*.3 + Math.sin(t*1.3)*S*.22);
+    const T = Tc.clone().lerp(perla.clone().sub(this.spine[0]).normalize(), .35).normalize();
+    let U = up.clone().addScaledVector(T, -up.dot(T));
+    if(U.lengthSq() < .01) U = this.U[0].clone().addScaledVector(T, -this.U[0].dot(T)); // a pique: el arriba del cuello
+    U.normalize();
+    const Sd = new THREE.Vector3().crossVectors(T, U).normalize();
     this.head.position.copy(this.spine[0]).addScaledVector(T, -S*.05);
     this.head.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(T, U, Sd));
+    const parpado = (t % 4.7) < .14 ? .12 : 1;    // parpadea cada tanto
+    for(const o of this.ojos) o.scale.y = parpado;
     const abre = .26 + .06*Math.sin(t*3);
     this.jaw.rotation.z = -abre*1.1;
     this.tongue.rotation.z = Math.sin(t*2.5)*.08;
     // melena: llamas alrededor de la nuca, hacia atrás y hacia afuera, ondeando
     for(const f of this.mane){
-      const ud = f.userData as { a?: number; l?: number; barba?: number };
+      const ud = f.userData as { a?: number; l?: number; barba?: number; r?: number; capa?: number; mejilla?: number; z?: number };
+      if(ud.mejilla !== undefined){ // abanico en la mejilla, hacia atrás y abajo
+        const k = ud.mejilla, z = ud.z!;
+        f.position.set(.08 - k*.04, .1 - k*.05, z*.27);
+        orienta(f, new THREE.Vector3(-1, -.35 - k*.25 + Math.sin(t*5 + k)*.08, z*.35), new THREE.Vector3(0, 1, 0));
+        f.scale.set(.13, .32 - k*.05, 1);
+        continue;
+      }
       if(ud.barba !== undefined){
         const k = ud.barba, d = new THREE.Vector3(-.5, -1, 0).normalize();
         f.position.set(.25 + k*.1, -.2, (k - 1.5)*.05);
@@ -435,30 +578,154 @@ export class Dragon {
         f.scale.set(.12, .3 + (k % 2)*.08, 1);
         continue;
       }
-      const a = ud.a!, l = ud.l!;
+      const a = ud.a!, l = ud.l!, rr = (ud as { r?: number }).r ?? .26, capa = (ud as { capa?: number }).capa ?? 0;
       const radial = new THREE.Vector3(0, Math.cos(a), Math.sin(a)); // alrededor del eje del cuello
-      const d = new THREE.Vector3(-.85, 0, 0).addScaledVector(radial, .7 + Math.sin(t*5 + a*3)*.12).normalize();
-      f.position.set(.02, .18, 0).addScaledVector(radial, .26);
+      const d = new THREE.Vector3(-.85 - capa*.15, 0, 0).addScaledVector(radial, .75 - capa*.12 + Math.sin(t*5 + a*3 + capa)*.12).normalize();
+      f.position.set(.02 - capa*.03, .18, 0).addScaledVector(radial, rr);
       orienta(f, d, new THREE.Vector3(1, 0, 0).cross(radial)); // de canto alrededor del cuello, como pétalos
       f.scale.set(.24, l, 1);
     }
     // bigotes: desde el hocico, ondeando hacia atrás (en coordenadas del mundo)
-    if(this.frame++ % 3 === 0) this.whiskers.forEach((w, k) => {
+    // los bigotes se rehacen cada tres cuadros; si la cabeza saltó (el bucle de la mesa vuelve a empezar), en el acto
+    const salto = this.ultimaCabeza.distanceTo(this.head.position) > S; this.ultimaCabeza.copy(this.head.position);
+    const dtb = lim(t - this.tBig, 0, .1); this.tBig = t;
+    this.whiskers.forEach((w, k) => {
       const z = k ? -.14 : .14, ola = (j: number) => Math.sin(t*4.5 + j + k*1.7);
-      const loc = [[.95, .18, z], [.6, .45 + ola(0)*.15, z*2.5], [-.2, .5 + ola(1)*.2, z*4], [-.9, .75 + ola(2)*.2, z*5], [-1.6, .5 + ola(3)*.2, z*5.5]];
-      const pts = loc.map(([x, y, zz]) => new THREE.Vector3(x, y, zz).multiplyScalar(S).applyQuaternion(this.head.quaternion).add(this.head.position));
-      w.geometry.dispose();
-      w.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, S*.012, 5);
+      const loc = [[1.2, .2, z*1.1], [.7, .5 + ola(0)*.15, z*2.6], [-.2, .5 + ola(1)*.2, z*4], [-.9, .75 + ola(2)*.2, z*5], [-1.6, .5 + ola(3)*.2, z*5.5]];
+      const meta = loc.map(([x, y, zz]) => new THREE.Vector3(x, y, zz).multiplyScalar(S).applyQuaternion(this.head.quaternion).add(this.head.position));
+      // inercia: cada punto sigue a su lugar con retraso, más hacia la punta
+      if(!this.bigotes[k] || salto) this.bigotes[k] = meta.map(p => p.clone());
+      else this.bigotes[k].forEach((p, j) => j === 0 ? p.copy(meta[0]) : p.lerp(meta[j], 1 - Math.exp(-dtb*(16 - j*3))));
+      if(this.frame % 2 === 0 || salto){
+        w.geometry.dispose();
+        w.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(this.bigotes[k]), 24, S*.012, 5);
+      }
     });
+    this.frame++;
     // la perla, delante: flota y sus llamas giran
-    this.pearl.position.copy(this.head.position).addScaledVector(T, S*1.9).addScaledVector(U, S*.35 + Math.sin(t*4)*.3);
+    this.pearl.position.copy(perla).addScaledVector(Uc, Math.sin(t*4)*.3);
     this.pearlFlames.forEach((f, k) => {
       const a = k/8*TAU + t*2;
       f.position.set(0, 0, 0);
       f.rotation.set(0, 0, a); f.scale.set(.5, 1.1 + .3*Math.sin(t*9 + k), 1);
     });
     this.pearl.quaternion.copy(this.head.quaternion);
+    this.halo.scale.setScalar(3.2 + .5*Math.sin(t*3.1) + .25*Math.sin(t*7.3));   // late
+    // chispas: cada una nace en la perla y se va hacia atrás y arriba, apagándose; su edad sale del reloj (sin estado:
+    // el bucle de la mesa y los videos cuadro por cuadro salen iguales)
+    const pa = this.chispas.geometry.attributes.position as THREE.BufferAttribute, ca = this.chispas.geometry.attributes.color as THREE.BufferAttribute;
+    const atras = T.clone().negate(), P0 = this.pearl.position;
+    for(let k = 0; k < pa.count; k++){
+      const sem = Math.sin(k*12.9898)*43758.5453, r1 = sem - Math.floor(sem), r2 = (r1*7.13) % 1, r3 = (r1*3.71) % 1;
+      const edad = (t*.9 + k/pa.count) % 1;
+      const lado = new THREE.Vector3().addScaledVector(Sd, (r2 - .5)*2).addScaledVector(U, (r3 - .5)*2);
+      const q = P0.clone().addScaledVector(atras, edad*4.2).addScaledVector(lado, edad*1.6 + .3).addScaledVector(U, edad*edad*1.2);
+      pa.setXYZ(k, q.x, q.y, q.z);
+      const v = (1 - edad)*(1 - edad);
+      ca.setXYZ(k, v, v*(.55 + .3*r2), v*.25);
+    }
+    pa.needsUpdate = true; ca.needsUpdate = true;
   }
+
+  // un cuadro: la curva por donde pasa (de la cabeza a la cola), su reloj (segundos) y su opacidad
+  pose(llenar: (out: THREE.Vector3[], paso: number) => void, t: number, op = 1){
+    this.mesh.visible = op > .01;
+    if(!this.mesh.visible) return;
+    for(const m of this.mats){
+      if(m instanceof THREE.ShaderMaterial) m.uniforms.uOpacity.value = op;
+      else m.opacity = op;
+    }
+    this.columna(t, llenar);
+    this.dibujarCuerpo(t);
+    this.dibujarPatas(t);
+    this.dibujarCabeza(t);
+    this.mesh.updateMatrixWorld(true);
+    for(const e of this.inst.values()){
+      e.piezas.forEach((o, k) => e.mesh!.setMatrixAt(k, o.matrixWorld));
+      e.mesh!.instanceMatrix.needsUpdate = true;
+    }
+  }
+}
+
+// ── En el Cronovisor: de vez en cuando cruza la galaxia por encima de los barrios y se va
+export class Dragon {
+  readonly cuerpo = new DragonCuerpo();
+  get mesh(){ return this.cuerpo.mesh; }
+  get position(){ return this.cuerpo.position; }
+  get spine(){ return this.cuerpo.spine; } get T(){ return this.cuerpo.T; } get U(){ return this.cuerpo.U; } get Sd(){ return this.cuerpo.Sd; }
+  private clock = 0;
+  route: THREE.CatmullRomCurve3 | null = null;
+  private len = 1; u = 0; wait = 8;
+  private next: THREE.Vector3 | null = null;  // donde termina la vuelta y empieza la siguiente
+  private shown = 0;                          // aparece una sola vez, con un fundido; después ya no se va
+  private hist: THREE.Vector3[] = [];         // dónde estuvo la cabeza, de la más nueva a la más vieja
+  onScreen = false;
+  constructor(private host: DragonHost){ this.cuerpo.mesh.visible = false; }
+  get flying(){ return !!this.route; }
+
+  // Su recorrido (Eze, 2026-11-25: que no desaparezca, que recorra la galaxia de lo más viejo a lo más nuevo y el globo
+  // pueda seguirlo, sin correa): una vuelta por los barrios en orden, del mes más viejo (afuera, en la punta de la
+  // espiral) al más nuevo (cerca del centro), por encima; al llegar sigue de largo, rodea la galaxia por fuera en un arco
+  // amplio y empieza otra vez desde lo más viejo. Cada vuelta empalma con la anterior, sin cortes.
+  private newRoute(){
+    const spots = this.host.spots();            // en orden cronológico, del más viejo al más nuevo
+    const viejo = spots[0];
+    const afuera = viejo.clone().setY(0).normalize();
+    if(!afuera.lengthSq()) afuera.set(1, 0, 0);
+    const salida = viejo.clone().addScaledVector(afuera, 30).setY(viejo.y + ARRIBA); // un poco afuera de lo más viejo
+    // Una navegación sostenida, no un sube y baja (Eze: pasar por el corazón exacto de cada barrio, cada uno a su
+    // altura, lo hacía abrupto): la espiral en orden, suavizada (cada punto, el promedio de sus vecinos en el tiempo),
+    // la altura casi plana (un promedio mucho más ancho), y un punto cada 45 como mucho, para curvas amplias.
+    const n = spots.length, liso: THREE.Vector3[] = [];
+    const media = (i: number, w: number, eje: 'x' | 'y' | 'z') => {
+      let a = 0, p = 0;
+      for(let k = -w; k <= w; k++){ const j = Math.min(n - 1, Math.max(0, i + k)), g = Math.exp(-(k*k)/(w*w*.5)); a += spots[j][eje]*g; p += g; }
+      return a/p;
+    };
+    for(let i = 0; i < n; i++) liso.push(new THREE.Vector3(media(i, 3, 'x'), media(i, 14, 'y') + ARRIBA, media(i, 3, 'z')));
+    const pts = [this.next ? this.next.clone() : salida.clone()];
+    for(const p of liso) if(p.distanceTo(pts[pts.length - 1]) > 45) pts.push(p);
+    const fin = liso[n - 1];
+    if(pts.length > 1 && fin.distanceTo(pts[pts.length - 1]) < 30) pts[pts.length - 1] = fin; else pts.push(fin);
+    // la vuelta: sigue de largo y abre un arco amplio que rodea la galaxia por fuera, girando hacia el mismo lado que
+    // venía, hasta volver por afuera de lo más viejo y entrar de nuevo; la altura cambia despacio (una loma suave)
+    const R = this.host.radius();
+    const dir = fin.clone().sub(pts[Math.max(0, pts.length - 2)]).setY(0).normalize();
+    const E = fin.clone().addScaledVector(dir, 60);
+    const llegada = salida.clone().addScaledVector(afuera, 60);
+    const aE = Math.atan2(E.z, E.x), aS = Math.atan2(llegada.z, llegada.x);
+    const lado = Math.sign(E.x*dir.z - E.z*dir.x) || 1;  // hacia dónde giraba
+    let D = aS - aE; while(lado*D <= .4) D += lado*TAU;  // siempre en el mismo sentido, nunca dando marcha atrás
+    const rE = Math.hypot(E.x, E.z), rS = Math.max(Math.hypot(llegada.x, llegada.z), R*.9);
+    pts.push(E);
+    const K = Math.max(6, Math.round(Math.abs(D)/.45));
+    for(let k = 1; k < K; k++){
+      const t = k/K, f = t*t*(3 - 2*t), a = aE + D*t, r = rE + (rS - rE)*f;
+      pts.push(new THREE.Vector3(Math.cos(a)*r, E.y + (llegada.y - E.y)*f + Math.sin(Math.PI*t)*18, Math.sin(a)*r));
+    }
+    pts.push(llegada);
+    pts.push(salida.clone());
+    this.next = salida.clone();
+    this.route = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    this.len = this.route.getLength();
+    this.u = 0;
+    // la primera vez, el cuerpo empieza estirado detrás de la cabeza, por donde venía; después sigue su propia estela
+    if(!this.hist.length){
+      const back = this.route.getTangentAt(0).negate();
+      this.hist = Array.from({ length: 220 }, (_, k) => pts[0].clone().addScaledVector(back, k*.2));
+    }
+  }
+  // la columna: puntos a lo largo de la historia de la cabeza, cada `paso`
+  private porLaHistoria = (out: THREE.Vector3[], paso: number) => {
+    let k = 0, acc = 0, prev = this.hist[0];
+    out[0].copy(prev);
+    for(let i = 1; i < out.length; i++){
+      const need = i*paso;
+      while(k + 1 < this.hist.length && acc + prev.distanceTo(this.hist[k + 1]) < need){ acc += prev.distanceTo(this.hist[k + 1]); k++; prev = this.hist[k]; }
+      const nx = this.hist[Math.min(k + 1, this.hist.length - 1)], dd = prev.distanceTo(nx) || 1;
+      out[i].copy(prev).lerp(nx, lim((need - acc)/dd, 0, 1));
+    }
+  };
 
   update(dt: number, camera: THREE.Camera & { fov: number }, _w: number, viewH: number, dim = 0){
     if(this.host.reduced){ this.mesh.visible = false; return; }
@@ -470,30 +737,17 @@ export class Dragon {
       return;
     }
     this.u += dt*VEL/this.len;
-    if(this.u >= 1){ this.route = null; this.wait = 25 + Math.random()*35; this.mesh.visible = false; this.onScreen = false; return; }
-    const cabeza = this.route.getPointAt(this.u);
+    if(this.u >= 1){ const sobra = (this.u - 1)*this.len; this.newRoute(); this.u = Math.min(.99, sobra/this.len); } // otra vuelta
+    const cabeza = this.route!.getPointAt(this.u);
     if(cabeza.distanceTo(this.hist[0]) > .15){ this.hist.unshift(cabeza); if(this.hist.length > 400) this.hist.pop(); }
     else this.hist[0].copy(cabeza);
-    const fade = Math.min(1, this.u/.06, (1 - this.u)/.06), op = fade*(1 - dim);
-    this.mesh.visible = op > .01;
+    this.shown = Math.min(1, this.shown + dt/3);
+    const op = this.shown*this.shown*(1 - dim);
     // ¿se ve?
     const d = camera.position.distanceTo(cabeza), sc = cabeza.clone().project(camera);
     const px = L*viewH/(2*d*Math.tan(camera.fov*Math.PI/360));
     const inView = sc.z < 1 && Math.abs(sc.x) < 1.6 && Math.abs(sc.y) < 1.6;
-    this.onScreen = this.mesh.visible && inView && px > 60;
-    if(!this.mesh.visible) return;
-    for(const m of this.mats){
-      if(m instanceof THREE.ShaderMaterial) m.uniforms.uOpacity.value = op;
-      else m.opacity = op;
-    }
-    this.columna(this.clock);
-    this.dibujarCuerpo(this.clock);
-    this.dibujarPatas(this.clock);
-    this.dibujarCabeza(this.clock);
-    this.mesh.updateMatrixWorld(true);
-    for(const e of this.inst.values()){
-      e.piezas.forEach((o, k) => e.mesh!.setMatrixAt(k, o.matrixWorld));
-      e.mesh!.instanceMatrix.needsUpdate = true;
-    }
+    this.onScreen = op > .01 && inView && px > 60;
+    this.cuerpo.pose(this.porLaHistoria, this.clock, op);
   }
 }

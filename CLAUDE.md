@@ -160,19 +160,55 @@ made in code from primitives with the 2D design's proportions, parts and festive
 - **Head:** skull, snout, yellow bulbous nose with nostrils, cheeks, two eyes (white, iris, pupil, glint) with yellow
   brows, open jaw on a hinge with teeth, a tongue, two horns that curl with a forward tine (tubes), a mane of flame cards
   in a ring round the nape, a beard, whiskers (tubes rebuilt every third frame). The pearl in flames ahead.
-- **No lights in the scene:** every material lights itself (`pintura`: fixed light from above plus a rim), under the
-  bloom. **Performance:** the head's static parts are merged per material (`fusionar`), and flames, toes and talons are
+- **No lights in the scene:** every material lights itself (`LUZ_COMUN`: a warm key light from above left, a cool fill
+  from below, Blinn-Phong specular per material (`pintura(color, rim, doble, brillo, dureza)`: talons and horns polished,
+  eyes glassy, tongue wet), a rim), bright enough to project on wood, under the bloom. The skin has relief: scales as
+  domes and belly plates as ridges, by derivative bump mapping (`relieve`, no tangents).
+- **Life** (2026-11-24): the body banks into the path's turns (`roll`, from the curvature before the wave, smoothed along
+  the body and in time), the chest breathes, the pearl weaves ahead and the head follows it (35 % toward it, the neck
+  rules), the eyes blink (`ojos`, kept out of the merge), the whiskers trail with inertia (the tip lags most).
+- **Horns are deer antlers** (Eze didn't like the uniform tubes with a hook): `tuboAfinado` (a tube tapering along a curve,
+  closed at the tip), swept back and out along the mane and the flight, three tines rising forward, a rough ring at the
+  base, warm polished gold.
+- **Neck into head** (Eze: the head sat on the neck like a ball): `perfil` no longer thins right before the head, it widens
+  into it; a nape and a throat (head pieces behind and below the skull) blend the skull into the neck.
+- **A Chinese dragon's head, not a dog's** (Eze found it dog-like): low flat forehead with ridges, long flat snout
+  widening at the tip, lion nostrils (two raised openings looking up, no ball), big bulging eyes under heavy angled brows,
+  ox ears laid back, flame fins on the cheeks, a long mouth full of teeth with fangs; scales on the head and legs too
+  (`pintura(..., escamas)`: crescent domes from object-space position, with relief); talons curved into hooks (the cone
+  bent, oriented so the hook points down).
+- **Shape** (2026-11-24): flames are curved tongues (the card bent back along its length and cupped across, so they don't
+  vanish edge-on), the mane three layers (red, orange, light); the head has bony brow ridges, an upper eyelid over each eye
+  (the look), a ridge along the snout, rimmed nostrils, fangs above and below, a chin. The pearl glows (`halo`, a pulsing
+  additive sprite) and sheds fire sparks backwards (`chispas`, Points whose age comes from the clock: no state, so loops
+  and frame-by-frame videos stay exact). **Performance:** the head's static parts are merged per material (`fusionar`), and flames, toes and talons are
   `InstancedMesh`es fed from empty `Object3D`s hung where they belong (`pieza`); measured: ~0.5 ms CPU, and no change
   in frame rate with it on screen. The lit shader handles `USE_INSTANCING`.
-- **Flights** (`newRoute`): now and then (25–60 s apart, the first ~8 s in) from outside the galaxy over two or three
-  barrio hearts (24 above them, over Tanu) and out the other side, at 12/s, fading in and out at the ends; on the
-  universe's clock. Fades with `calm` at a piece and with the galaxy crossings; `onScreen` keeps the frame budget at 60.
-  Eze's galaxy only, not in the teaser, not with reduced motion (`buildDragon`, from `buildTanu`).
+- **Its endless round** (`newRoute`; Eze, 2026-11-25: it shouldn't vanish; it travels oldest to newest and the balloon
+  can follow it, no leash): ~8 s after load it fades in once outside the oldest barrio and never leaves: it flies through
+  the barrios in date order (`spots()` sorted by month), from the tip of the spiral to the newest near the centre, at
+  12/s (the balloon's top is 22, so it can be followed; a round takes ~7 min). A sustained flight, not a roller coaster
+  (Eze found passing each heart at its own height abrupt): the hearts are smoothed (Gaussian over ±3 months for x/z,
+  ±14 for height, so it's nearly level), a point at most every 45; at the newest it carries on and sweeps round the
+  outside of the galaxy in a wide arc turning the way it was turning (never doubling back, a gentle rise of 18), and
+  comes in again from outside the oldest (measured: steepest 20°, sharpest turn ~9°/unit); each round joins the last without a cut (`next`, the body keeps its own trail). An
+  amber `the dragon` mark in the sky (`dragonMark`, `placeMark`, hidden within 60) shows where it is; it's a guide, not
+  a link. On the universe's clock; fades with `calm` at a piece and with the galaxy crossings; `onScreen` keeps the frame
+  budget at 60. Eze's galaxy only, not in the teaser, not with reduced motion (`buildDragon`, from `buildTanu`).
 - Dev: `window.__dragon` (`.wait = 0` sends it out now; `.spine`, `.T` to ride along). Testing it, a joystick left
   connected kept taking the balloon up: `navigator.getGamepads = () => []` in the tab.
 
-The table version stays 2D in dragon-mesa (the right look for a projection seen from above); changes there don't reach
-this one.
+**One dragon, two flights** (2026-11-24): `DragonCuerpo` is everything that's drawn; it's told each frame the curve it
+lies along (`pose(llenar, t, opacity)`: a function that fills the spine with points every `paso`, head to tail) and does
+the rest. `Dragon` (the Cronovisor's) flies routes over the galaxy and fills it from the head's history. The **table**
+version for the restaurant client is `src/pages/dragon.astro`, served at **/dragon/** (noindex, unlisted; Eze shows it
+to the owner): the same body seen three-quarter (camera 35° up), crossing the table corner to corner (top left to bottom
+right on screen) on a fixed curve sampled by arc length, in a seamless loop (it starts when the head and pearl are about
+to show and ends once the last of the tail has left the table, computed by projecting points; the camera's matrices
+must be updated before that). The camera's frame *is* the table (viewport + scissor), so everything else stays black.
+`renderer.outputColorSpace = LinearSRGBColorSpace` to match the Cronovisor's colours (which renders through its
+composer); whiskers are rebuilt at once when the head jumps (the loop's restart). Keys O, P, G (MediaRecorder, one pass),
+H, F; `?mesa=WxH` cm, `?seg=`. The 2D original stays in `~/Desktop/dev/dragon-mesa`. **The USB video:** `node tools/video/mesa-usb.mjs [out.mp4] [mesa] [seg] [fps]` (dev server running) renders exactly one pass frame by frame (two warm-up passes first), 1920×1080 H.264, black at both ends so the projector's loop doesn't show the seam; default `~/Desktop/dragon-mesa-USB.mp4`. `tools/video/dragon-story.mjs` does the Instagram story in the galaxy the same way (the page's clock made manual).
 
 ## The games room (family only, 2026-11-09)
 

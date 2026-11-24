@@ -144,6 +144,8 @@ import Layout from '../layouts/Layout.astro';
       .sky-mark.xib { color: #ffb37a; }
       .sky-mark.tanu { color: #ff7f6e; pointer-events: auto; cursor: pointer; } /* Tanu: her name takes you to her (or, flying, brings her to you) */
       .sky-mark.tanu i { width: 34px; height: 13px; transform: rotate(-8deg); }
+      .sky-mark.dragon { color: #ffb347; } /* the dragon: a guide to follow, not a link */
+      .sky-mark.dragon i { width: 30px; height: 11px; transform: rotate(6deg); }
       .sky-mark.xib i { width: 10px; height: 10px; border-radius: 50%; transform: none; background: currentColor; border: none; box-shadow: 0 0 10px currentColor; }
       body.focus #xib-panel, body.aboard #xib-panel { opacity: 0; pointer-events: none; }
       /* crossing into another galaxy: everything goes to light */
@@ -839,7 +841,7 @@ import Layout from '../layouts/Layout.astro';
     // but nothing answers: no dragging, zooming, opening, flying. Only someone signed in (a galaxy's owner) gets in.
     // It opens by itself on the day. (A curtain in the browser: the files on the server are as public as ever.)
     const RELEASE = Date.parse('2026-12-01T00:00:00+01:00');
-    if(import.meta.env.DEV && /[?&](fake|stats|doors|tanu)\b/.test(location.search)) sessionStorage.setItem('cv-dev-open', '1');
+    if(import.meta.env.DEV && /[?&](fake|stats|doors|tanu|video)\b/.test(location.search)) sessionStorage.setItem('cv-dev-open', '1');
     if(import.meta.env.DEV && /[?&]doors\b/.test(location.search)) sessionStorage.setItem('cv-dev-doors', new URLSearchParams(location.search).get('doors') || '1');
     // Crossing in from another galaxy, that page hands over what it already knew (the registry, which doors are open
     // to you, this galaxy's frases and sets, that you were in), so arriving doesn't wait on the network: ~0.8 s less
@@ -1015,7 +1017,8 @@ import Layout from '../layouts/Layout.astro';
     catch { renderer = null; }
     // 1.25 instead of the full retina ratio: half the pixels, and the grain and halftone hide the difference.
     // (Fanless laptops ran hot drawing ~4M pixels every frame.)
-    const DPR = Math.min(window.devicePixelRatio || 1, 1.25);
+    // dev only: `?dpr=2.4` renders sharper (to record a video, e.g. 450×800 at 2.4 = 1080×1920 for Instagram stories)
+    const DPR = Math.min(window.devicePixelRatio || 1, import.meta.env.DEV && Number(new URLSearchParams(location.search).get('dpr')) || 1.25);
     THREE.ColorManagement.enabled = false;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, .1, 6000); // far: the other galaxies and the Sun
@@ -1195,6 +1198,7 @@ import Layout from '../layouts/Layout.astro';
     // now and then, high over the barrios, chasing its pearl, in 3D (src/cronovisor/dragon/dragon3d.ts)
     let dragon: Dragon | null = null;
     let tanuNear = false; // she's on screen and close: the universe draws at full rate so her swim stays smooth
+    let dragonMark: HTMLElement | null = null;
     let tanu: Tanu | null = null, tanuFollow = false, tanuMark: HTMLElement | null = null, tanuFlight: unknown = null; // tanuFollow: the camera rides along with her
     // Months on a spiral that keeps its spacing however long the archive gets: about 30 apart along the curve
     // and between turns (an Archimedean spiral walked at constant speed), newest at the centre.
@@ -1322,8 +1326,14 @@ import Layout from '../layouts/Layout.astro';
     }
     function buildDragon(){
       if(dragon || !renderer || GAL || teaser) return;
-      dragon = new Dragon({ spots: () => [...monthSpots.values()], radius: () => galaxyR, reduced });
+      // los barrios en orden cronológico: su recorrido va de lo más viejo a lo más nuevo
+      dragon = new Dragon({ spots: () => [...monthSpots.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(e => e[1]), radius: () => galaxyR, reduced });
       scene.add(dragon.mesh);
+      // su marca en el cielo, como la de Tanu, para encontrarlo y seguirlo con el globo (sólo una guía: no se hace clic)
+      dragonMark = document.createElement('div');
+      dragonMark.className = 'sky-mark dragon';
+      dragonMark.innerHTML = '<i></i><b>➤</b><span>the dragon</span>';
+      $('sky-marks').append(dragonMark);
       if(import.meta.env.DEV) (window as any).__dragon = dragon;
     }
     function buildTanu(){
@@ -3728,7 +3738,13 @@ import Layout from '../layouts/Layout.astro';
       if(rolled) camera.rotateZ(Math.PI/2);
       if(windMotes) windMotes.visible = !!pilot && focused < 0 && !boarded && !sunScene && !still; // still air for the words at the Sun
       flightEnergy = Math.max(flightEnergy, updateBalloon(now, dt));
+      if(import.meta.env.DEV && DEV_Q?.has('video') && balloon) balloon.group.visible = false; // dev: recording a video, the balloon (glued to the camera) stays out of the shot
       if(dragon) dragon.update(frozen ? 0 : dt, camera, renderer.domElement.width, renderer.domElement.height, Math.max(calm, crossFade, arriveFade));
+      if(dragon && dragonMark){
+        const head = dragon.spine[0];
+        dragonMark.hidden = !dragon.flying || camera.position.distanceTo(head) < 60;
+        if(!dragonMark.hidden) placeMark(dragonMark, head, window.innerWidth, window.innerHeight);
+      }
       if(tanu){
         tanu.update(frozen ? 0 : dt, renderer.domElement.height, camera.fov);
         if(flight && flight !== tanuFlight) tanuFollow = false; // something else took the camera
