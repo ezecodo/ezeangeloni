@@ -3683,7 +3683,7 @@ import Layout from '../layouts/Layout.astro';
     }
     window.addEventListener('resize', resize);
 
-    let lastFrame = 0, calm = 0, slowAvg = 1/60, lowPower = false, focusedWindow = document.hasFocus(), lastMove = 0;
+    let lastFrame = 0, calm = 0, acerca = 0, slowAvg = 1/60, lowPower = false, focusedWindow = document.hasFocus(), lastMove = 0;
     let focusAt = 0; // the click that brings the window to the front isn't meant for the universe
     window.addEventListener('focus', () => { focusedWindow = true; focusAt = performance.now(); });
     window.addEventListener('blur', () => { focusedWindow = false; });
@@ -3819,6 +3819,7 @@ import Layout from '../layouts/Layout.astro';
         if(now-lockedAt > dwell){ if(focused < pieces.length-1) focusOn(focused+1, 1300); else { stopScan(); backOut(); } }
       }
       for(const b of billboards) b.quaternion.copy(camera.quaternion);
+      let pegado = 0; // cuán cerca está la cámara de la pieza más cercana (para bajar el resplandor, abajo)
       for(const p of pieces){
         const d = camera.position.distanceTo(p.mesh.position);
         const home = p.st.kind === 'home';
@@ -3850,7 +3851,11 @@ import Layout from '../layouts/Layout.astro';
           if(p.halo) p.halo.visible = p.opacity > .004;
         }
         if(starField) starField.opacity.array[p.i] = p.gone || home ? 0 : p.opacity*p.starMix;
-        p.mat.uniforms.uGain.value = home ? 1 + logoPulse*1.8 : isOn || isHov ? 1 : .74;
+        // de lejos, el 74 % de su brillo (la regla del universo); acercándose, volando o mirando, sube de a poco hasta el
+        // original: al lado de una foto no tiene sentido verla apagada (Eze, 2026-11-25)
+        const cerca = near*near*(3 - 2*near);
+        if(!home && p.mesh.visible) pegado = Math.max(pegado, cerca*p.opacity);
+        p.mat.uniforms.uGain.value = home ? 1 + logoPulse*1.8 : isOn || isHov ? 1 : .74 + .26*cerca;
         if(p.halo){
           const s = Math.max(p.w, p.h)*(.85 + .05*Math.sin(sim*.0016));
           p.halo.scale.set(s, s, 1);
@@ -3878,7 +3883,9 @@ import Layout from '../layouts/Layout.astro';
       updateNova();
       if(still) still.drawn = true; // this is the picture that holds
       if(composer && bloom && lens){
-        bloom.strength = BLOOM*(1-calm) + logoPulse*.8;
+        // junto a una foto, a todo su brillo, el resplandor se aparta (como al abrirla) para que sus blancos no se quemen
+        acerca += (pegado - acerca)*ease;
+        bloom.strength = BLOOM*(1-calm)*(1 - .85*acerca) + logoPulse*.8;
         bloom.enabled = !lowPower && bloom.strength > .01;
         lens.uniforms.uEnergy.value = reduced || still ? 0 : flightEnergy; // a still is sharp
         lens.uniforms.uGrain.value = 1-calm;
