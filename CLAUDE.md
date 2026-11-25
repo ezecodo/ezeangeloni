@@ -167,6 +167,43 @@ made in code from primitives with the 2D design's proportions, parts and festive
 - **Life** (2026-11-24): the body banks into the path's turns (`roll`, from the curvature before the wave, smoothed along
   the body and in time), the chest breathes, the pearl weaves ahead and the head follows it (35 % toward it, the neck
   rules), the eyes blink (`ojos`, kept out of the merge), the whiskers trail with inertia (the tip lags most).
+- **A sculpted head, not ellipsoids** (2026-11-25; Eze: the face was "elongated spheres", the joins weak): the head and
+  the jaw are each one continuous surface lofted from cross-sections (`esculpir(Seccion[])`: superellipses along x with
+  centre, width, top/bottom height, squareness, and features: dorsal `cresta`, brow arches `ceja`, cheekbones `pomulo`;
+  Catmull-Rom between sections, ends capped). The nape starts at the neck's own thickness (scaled by the style's
+  `grosor`, so the ryū's slimmer neck flows in too) and the neck widens into it (`perfil`); the snout narrows and widens
+  again at the nose; the mouth line is flat. Eyes, brows (seated on the brow arch), nostrils, teeth, horns and whiskers
+  are still separate pieces; the ox ears were dropped (they sank into the new skin). A golden **ruff** (`crin` cards from
+  the cheeks and the jaw angle, swept back over the neck) hides the head–neck join, as in Eze's reference.
+  **The join itself is skinned** (Eze still saw the cut: a rigid head on a curving neck met it at an angle):
+  `doblarNuca()` bends the back of the head's skin with the neck every frame: each vertex behind the eyes is also placed
+  on the spine at its distance behind the head (that point's frame and banking), blended with its rigid place (fully at
+  the nape, where the last section *is* the neck ring at that point: same centre, same thickness, a hair inside; not at
+  all at the eyes). The head skin is kept out of `fusionar` (`userData.vivo`) for that; normals recomputed each frame.
+  **What finally made the join seamless** (found with Eze's paused screenshots, space on /dragon/, and by measuring):
+  (1) the head and jaw wear the body's own skin shader (`conPiel`: `aS` = distance behind the neck front in body lengths,
+  `aA` the same turn as the tube, `aV` how much belly, fading towards the snout), so the scales run on from the neck
+  without a change of pattern; (2) the head skin starts far back on the neck (`NUCA` -1.6), born *inside* it (×0.9 of
+  `rCuello`) and coming out very gradually (×0.985, 1.03, 1.06, 1.11 by -0.5, then the skull): it used to swell 25-40 %
+  in a short stretch, and that "shoulder" was the edge; (3) the neck tube tucks in gradually along the whole stretch
+  where the head skin grows (`dentro` in `dibujarCuerpo`, by where each ring falls in head units), not in one step, so
+  the two surfaces only ever meet at a grazing angle (checked on the most bent necks of a pass, mane hidden); (4) the cheek ruff roots are staggered on the cheek, not in one row.
+  **The mane is not a collar** (Eze spotted it: the ring of flame cards radiating round the nape at one point drew a hard
+  line behind the head, the "cut"): its cards now rise along the nape and the top of the neck, staggered backwards over
+  the top and upper sides (golden-ratio spread), lying back along the back and waving. Every mane and ruff strand is two crossed
+  cards (`cruz`: seen edge-on a single card became a line and the hair seemed to vanish as the dragon moved), and they
+  ride the bent neck (`crinSobreCuello` through `alCuello`, the same point mapping as the head skin), so the ones over
+  the neck never sink into it when it bends. And they draw after everything solid (`renderOrder` 2 on the flame instanced meshes, 3 on the
+  pearl's halo and sparks): the whole dragon is transparent (to fade), three.js sorts that pass by mesh distance, and as
+  the neck moved the body sometimes drew after the flames (which don't write depth) and wiped out the hair in front of
+  it. Measured on /dragon/ by counting mane pixels per frame: 1 frame in 5 lost >15 % of the mane; after, nothing beyond
+  the noise of redrawing the same frame (~3 %).
+- **The face** (2026-11-25, Eze: the mouth flat and too round; cartoon brows): `esculpir` also takes `labio` (the upper
+  lip bulging over the jaw on the lower side of the snout) and `labioSup` (the lower lip on the jaw's upper side); the
+  head has strong cheekbones behind and below the eye (`pomulo` up to .1) and a hollow between them and the snout
+  (negative `pomulo`); the jaw has jowls at the hinge. Eyes: a yellow upper lid covering nearly the top half (it blinks
+  with the eye), and `cejaArco`, a thick arched brow tube hugging the eye, thick at the front, tapering back to a
+  raised tip (smaller and lower for the ryū).
 - **Horns are deer antlers** (Eze didn't like the uniform tubes with a hook): `tuboAfinado` (a tube tapering along a curve,
   closed at the tip), swept back and out along the mane and the flight, three tines rising forward, a rough ring at the
   base, warm polished gold.
@@ -198,6 +235,19 @@ made in code from primitives with the 2D design's proportions, parts and festive
 - Dev: `window.__dragon` (`.wait = 0` sends it out now; `.spine`, `.T` to ride along). Testing it, a joystick left
   connected kept taking the balloon up: `navigator.getGamepads = () => []` in the tab.
 
+**Two styles, one palette** (2026-11-25, for the restaurant's Japanese / Korean / Southeast Asian fusion; Eze kept the
+colours): `new DragonCuerpo('chino' | 'japones')`, parameters in `ESTILOS`. The Chinese long (default, and the one in the
+galaxy): five claws and a spur, deer antlers, sturdy head. The Japanese ryū: three claws (the legend of the dragon losing
+claws as it travelled from China: four in Korea, three in Japan), a slimmer body (`grosor` .8) with a longer, wider wave,
+finer legs, a long slender snout with small nostrils, long thin antlers swept back with one tine, a mane flowing back
+like water, long whiskers, the pearl further ahead. A Korean yong (four claws, pearl in the mouth or claw) or a naga
+(legless; a religious figure, handle with care) would be further styles; not made yet.
+
+**A model dragon was tried and dropped** (2026-11-25): "Chinese Red Dragon" (Sketchfab, CC BY 4.0), a static sculpture
+bent along the same spine in a shader, with its neck articulated on its own. Eze preferred the dragon designed here, so
+it was removed before being committed. If ever wanted again: each vertex's place along the body (head 0 → tail 1, from
+the main horizontal axis) plus its offsets in that frame, the spine and its frames sent to the shader as a float texture.
+
 **One dragon, two flights** (2026-11-24): `DragonCuerpo` is everything that's drawn; it's told each frame the curve it
 lies along (`pose(llenar, t, opacity)`: a function that fills the spine with points every `paso`, head to tail) and does
 the rest. `Dragon` (the Cronovisor's) flies routes over the galaxy and fills it from the head's history. The **table**
@@ -208,7 +258,17 @@ to show and ends once the last of the tail has left the table, computed by proje
 must be updated before that). The camera's frame *is* the table (viewport + scissor), so everything else stays black.
 `renderer.outputColorSpace = LinearSRGBColorSpace` to match the Cronovisor's colours (which renders through its
 composer); whiskers are rebuilt at once when the head jumps (the loop's restart). Keys O, P, G (MediaRecorder, one pass),
-H, F; `?mesa=WxH` cm, `?seg=`. The 2D original stays in `~/Desktop/dev/dragon-mesa`. **The USB video:** `node tools/video/mesa-usb.mjs [out.mp4] [mesa] [seg] [fps]` (dev server running) renders exactly one pass frame by frame (two warm-up passes first), 1920×1080 H.264, black at both ends so the projector's loop doesn't show the seam; default `~/Desktop/dragon-mesa-USB.mp4`. `tools/video/dragon-story.mjs` does the Instagram story in the galaxy the same way (the page's clock made manual).
+H, F, space to pause (and ← → a frame at a time while paused, for screenshots), and 1 / 2 (or the buttons bottom left, hidden with H, or `?estilo=1|2`) for the Chinese or the Japanese dragon; `?mesa=WxH` cm, `?seg=`. The 2D original stays in `~/Desktop/dev/dragon-mesa`. **The USB video:** `node tools/video/mesa-usb.mjs [out.mp4] [mesa] [seg] [fps]` (`ESTILO=2` for the Japanese; dev server running) renders exactly one pass frame by frame (two warm-up passes first), 1920×1080 H.264, black at both ends so the projector's loop doesn't show the seam; default `~/Desktop/dragon-mesa-USB.mp4`. `tools/video/dragon-story.mjs` does the Instagram story in the galaxy the same way (the page's clock made manual).
+
+## Morphing faces (for the restaurant client, 2026-11-25)
+
+`/caras/` (`src/pages/caras.astro`, noindex): AI-generated faces (Gemini; not real people) morphing one into the next in
+a loop, the second piece of content for the restaurant table (Miss Ko-style). Classic morph: `public/caras/morph.json`
+holds each face's points (MediaPipe's 468 + two rings round the face so head, hair and shoulders follow + the border)
+and one shared Delaunay triangulation; two meshes (leaving face, arriving face) are drawn in the in-between shape, each
+textured from its own shape, the arriving one fading in. Like Miss Ko (Eze's recording of it), only the face shows: a mask painted per face in `preparar.py` (`cara<k>-m.png`: MediaPipe's face oval, enlarged a little so the hairline is in, Gaussian-blurred evenly; it replaced a per-vertex mask whose edge was polygonal and uneven), sampled at the face's own uv so it morphs with it, fades the face into pure black (the photos' near-black lifted to 0 in the shader, `uNegro`), it morphs with the face, and the camera frames the faces' box so the face fills the screen; `?mascara=0` shows the whole photo. The two faces are summed additively over the black, the leaving one at 1-f and the arriving at f (an exact crossfade even in the soft edge: drawn one over the other, the old face showed under the new one's edge and vanished at once when the transition ended, Eze's "pamm"; measured after: the change at the end of a transition is smaller than the average change per frame during it). On `/dragon/` it's option **3** (button bottom left, key 3, `?estilo=3`): the faces page in an iframe over the dragon (no pointer or focus; the table page forwards space, ← → and H to it and stops drawing the dragon meanwhile), so switching never leaves fullscreen. `tools/caras/preparar.py` builds it (grid image or a folder of
+one-face images; MediaPipe 0.10.14 in a separate venv, it bundles the model). Roadmap and the restaurant notes:
+`~/Desktop/dev/dragon-mesa/ROADMAP.md`.
 
 ## The games room (family only, 2026-11-09)
 
@@ -411,6 +471,11 @@ A **work** (`WORKS` in `index.astro`, `kind: 'work'`, id `w-<slug>`, Eze's galax
 First one: **the radio of Tinto & Soda** (2026-11-12, the day it was born): the 70s radio-cassette whose dial tuned their site (carta, Soda, hours, where) and whose cassette is the carta (side A food, side B drinks; choosing a track fast-forwards the tape). The owner chose the photo version on 2026-11-17, so it lives only in tinto_soda's tag `variantes-presentacion` (`src/components/Radio.astro`). `tools/tinto-radio/build.sh` builds it alone (`radio-page.astro`: transparent, already lit, key forwarding) from that tag with the **current** carta and hours from tinto_soda's main, into `public/obras/tinto-radio/` (base `/obras/tinto-radio`, assets in `_a/`), and retakes `cover.webp` with headless Chrome. Rerun it when the bar's carta changes, if the radio should follow. Its fonts come from Google Fonts like the rest of the page. Link the iframe to `…/index.html` (astro dev doesn't serve a folder's index from `public/`). On a phone the scaled radio is small; it's built for a laptop.
 
 Second: **the lamp of Salamat Clot** (2026-11-20, `salamat-lampara`, linked from the Salamat planet like the radio from Tinto's): the opening scene of salamatclot.com (the real brick wall, the five bulbs lighting one by one, electric rays writing «Salamat Clot», the neon, the gauge "GLUTEN · ppm" coming down to 0, then "100% sin gluten."), its `Escena.astro` alone at 1000×525 (the photo's 1772×930, uncropped). `tools/salamat-lampara/build.sh` builds it from salamat's main (its `public/` left out) into `public/obras/salamat-lampara/` and shoots the cover with `cover.mjs` (Puppeteer from the cv project and the installed Chrome, in real time: headless Chrome's virtual time stalls the animation halfway). It's `fresh`: an animation that plays once, so it loads only on arrival and is unloaded once you leave, to play from the dark wall on every visit. Third: **the shutter of La Fuerza Café** (2026-11-10, `la-fuerza-persiana`, from the La Fuerza planet, `https://lafuerzabcn.pages.dev` until the café has its domain): its whole home page at 1280×800 (narrower, the hero stacks and the logo falls out of frame), opening with the pink shutter: the brandbook's icons one by one, the mural of the woman with the lion (signed @gabobenad, as on the real shutter), "Toca la estrella"; touched (or after 15 s, as on the site) it rolls up onto the hero. `tools/la-fuerza/build.sh` builds it from fuerza's main: it removes the shutter's same-origin check (the iframe is same-origin, so the site would skip it), keeps only the home, moves the site's `/svg/ /img/ /galeria/` paths under the base, and injects `inject.html` (links open the real site in a new tab, keys back to the universe, `cvReady`); cover by `cover.mjs` (width, height and wait are arguments). `fresh`. While testing, a joystick left connected stepped through pieces and flew on by itself: suspect the pad before the code.
+Fourth: **Caras** (2026-11-25, `w-caras`, on its own, tied to no planet or project): the morphing faces (see
+"Morphing faces"), embedded as `/caras/?obra=1`: a transparent canvas (the faces are summed with premultiplied alpha),
+so the face floats among the stars; it posts `cvReady` after its first frames and hands every key back (`cvKey`),
+using none. Its cover (`public/obras/caras/cover.webp`) is the first face with its mask, in the same square framing,
+written by `tools/caras/preparar.py`. As the newest piece by date, the nova shines on it.
 A work's `frameH` is how tall its live page is drawn (the radio's 1050 lets its papers hang below).
 
 

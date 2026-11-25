@@ -1,0 +1,171 @@
+---
+/**
+ * Caras que mutan una en otra, en bucle (para el restaurante del cliente, como en Miss Ko de París). Unlisted y sin
+ * indexar: es para mostrarle al dueño. Las caras son generadas por IA (no son personas reales), preparadas por
+ * tools/caras/preparar.py en public/caras/ (cara0.jpg…, morph.json: los puntos de cada cara y los triángulos).
+ *
+ * Morphing clásico: cada cara se deforma hacia la forma de la siguiente mientras se funden. Los 468 puntos de MediaPipe
+ * de cada cara, más dos anillos alrededor (cabeza, pelo, hombros) y el borde, unidos por los mismos triángulos; en el
+ * paso de A a B la malla va de la forma de A a la de B, y se dibuja con la imagen de A y encima la de B, cada una
+ * pegada a su propia forma, B cada vez más visible.
+ *
+ * Como en Miss Ko (Eze, 2026-11-25): sólo se ve la cara, que se funde en negro puro (el nacimiento del pelo y el borde se
+ * desvanecen; cuello y hombros no se ven), así flota sin marco. La máscara de cada cara está pintada y difuminada en
+ * preparar.py (cara<k>-m.png) y va pegada a su imagen, así se deforma con el morphing. Los negros se bajan a negro puro. ?mascara=0 muestra
+ * la foto entera.
+ *
+ * Teclas: espacio pausa (← → saltan de cara) · H oculta la ayuda · F pantalla completa. ?quieta=1.6&paso=2.4 (segundos).
+ * ?obra=1: como obra en la galaxia (WORKS en index.astro): fondo transparente (la cara flota entre las estrellas), avisa
+ * `cvReady` al universo cuando ya dibujó, y le devuelve todas las teclas (`cvKey`) sin usarlas.
+ */
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Caras · prueba de mesa</title>
+  <style is:global>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 12px/1.4 ui-monospace, monospace; color: #888; }
+    canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+    #ui { position: fixed; left: 12px; bottom: 10px; pointer-events: none; transition: opacity .4s; }
+    #ui b { color: #ccc; font-weight: 400; }
+    body.clean #ui { opacity: 0; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="ui"><b>espacio</b> pausa (<b>← →</b> cara anterior / siguiente) · <b>H</b> ocultar esto · <b>F</b> pantalla completa</div>
+  <script>
+    import * as THREE from 'three';
+    if(window.parent !== window) document.getElementById('ui')!.remove(); // dentro de /dragon/ (el 3) o de la galaxia: la ayuda es la de allí
+    const OBRA = new URLSearchParams(location.search).has('obra') && window.parent !== window;
+    if(OBRA){ document.documentElement.style.background = 'transparent'; }
+    const Q = new URLSearchParams(location.search);
+    const QUIETA = (Number(Q.get('quieta')) || 1.6)*1000, PASO = (Number(Q.get('paso')) || 2.4)*1000, CICLO = QUIETA + PASO;
+
+    const datos: { w: number; h: number; fondo?: string; tri: number[]; formas: number[][] } = await (await fetch('/caras/morph.json')).json();
+    const N = datos.formas.length, W = datos.w, H = datos.h, puntos = datos.formas[0].length/2;
+    const cargador = new THREE.TextureLoader();
+    const texturas = await Promise.all(datos.formas.map((_, k) => cargador.loadAsync(`/caras/cara${k}.jpg`)));
+    // la máscara de cada cara (pintada y difuminada en tools/caras/preparar.py), pegada a su imagen
+    const mascaras = await Promise.all(datos.formas.map((_, k) => cargador.loadAsync(`/caras/cara${k}-m.png`)));
+    texturas.forEach(t => { t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; }); // sin conversión de color: el shader saca la imagen tal cual
+    const MASCARA = Q.get('mascara') !== '0';
+    // el negro de las fotos (un gris muy oscuro): se baja a negro puro
+    const fondo = new THREE.Color(datos.fondo ?? '#000'), negro = Math.max(fondo.r, fondo.g, fondo.b) + .025;
+
+    const cv = document.getElementById('c') as HTMLCanvasElement;
+    const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: OBRA });
+    renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+    // toda la pantalla del color del fondo de las fotos (un gris muy oscuro, no negro puro): no se nota el cuadro de la imagen
+    renderer.setClearColor(0x000000, OBRA ? 0 : 1); document.body.style.background = OBRA ? 'transparent' : '#000';
+    const scene = new THREE.Scene();
+    // la cámara mira la imagen en píxeles (y hacia abajo, como la imagen)
+    const camera = new THREE.OrthographicCamera(0, W, 0, H, -1, 1);
+
+    // dos mallas con los mismos triángulos: la cara que se va (A) y la que llega (B), encima
+    const malla = (orden: number) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(puntos*3), 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(puntos*2), 2));
+      g.setIndex(datos.tri);
+      // la máscara: 1 en la cara (los 468 puntos de MediaPipe), 0 en los anillos de afuera y el borde
+      const aM = new Float32Array(puntos); for(let i = 0; i < Math.min(468, puntos); i++) aM[i] = 1;
+      g.setAttribute('aM', new THREE.BufferAttribute(aM, 1));
+      // el eje y va hacia abajo (como la imagen), así que los triángulos quedan de espaldas: se dibujan de los dos lados
+      const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
+        // las dos caras se suman sobre el negro, cada una con su parte (la que se va 1-f, la que llega f): un fundido
+        // exacto, también en el borde difuminado. Antes la nueva iba encima y por el borde se veía la vieja debajo, que al
+        // terminar la transición desaparecía de golpe (Eze: "hace pamm").
+        // (sumadas también en el alfa, premultiplicado: en la galaxia el lienzo es transparente y la cara flota)
+        transparent: true, depthTest: false, side: THREE.DoubleSide, blending: THREE.CustomBlending,
+        blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneFactor,
+        uniforms: { uMap: { value: null }, uMask: { value: null }, uOpacity: { value: 1 }, uNegro: { value: negro }, uMascara: { value: MASCARA ? 1 : 0 } },
+        vertexShader: `attribute float aM; varying vec2 vUv; varying float vM;
+          void main(){ vUv = uv; vM = aM; gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.); }`,
+        fragmentShader: `uniform sampler2D uMap, uMask; uniform float uOpacity, uNegro, uMascara; varying vec2 vUv; varying float vM;
+          void main(){
+            vec3 c = texture2D(uMap, vUv).rgb;
+            c = clamp((c - uNegro)/(1. - uNegro), 0., 1.);         // el gris del fondo, a negro puro
+            // el borde: la máscara pintada (pareja, redonda, con el nacimiento del pelo), con una caída suave al final
+            float mk = texture2D(uMask, vUv).r;
+            float m = mix(1., mk*mk*(3. - 2.*mk), uMascara);
+            gl_FragColor = vec4(c*m*uOpacity, m*uOpacity);
+          }`,
+      }));
+      m.renderOrder = orden; m.frustumCulled = false; scene.add(m);
+      return m;
+    };
+    const A = malla(0), B = malla(1);
+    // la imagen de una cara, pegada a su propia forma (uv) y dibujada en la forma intermedia (posición)
+    function poner(m: THREE.Mesh, cara: number, de: number[], a: number[], f: number, opacidad: number){
+      const pos = m.geometry.attributes.position as THREE.BufferAttribute, uv = m.geometry.attributes.uv as THREE.BufferAttribute, propia = datos.formas[cara];
+      for(let i = 0; i < puntos; i++){
+        pos.setXYZ(i, de[i*2] + (a[i*2] - de[i*2])*f, de[i*2 + 1] + (a[i*2 + 1] - de[i*2 + 1])*f, 0);
+        uv.setXY(i, propia[i*2]/W, 1 - propia[i*2 + 1]/H);
+      }
+      pos.needsUpdate = true; uv.needsUpdate = true;
+      const mat = m.material as THREE.ShaderMaterial; mat.uniforms.uMap.value = texturas[cara]; mat.uniforms.uMask.value = mascaras[cara]; mat.uniforms.uOpacity.value = opacidad;
+    }
+    const suave = (x: number) => x*x*(3 - 2*x);
+
+    function dibujar(t: number){
+      const k = Math.floor(t/CICLO), dentro = t - k*CICLO, a = ((k % N) + N) % N, b = (a + 1) % N;
+      const f = dentro < QUIETA ? 0 : suave((dentro - QUIETA)/PASO);
+      const fa = datos.formas[a], fb = datos.formas[b];
+      poner(A, a, fa, fb, f, 1 - f);
+      poner(B, b, fa, fb, f, f);
+      B.visible = f > 0;
+      renderer.render(scene, camera);
+    }
+
+    // el lienzo: la cara entera y lo más grande posible, centrada, el resto negro (el fondo de las caras es negro)
+    // el encuadre: con máscara, la cara (los 468 puntos de todas, con un margen) llena la pantalla, como en Miss Ko;
+    // sin máscara, la foto entera
+    const caja = (() => {
+      if(!MASCARA) return { x0: 0, y0: 0, x1: W, y1: H };
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for(const f of datos.formas) for(let i = 0; i < 468; i++){ x0 = Math.min(x0, f[i*2]); x1 = Math.max(x1, f[i*2]); y0 = Math.min(y0, f[i*2 + 1]); y1 = Math.max(y1, f[i*2 + 1]); }
+      const mx = (x1 - x0)*.2, my = (y1 - y0)*.16;   // margen para el difuminado de la máscara
+      return { x0: x0 - mx, y0: y0 - my, x1: x1 + mx, y1: y1 + my };
+    })();
+    function medir(){
+      const w = innerWidth, h = innerHeight;
+      renderer.setSize(w, h, false); renderer.setViewport(0, 0, w, h);
+      // la caja, centrada y entera, estirada al formato de la pantalla (lo de afuera es negro igual)
+      const cx = (caja.x0 + caja.x1)/2, cy = (caja.y0 + caja.y1)/2, bw = caja.x1 - caja.x0, bh = caja.y1 - caja.y0;
+      const s = Math.min(w/bw, h/bh), hw = w/s/2, hh = h/s/2;
+      camera.left = cx - hw; camera.right = cx + hw; camera.top = cy - hh; camera.bottom = cy + hh; camera.updateProjectionMatrix();
+    }
+    addEventListener('resize', medir); medir();
+
+    let pausa: number | null = null, corrido = 0;
+    const t0 = performance.now();
+    const reloj = (now: number) => pausa ?? now - t0 - corrido;
+    function frame(now: number){ dibujar(reloj(now)); requestAnimationFrame(frame); }
+    requestAnimationFrame(frame);
+    if(OBRA){
+      // al universo: ya está dibujada (se muestra encima de la portada), y todas las teclas de vuelta (Esc, pilotar)
+      const up = window.parent;
+      requestAnimationFrame(() => requestAnimationFrame(() => up.postMessage({ cvReady: true }, location.origin)));
+      for(const type of ['keydown', 'keyup'] as const) addEventListener(type, e => up.postMessage({ cvKey: { type, key: e.key, code: e.code, shiftKey: e.shiftKey, repeat: e.repeat } }, location.origin));
+    }
+    (window as any).__caras = { dibujar, CICLO, N };
+
+    if(!OBRA) addEventListener('keydown', e => {
+      const key = e.key.toLowerCase(), now = performance.now();
+      if(e.key === ' '){ e.preventDefault(); if(pausa === null) pausa = reloj(now); else { corrido = now - t0 - pausa; pausa = null; } }
+      if(e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
+        // saltar a la cara siguiente / anterior (quieta)
+        const k = Math.floor(reloj(now)/CICLO) + (e.key === 'ArrowRight' ? 1 : -1), t = k*CICLO;
+        if(pausa !== null) pausa = t; else corrido = now - t0 - t;
+        e.preventDefault();
+      }
+      if(key === 'h') document.body.classList.toggle('clean');
+      if(key === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    });
+  </script>
+</body>
+</html>

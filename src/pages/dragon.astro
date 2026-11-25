@@ -6,8 +6,11 @@
  * es negro (en proyección, negro = luz apagada). Unlisted y sin indexar: es para mostrarle al dueño.
  * El prototipo 2D original sigue en ~/Desktop/dev/dragon-mesa.
  *
- * Ajustes (en la dirección): ?mesa=180x90 (cm) · ?seg=14 (segundos de una pasada).
- * Teclas: O contorno de la mesa · P platos de prueba · G grabar una pasada (.webm) · H ocultar la ayuda · F pantalla completa.
+ * Ajustes (en la dirección): ?mesa=180x90 (cm) · ?seg=14 (segundos de una pasada) · ?estilo=1 chino, 2 japonés, 3 caras.
+ * El 3 son las caras que mutan (/caras/), cargadas dentro de esta misma página (un iframe encima): se cambia sin salir de
+ * la pantalla completa, y espacio, ← → y H se le pasan a ella.
+ * El selector de abajo a la izquierda (o las teclas 1 y 2) cambia de dragón; se oculta con H, como la ayuda.
+ * Teclas: espacio pausa (y en pausa ← → cuadro a cuadro) · O contorno de la mesa · P platos de prueba · G grabar una pasada (.webm) · H ocultar la ayuda · F pantalla completa.
  */
 ---
 <!doctype html>
@@ -23,18 +26,28 @@
     #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
     #ui { position: fixed; left: 12px; bottom: 10px; pointer-events: none; transition: opacity .4s; }
     #ui b { color: #ccc; font-weight: 400; }
-    body.clean #ui { opacity: 0; }
+    body.clean #ui, body.clean #estilos { opacity: 0; pointer-events: none; }
+    body.pausa #estilos::after { content: 'pausa'; align-self: center; margin-left: 10px; color: #ccc; letter-spacing: .1em; }
+    #estilos { position: fixed; left: 12px; bottom: 34px; display: flex; gap: 6px; transition: opacity .4s; }
+    #estilos button { font: inherit; width: 30px; height: 30px; border: 1px solid #444; background: #000; color: #888; cursor: pointer; }
+    #estilos button.on { border-color: #ccc; color: #fff; }
+    #estilos { z-index: 3; } #ui { z-index: 3; }
+    /* las caras: encima del dragón, sin tomar el ratón ni el teclado (las teclas se las pasa esta página) */
+    #caras { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 2; pointer-events: none; display: none; background: #000; }
+    body.modo-caras #caras { display: block; }
   </style>
 </head>
 <body>
   <div id="stage"><canvas id="c" width="1920" height="1080"></canvas><canvas id="over" width="1920" height="1080"></canvas></div>
+  <div id="estilos"><button data-e="1" title="chino (long)">1</button><button data-e="2" title="japonés (ryū)">2</button><button data-e="3" title="caras">3</button></div>
+  <iframe id="caras" title="caras" tabindex="-1"></iframe>
   <div id="ui">
-    <b>O</b> contorno de la mesa · <b>P</b> platos de prueba · <b>G</b> grabar un bucle (.webm) · <b>H</b> ocultar esto · <b>F</b> pantalla completa
+    <b>espacio</b> pausa (<b>← →</b> cuadro a cuadro) · <b>1</b> <b>2</b> <b>3</b> dragón chino / japonés / caras · <b>O</b> contorno de la mesa · <b>P</b> platos de prueba · <b>G</b> grabar un bucle (.webm) · <b>H</b> ocultar esto · <b>F</b> pantalla completa
     <div id="msg"></div>
   </div>
   <script>
     import * as THREE from 'three';
-    import { DragonCuerpo, LARGO } from '../cronovisor/dragon/dragon3d';
+    import { DragonCuerpo, LARGO, type Estilo } from '../cronovisor/dragon/dragon3d';
     THREE.ColorManagement.enabled = false; // como el Cronovisor: los mismos colores
 
     const Q = new URLSearchParams(location.search);
@@ -103,11 +116,37 @@
     let sCab = S_INI;
     const llenar = (out: THREE.Vector3[], paso: number) => { for(let i = 0; i < out.length; i++) out[i].copy(enArco(sCab - i*paso)); };
 
-    const dragon = new DragonCuerpo();
-    scene.add(dragon.mesh);
+    // los dragones: 1 el chino, 2 el japonés; se arma cada uno la primera vez que se lo elige
+    const ESTILO: Record<string, Estilo> = { '1': 'chino', '2': 'japones' };
+    const hechos: Partial<Record<Estilo, DragonCuerpo>> = {};
+    let dragon!: DragonCuerpo;
+    const caras = document.getElementById('caras') as HTMLIFrameElement;
+    let modoCaras = false;
+    function elegir(n: string){
+      modoCaras = n === '3';
+      document.body.classList.toggle('modo-caras', modoCaras);
+      if(modoCaras){
+        if(!caras.src) caras.src = '/caras/';   // se carga la primera vez que se elige
+        document.querySelectorAll<HTMLButtonElement>('#estilos button').forEach(b => b.classList.toggle('on', b.dataset.e === n));
+        const u = new URL(location.href); u.searchParams.set('estilo', n); history.replaceState(null, '', u);
+        return;
+      }
+      const e = ESTILO[n]; if(!e) return;
+      if(dragon) scene.remove(dragon.mesh);
+      dragon = hechos[e] ??= new DragonCuerpo(e);
+      scene.add(dragon.mesh);
+      document.querySelectorAll<HTMLButtonElement>('#estilos button').forEach(b => b.classList.toggle('on', b.dataset.e === n));
+      const u = new URL(location.href); u.searchParams.set('estilo', n); history.replaceState(null, '', u);
+      if((window as any).__mesa) (window as any).__mesa.dragon = dragon;
+    }
+    elegir(ESTILO[Q.get('estilo') ?? ''] || Q.get('estilo') === '3' ? Q.get('estilo')! : '1');
+    document.querySelectorAll<HTMLButtonElement>('#estilos button').forEach(b => b.addEventListener('click', () => elegir(b.dataset.e!)));
 
     let contorno = false, platos = false, grabando: { rec: MediaRecorder; desde: number } | null = null;
     const t0 = performance.now();
+    // pausa: el reloj se detiene (y sigue desde ahí al reanudar); en pausa, ← → mueven un cuadro (1/30 s)
+    let pausa: number | null = null, corrido = 0;
+    const reloj = (now: number) => pausa ?? now - t0 - corrido;
     function dibujar(t: number){
       const u = (t % PERIODO)/PERIODO;
       sCab = S_INI + (S_FIN - S_INI)*u;
@@ -127,13 +166,13 @@
       if(contorno){ o.strokeStyle = 'rgba(255,255,255,.35)'; o.lineWidth = 2; o.setLineDash([12, 10]); o.beginPath(); o.roundRect(mesa.x, mesa.y, mesa.w, mesa.h, mesa.r); o.stroke(); o.setLineDash([]); }
     }
     function frame(now: number){
-      const t = grabando ? now - grabando.desde : now - t0;
-      dibujar(t);
+      const t = grabando ? now - grabando.desde : reloj(now);
+      if(!modoCaras) dibujar(t);   // con las caras delante, el dragón no se dibuja (no gasta)
       if(grabando && t >= PERIODO){ grabando.rec.stop(); grabando = null; }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
-    (window as any).__mesa = { dibujar, PERIODO, dragon };
+    (window as any).__mesa = { dibujar, PERIODO, dragon, camera, mesa };
 
     // G: graba exactamente una pasada (el bucle no salta); sólo el dragón y la mesa, sin el contorno ni los platos
     function grabar(){
@@ -146,7 +185,7 @@
       rec.onstop = () => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob(partes, { type: 'video/webm' }));
-        a.download = `dragon-mesa-${MESA_W}x${MESA_H}-${PERIODO/1000}s.webm`;
+        a.download = `dragon-${dragon.estilo}-mesa-${MESA_W}x${MESA_H}-${PERIODO/1000}s.webm`;
         a.click();
         msg.textContent = 'listo: el .webm está en Descargas (para el USB, pasarlo a .mp4)';
       };
@@ -156,11 +195,25 @@
     }
     addEventListener('keydown', e => {
       const key = e.key.toLowerCase();
+      if(key === '1' || key === '2' || key === '3'){ elegir(key); return; }
+      if(key === 'h'){ document.body.classList.toggle('clean'); caras.contentDocument?.body.classList.toggle('clean', document.body.classList.contains('clean')); return; }
+      if(key === 'f'){ document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); return; }
+      if(modoCaras){
+        // espacio y flechas, para las caras
+        if(e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowRight'){ e.preventDefault(); caras.contentWindow?.dispatchEvent(new KeyboardEvent('keydown', { key: e.key })); }
+        return;
+      }
+      if(e.key === ' '){
+        e.preventDefault();
+        const now = performance.now();
+        if(pausa === null) pausa = now - t0 - corrido;
+        else { corrido = now - t0 - pausa; pausa = null; }
+        document.body.classList.toggle('pausa', pausa !== null);
+      }
+      if(pausa !== null && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')){ pausa += (e.key === 'ArrowRight' ? 1 : -1)*1000/30; e.preventDefault(); }
       if(key === 'o') contorno = !contorno;
       if(key === 'p') platos = !platos;
       if(key === 'g') grabar();
-      if(key === 'h') document.body.classList.toggle('clean');
-      if(key === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
     });
   </script>
 </body>

@@ -818,6 +818,12 @@ import Layout from '../layouts/Layout.astro';
       // real site. Built from fuerza's main (tools/la-fuerza).
       { slug: 'la-fuerza-persiana', date: '2026-11-10', title: 'La persiana de La Fuerza', cover: '/obras/la-fuerza/cover.webp',
         embed: '/obras/la-fuerza/index.html', url: 'https://lafuerzabcn.pages.dev', W: 1280, H: 800, frameH: 800, fresh: true },
+      // Faces that morph one into the next (2026-11-25), on their own, not tied to any project: 14 AI-generated faces
+      // (not real people), only the face floating, fading into the dark, as in Miss Ko. The page is /caras/ (?obra:
+      // transparent, so the face floats among the stars); the cover is its first face in the same framing
+      // (tools/caras/preparar.py).
+      { slug: 'caras', date: '2026-11-25', title: 'Caras', cover: '/obras/caras/cover.webp',
+        embed: '/caras/?obra=1', url: 'https://ezeangeloni.xyz/caras/', W: 1000, H: 1000, frameH: 1000 },
     ];
     let stations: Station[] = [{ kind:'home', n:0, id:'', date:'', text:'', tint:'#c77dff', flood:false }];
     let total = 0;

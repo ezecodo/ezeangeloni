@@ -39,14 +39,22 @@ const N = 90, M = 14;           // anillos y lados del tubo
 const GROSOR = L*.071;          // grosor máximo
 const S = L*.15;                // largo de la cabeza
 const PATA = L*.095;
-const GARRAS = 5;
 const VEL = 12, ARRIBA = 24;
+// Dos dragones con la misma paleta (Eze, 2026-11-25, para el restaurante de cocina japonesa, coreana y del sudeste
+// asiático): el chino (long: cinco garras, astas de ciervo, cabeza robusta) y el japonés (ryū: tres garras, como cuenta
+// la leyenda del dragón que perdía garras al alejarse de China; más delgado y serpentino, cabeza larga y estilizada,
+// astas largas y finas, melena que fluye hacia atrás como agua, bigotes largos).
+export type Estilo = 'chino' | 'japones';
+const ESTILOS = {
+  chino:   { garras: 5, espolon: true,  grosor: 1,   pata: 1,   ondaL: .55, ondaA: 1,   aletas: 1,   perla: 2.15 },
+  japones: { garras: 3, espolon: false, grosor: .8,  pata: .85, ondaL: .4,  ondaA: 1.3, aletas: .8,  perla: 2.5 },
+};
 const bulto = (f: number, donde: number, alto: number, ancho: number) => alto*Math.exp(-Math.pow((f - donde)/ancho, 2));
 function perfil(f: number){
   const base = f < .45 ? .74 : .74*(1 - Math.pow((f - .45)/.55, 1.15)*.88);
   // el cuello: un poco más fino a media altura y ensanchándose hacia la cabeza, hasta el tamaño del cráneo (antes se
   // afinaba justo antes de la cabeza y el cráneo quedaba como una bola pegada; Eze pidió continuidad)
-  return base - bulto(f, .075, .1, .035) + bulto(f, 0, .2, .045) + bulto(f, .12, .26, .055) - bulto(f, .26, .06, .04) + bulto(f, .4, .2, .05);
+  return base - bulto(f, .085, .06, .03) + bulto(f, 0, .3, .055) + bulto(f, .12, .26, .055) - bulto(f, .26, .06, .04) + bulto(f, .4, .2, .05);
 }
 
 // ── materiales: se iluminan solos ───────────────────────────────────────────────────────────────────────────────────
@@ -109,17 +117,17 @@ function pintura(color: number, rim = .35, doble = false, brillo = .35, dureza =
 // la piel del cuerpo: aS a lo largo (0 cabeza, 1 cola), aA alrededor (0 lomo, .5 vientre). Las escamas y las placas
 // tienen relieve (bump mapping sin tangentes, con derivadas de pantalla): cada escama es una cúpula que capta la luz
 const PIEL_VERT = `
-  attribute float aS; attribute float aA;
-  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying float vS; varying float vA;
-  void main(){ vS = aS; vA = aA; vec4 mv = modelViewMatrix*vec4(position, 1.); vP = mv.xyz; vN = normalize(normalMatrix*normal); vV = -mv.xyz; gl_Position = projectionMatrix*mv; }`;
+  attribute float aS; attribute float aA; attribute float aV;
+  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying float vS; varying float vA; varying float vVi;
+  void main(){ vS = aS; vA = aA; vVi = aV; vec4 mv = modelViewMatrix*vec4(position, 1.); vP = mv.xyz; vN = normalize(normalMatrix*normal); vV = -mv.xyz; gl_Position = projectionMatrix*mv; }`;
 const PIEL_FRAG = `
   uniform vec3 uCuerpo, uLuz, uVientre, uPlaca; uniform float uOpacity;
-  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying float vS; varying float vA;
+  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying float vS; varying float vA; varying float vVi;
   ${LUZ_COMUN}
   void main(){
-    vec3 n = normalize(vN);
+    vec3 n = normalize(vN); if(!gl_FrontFacing) n = -n;
     float aVientre = abs(vA - .5);                      // 0 en el centro del vientre
-    float vientre = smoothstep(.2, .16, aVientre);
+    float vientre = smoothstep(.2, .16, aVientre)*vVi;  // aV: cuánto vientre (en la cabeza se desvanece hacia el hocico)
     // placas del vientre: bandas atravesadas, abombadas
     float fp = fract(vS*60.);
     float placa = smoothstep(.06, 0., abs(fp - .5) - .38);
@@ -182,6 +190,55 @@ function tuboAfinado(curva: THREE.Curve<THREE.Vector3>, seg: number, lados: numb
   return g;
 }
 
+// Una superficie esculpida por secciones (la cabeza, la mandíbula): en vez de óvalos pegados, una sola piel continua
+// (Eze, 2026-11-25: la cara eran "esferas alargadas", todo círculos). Cada sección, a lo largo de x, es una superelipse
+// (más cuadrada cuanto mayor `pt`/`pb`, arriba y abajo por separado) con su centro `cy`, medio ancho `w`, alto arriba
+// `top` y abajo `bot`, más rasgos: una cresta en el lomo (`cresta`), los arcos de las cejas (`ceja`) y los pómulos
+// (`pomulo`). Entre secciones se interpola con suavidad (Catmull-Rom), y los dos extremos se cierran.
+type Seccion = { x: number; cy: number; w: number; top: number; bot: number; pt?: number; pb?: number; cresta?: number; ceja?: number; pomulo?: number; labio?: number; labioSup?: number; cuello?: boolean };
+function esculpir(sec: Seccion[], anillos = 56, lados = 32){
+  const claves = ['x', 'cy', 'w', 'top', 'bot', 'pt', 'pb', 'cresta', 'ceja', 'pomulo', 'labio', 'labioSup'] as const;
+  const val = (i: number, k: typeof claves[number]) => { const q = sec[Math.max(0, Math.min(sec.length - 1, i))]; return (q[k] as number | undefined) ?? (k === 'pt' || k === 'pb' ? 2 : 0); };
+  const en = (u: number, k: typeof claves[number]) => { // Catmull-Rom entre las secciones, u de 0 a sec.length - 1
+    const i = Math.min(sec.length - 2, Math.floor(u)), f = u - i;
+    const p0 = val(i - 1, k), p1 = val(i, k), p2 = val(i + 1, k), p3 = val(i + 2, k);
+    return .5*((2*p1) + (-p0 + p2)*f + (2*p0 - 5*p1 + 4*p2 - p3)*f*f + (-p0 + 3*p1 - 3*p2 + p3)*f*f*f);
+  };
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  const sp = (c: number, e: number) => Math.sign(c)*Math.pow(Math.abs(c), 2/e);
+  for(let r = 0; r <= anillos; r++){
+    const u = r/anillos*(sec.length - 1);
+    const x = en(u, 'x'), cy = en(u, 'cy'), w = Math.max(1e-3, en(u, 'w')), top = Math.max(1e-3, en(u, 'top')), bot = Math.max(1e-3, en(u, 'bot'));
+    const pt = Math.max(1.6, en(u, 'pt')), pb = Math.max(1.6, en(u, 'pb')), cresta = en(u, 'cresta'), ceja = en(u, 'ceja'), pomulo = en(u, 'pomulo');
+    const labio = en(u, 'labio'), labioSup = en(u, 'labioSup');
+    for(let j = 0; j <= lados; j++){
+      const a = j/lados*TAU, ca = Math.cos(a), sa = Math.sin(a), arriba = ca >= 0, e = arriba ? pt : pb;
+      let y = cy + (arriba ? top : bot)*sp(ca, e), z = w*sp(sa, e);
+      const ad = Math.min(a, TAU - a); // 0 arriba, π abajo, simétrico
+      y += cresta*Math.exp(-Math.pow(ad/.22, 2)) + ceja*Math.exp(-Math.pow((ad - .8)/.42, 2));
+      z += Math.sign(sa)*pomulo*Math.exp(-Math.pow((ad - 1.75)/.4, 2));
+      // los labios: el de arriba cae sobre la mandíbula por el costado de abajo; el de abajo, por el de arriba de la mandíbula
+      const lb = Math.exp(-Math.pow((ad - 2.3)/.28, 2)), ls = Math.exp(-Math.pow((ad - .95)/.3, 2));
+      z += Math.sign(sa)*(labio*lb + labioSup*ls); y -= labio*lb*.5;
+      pos.push(x, y, z); uv.push(r/anillos, j/lados);
+    }
+  }
+  for(let r = 0; r < anillos; r++) for(let j = 0; j < lados; j++){
+    const a = r*(lados + 1) + j, b = a + lados + 1;
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  // las tapas: un punto en el centro de cada extremo
+  for(const [r, sentido] of [[0, -1], [anillos, 1]] as [number, number][]){
+    const u = r/anillos*(sec.length - 1), c = pos.length/3;
+    pos.push(en(u, 'x') + sentido*.002, en(u, 'cy'), 0); uv.push(r/anillos, .5);
+    for(let j = 0; j < lados; j++){ const a = r*(lados + 1) + j; if(sentido < 0) idx.push(a + 1, a, c); else idx.push(a, a + 1, c); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
 // Para no dibujar cientos de piezas sueltas (llamas, dedos, uñas), cada clase es un InstancedMesh: las piezas son
 // Object3D vacíos colgados donde corresponde (para heredar las transformaciones de la cabeza o la perla) y en cada
 // cuadro sus matrices pasan a la instancia. Las piezas fijas de la cabeza se funden en una malla por material.
@@ -218,13 +275,30 @@ export class DragonCuerpo {
   // cabeza
   private head = new THREE.Group(); private jaw = new THREE.Group(); private mane: THREE.Object3D[] = []; private whiskers: THREE.Mesh[] = []; private ojos: THREE.Group[] = []; private bigotes: THREE.Vector3[][] = []; private tPrev = 0; private tBig = 0; private roll = new Float32Array(N + 1); private frame = 0; private ultimaCabeza = new THREE.Vector3(1e9, 0, 0);
   private tongue = new THREE.Group();
+  // la piel de la cabeza, que en la nuca se dobla con el cuello (ver `doblarNuca`)
+  private nuca!: { geo: THREE.BufferGeometry; base: Float32Array };
+  private pielMat!: THREE.ShaderMaterial;
+  // La piel del cuerpo en una superficie esculpida (cabeza, mandíbula): las mismas escamas, que siguen sin corte desde el
+  // cuello (Eze vio el "corte" donde cambiaba el dibujo): aS es la distancia detrás del frente del cuello, en largos
+  // del cuerpo (la que tendría ese punto en el tubo), aA la vuelta alrededor (0 el lomo, .5 el vientre, como el tubo),
+  // aV cuánto vientre (las placas claras), que se apaga hacia el hocico.
+  private conPiel(g: THREE.BufferGeometry, desde: number, vientre: (x: number) => number){
+    const pos = g.attributes.position as THREE.BufferAttribute, uv = g.attributes.uv as THREE.BufferAttribute, n = pos.count;
+    const aS = new Float32Array(n), aA = new Float32Array(n), aV = new Float32Array(n);
+    for(let k = 0; k < n; k++){ const x = pos.getX(k); aS[k] = (desde - x)*S/L; aA[k] = uv.getY(k); aV[k] = vientre(x); }
+    g.setAttribute('aS', new THREE.BufferAttribute(aS, 1)); g.setAttribute('aA', new THREE.BufferAttribute(aA, 1)); g.setAttribute('aV', new THREE.BufferAttribute(aV, 1));
+    return g;
+  }
   private pearl = new THREE.Group(); private pearlFlames: THREE.Object3D[] = []; private halo!: THREE.Sprite; private chispas!: THREE.Points;
   // una pieza de una clase instanciada, colgada de `padre`
   private pieza(clase: string, geo: THREE.BufferGeometry, mat: THREE.Material, padre: THREE.Object3D){
     const e = this.inst.get(clase) ?? this.inst.set(clase, { geo, mat, piezas: [] }).get(clase)!;
     const o = new THREE.Object3D(); e.piezas.push(o); padre.add(o); return o;
   }
-  constructor(){
+  private E: typeof ESTILOS.chino; private G: number; private P: number;
+  constructor(readonly estilo: Estilo = 'chino'){
+    this.E = ESTILOS[estilo]; this.G = GROSOR*this.E.grosor; this.P = PATA*this.E.pata;
+    const J = estilo === 'japones';
     const mat = <T extends THREE.ShaderMaterial | THREE.MeshBasicMaterial>(m: T) => { this.mats.push(m); return m; };
     // ── el cuerpo: un tubo de N+1 anillos de M lados
     const verts = (N + 1)*(M + 1);
@@ -239,8 +313,9 @@ export class DragonCuerpo {
     geo.setAttribute('position', new THREE.BufferAttribute(this.bodyPos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(this.bodyNor, 3));
     geo.setAttribute('aS', new THREE.BufferAttribute(aS, 1)); geo.setAttribute('aA', new THREE.BufferAttribute(aA, 1));
+    geo.setAttribute('aV', new THREE.BufferAttribute(new Float32Array(verts).fill(1), 1));
     geo.setIndex(idx);
-    const piel = mat(new THREE.ShaderMaterial({ vertexShader: PIEL_VERT, fragmentShader: PIEL_FRAG, transparent: true,
+    const piel = this.pielMat = mat(new THREE.ShaderMaterial({ vertexShader: PIEL_VERT, fragmentShader: PIEL_FRAG, transparent: true,
       uniforms: { uCuerpo: { value: new THREE.Color(C.cuerpo) }, uLuz: { value: new THREE.Color(C.luz) }, uVientre: { value: new THREE.Color(C.vientre) }, uPlaca: { value: new THREE.Color(C.placa) }, uOpacity: { value: 1 } } }));
     this.body = new THREE.Mesh(geo, piel);
     this.body.frustumCulled = false;
@@ -269,14 +344,14 @@ export class DragonCuerpo {
       for(let v = 0; v < up.count; v++){ const y = up.getY(v); up.setX(v, up.getX(v) - .55*y*y); }
       unaGeo.computeVertexNormals(); }
     for(const [f, delantera, fase] of [[.15, true, 0], [.4, false, .5]] as [number, boolean, number][]) for(const lado of [1, -1]){
-      const m = lado > 0 ? azul : azulLejos, g = GROSOR*perfil(f)/2;
+      const m = lado > 0 ? azul : azulLejos, g = this.G*perfil(f)/2;
       // el brazo nace grueso, dentro de la masa del hombro (o del anca), y se afina; el codo, redondeado
       const brazo = new THREE.Mesh(cil(g*.62, g*.3), m), ante = new THREE.Mesh(cil(g*.3, g*.2), m), mano = new THREE.Mesh(new THREE.SphereGeometry(g*.24, 10, 8), m);
       const hombro = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), m), codo = new THREE.Mesh(new THREE.SphereGeometry(g*.31, 12, 8), m);
       const dedos: THREE.Object3D[] = [], unas: THREE.Object3D[] = [], mechon: THREE.Object3D[] = [];
-      for(let k = 0; k < GARRAS + 1; k++){ // el último es el espolón; radio 1, se escalan al grosor de la pata
+      for(let k = 0; k < this.E.garras + (this.E.espolon ? 1 : 0); k++){ // el último es el espolón; radio 1, se escalan al grosor de la pata
         const d = this.pieza(lado > 0 ? 'dedo' : 'dedoLejos', dedoGeo, m, this.mesh), u = this.pieza('una', unaGeo, unaMat, this.mesh);
-        d.userData.r = g*.085; u.userData.r = g*.07;
+        d.userData.r = g*(J ? .1 : .085); u.userData.r = g*(J ? .085 : .07);
         dedos.push(d); unas.push(u);
       }
       for(let k = 0; k < 3; k++) mechon.push(carta(rojo));
@@ -297,51 +372,101 @@ export class DragonCuerpo {
     // crestas, hocico largo y plano que se ensancha en la punta, narinas de león (dos orificios abultados que miran
     // arriba) en vez de una bola, ojos grandes y saltones bajo cejas pesadas en ángulo, orejas de buey hacia atrás,
     // aletas de llama en las mejillas, y una boca larga llena de dientes.
-    H.add(pieza(esfera(.3), azul, .14, .27, 0, 1.55, .72, .95));          // cráneo: bajo y largo, frente plana
-    // la nuca y la garganta: el cráneo baja por detrás y se funde con el cuello, y la garganta une la mandíbula al cuello
-    H.add(pieza(esfera(.3), azul, -.32, .17, 0, 1.5, .78, .9, .22));
-    H.add(pieza(esfera(.26), azul, -.62, .08, 0, 1.4, .82, .86, .12));
-    H.add(pieza(esfera(.22), azul, -.12, -.06, 0, 1.6, .62, .78, -.12));
-    H.add(pieza(esfera(.18), claro, -.1, -.12, 0, 1.6, .45, .62, -.12));   // la garganta, clara como el vientre
-    H.add(pieza(esfera(.2), azul, .78, .22, 0, 2.7, .62, 1.0));            // hocico: largo y plano
-    H.add(pieza(esfera(.17), azul, 1.24, .25, 0, 1.0, .72, 1.45));         // la punta del hocico, ancha
-    H.add(pieza(esfera(.1), azul, .72, .36, 0, 3.4, .32, .4, -.05));       // la cresta del lomo del hocico
-    H.add(pieza(esfera(.1), claro, .74, .39, 0, 3.0, .18, .22, -.05));
-    for(const z of [.085, -.085]){                                         // narinas de león: abultadas, mirando arriba
-      H.add(pieza(esfera(.075), amarillo, 1.3, .34, z, 1.15, .85, 1));
-      const hueco = pieza(esfera(.032), boca, 1.33, .4, z*1.05, 1, .55, 1); H.add(hueco);
-      const borde = pieza(new THREE.TorusGeometry(.04, .014, 6, 14), amarillo, 1.33, .395, z*1.05); borde.rotation.x = Math.PI/2; H.add(borde);
+    // La cabeza, una sola piel esculpida (`esculpir`) de la nuca a la punta del hocico: la nuca nace del grosor del cuello
+    // (sin escalón), el cráneo bajo con su cresta, los arcos de las cejas y los pómulos, el hocico que se afina y vuelve a
+    // ensancharse en la nariz, y abajo la línea recta de la boca (más cuadrada). El ryū, con el hocico más largo y fino.
+    // la nuca empieza bien atrás, en el cuello, y crece poco a poco hasta el cráneo (medido: antes se inflaba un 25-40 %
+    // en muy poco trecho, y ese "hombro" era el borde que se veía)
+    const NUCA = -1.6, rCuello = (x: number) => this.G*perfil((.05 - x)*S/L)/2/S;
+    const largo = (x: number) => J && x > .5 ? .5 + (x - .5)*1.12 : x, fino = J ? .88 : 1;
+    const CABEZA: Seccion[] = [
+      // atrás, el anillo del cuello en cada punto (mismo centro, mismo grosor, un pelo adentro), y de ahí creciendo
+      // nace adentro del cuello (más fina) y sale hacia afuera muy de a poco: el cruce con el tubo es casi paralelo
+      ...[[NUCA, .9], [-1.32, .985], [-1.06, 1.03], [-.78, 1.06], [-.5, 1.11]].map(([x, g]) => { const r = rCuello(x)*g; return { x, cy: Math.max(0, g - 1)*.3, w: r, top: r*1.05, bot: r*1.05, cuello: true }; }),
+      { x: -.26, cy: .07,  w: .26, top: .26, bot: .27, cresta: .015 },
+      // la cara: pómulos marcados detrás y debajo del ojo, una zona hundida entre el pómulo y el hocico, y el labio de
+      // arriba que sobresale por encima de la mandíbula a lo largo de la boca (Eze: la boca era plana, muy redonda)
+      { x: -.08, cy: .13,  w: .28, top: .28, bot: .29, pt: 2.05, cresta: .025, pomulo: .02 },
+      { x: .1,   cy: .21,  w: .3,  top: .28, bot: .28, pt: 2.15, pb: 2.1, cresta: .03, ceja: .02, pomulo: .09 },
+      { x: .34,  cy: .24,  w: .27, top: .25, bot: .2,  pt: 2.3, pb: 2.5, cresta: .02, ceja: .06, pomulo: .1, labio: .025 },
+      { x: .52,  cy: .235, w: .21, top: .2,  bot: .16, pt: 2.4, pb: 3,   cresta: .018, ceja: .04, pomulo: -.03, labio: .038 },
+      { x: .7,   cy: .22,  w: .17, top: .15, bot: .13, pt: 2.6, pb: 3.6, cresta: .03, pomulo: -.035, labio: .045 },
+      { x: .95,  cy: .21,  w: .165, top: .13, bot: .12, pt: 2.8, pb: 4,  cresta: .025, pomulo: -.02, labio: .048 },
+      { x: 1.18, cy: .215, w: .185, top: .13, bot: .125, pt: 2.8, pb: 4, cresta: .015, labio: .05 },
+      { x: 1.34, cy: .225, w: .2,  top: .13, bot: .12, pt: 2.6, pb: 3.4, labio: .035 },
+      { x: 1.46, cy: .23,  w: .15, top: .1,  bot: .1,  pt: 2.3, pb: 2.8, labio: .015 },
+      { x: 1.53, cy: .23,  w: .05, top: .04, bot: .04 },
+    ].map(q => {
+      // la nuca, del grosor de su propio cuello (el ryū es más delgado): de ese grosor atrás al de la cabeza en el cráneo
+      const k = 'cuello' in q ? 1 : 1 + (this.E.grosor - 1)*Math.min(1, Math.max(0, (.25 - q.x)/.6));
+      return { ...q, x: largo(q.x), w: q.w*k*(q.x > .5 ? fino : 1), top: q.top*k, bot: q.bot*k, cy: q.cy*(q.x < .1 ? k : 1) };
+    });
+    { const piel = new THREE.Mesh(this.conPiel(esculpir(CABEZA, 64, 36), .05, x => 1 - suave(lim((x + .1)/.4, 0, 1))), this.pielMat); piel.userData.vivo = true; piel.frustumCulled = false; H.add(piel);
+      this.nuca = { geo: piel.geometry, base: (piel.geometry.attributes.position.array as Float32Array).slice() }; }
+    if(!J){
+      for(const z of [.085, -.085]){                                         // narinas de león: abultadas, mirando arriba
+        H.add(pieza(esfera(.075), amarillo, 1.3, .34, z, 1.15, .85, 1));
+        const hueco = pieza(esfera(.032), boca, 1.33, .4, z*1.05, 1, .55, 1); H.add(hueco);
+        const borde = pieza(new THREE.TorusGeometry(.04, .014, 6, 14), amarillo, 1.33, .395, z*1.05); borde.rotation.x = Math.PI/2; H.add(borde);
+      }
+      for(const z of [.21, -.21]){
+        // el ojo, aparte (no se funde): grande y saltón; parpadea
+        const ojo = new THREE.Group(); ojo.position.set(.44, .42, z*1.12);
+        ojo.add(pieza(esfera(.1), ojoBlanco, 0, 0, 0));
+        ojo.add(pieza(esfera(.06), iris, .045, .01, z*.25));
+        ojo.add(pieza(esfera(.034), negro, .06, .01, z*.38));
+        ojo.add(pieza(esfera(.014), blanco, .035, .045, z*.45));
+        // el párpado de arriba, caído sobre el tercio de arriba del ojo: la mirada feroz
+        // el párpado de arriba, amarillo, que tapa casi la mitad de arriba del ojo (Eze: más caricaturesco)
+        const parp = pieza(new THREE.SphereGeometry(.116, 20, 10, 0, TAU, 0, 1.3), amarillo, 0, 0, 0); parp.rotation.z = -.38; ojo.add(parp);
+        this.ojos.push(ojo); H.add(ojo);
+        H.add(this.cejaArco(z > 0 ? 1 : -1, amarillo, 1));
+      }
+    } else {
+      // el ryū: hocico largo y fino, punta estrecha, narinas pequeñas, ojos algo menores bajo cejas finas y largas,
+      // crestas en la frente, orejas pequeñas
+      for(const z of [.06, -.06]){
+        H.add(pieza(esfera(.045), amarillo, 1.58, .31, z, 1.3, .8, 1));
+        H.add(pieza(esfera(.022), boca, 1.61, .34, z*1.05, 1, .6, 1));
+      }
+      for(const z of [.19, -.19]){
+        const ojo = new THREE.Group(); ojo.position.set(.46, .38, z*1.08);
+        ojo.add(pieza(esfera(.085), ojoBlanco, 0, 0, 0));
+        ojo.add(pieza(esfera(.052), iris, .04, .01, z*.26));
+        ojo.add(pieza(esfera(.03), negro, .052, .01, z*.38));
+        ojo.add(pieza(esfera(.012), blanco, .03, .04, z*.45));
+        const parp = pieza(new THREE.SphereGeometry(.098, 20, 10, 0, TAU, 0, 1.25), amarillo, 0, 0, 0); parp.rotation.z = -.32; ojo.add(parp);
+        this.ojos.push(ojo); H.add(ojo);
+        H.add(this.cejaArco(z > 0 ? 1 : -1, amarillo, .86, .9));
+      }
     }
-    for(const k of [0, 1, 2]) H.add(pieza(esfera(.06), azul, .05 + k*.17, .46 - k*.03, 0, 1.4, .35, .5)); // crestas de la frente
-    for(const z of [.21, -.21]){
-      H.add(pieza(esfera(.17), claro, .12, .12, z*1.08, 1.25, .85, .5));    // mejillas
-      // el ojo, aparte (no se funde): grande y saltón; parpadea
-      const ojo = new THREE.Group(); ojo.position.set(.44, .42, z*1.12);
-      ojo.add(pieza(esfera(.1), ojoBlanco, 0, 0, 0));
-      ojo.add(pieza(esfera(.06), iris, .045, .01, z*.25));
-      ojo.add(pieza(esfera(.034), negro, .06, .01, z*.38));
-      ojo.add(pieza(esfera(.014), blanco, .035, .045, z*.45));
-      // el párpado de arriba, caído sobre el tercio de arriba del ojo: la mirada feroz
-      const parp = pieza(new THREE.SphereGeometry(.108, 18, 10, 0, TAU, 0, 1.05), azul, 0, 0, 0); parp.rotation.z = -.3; ojo.add(parp);
-      this.ojos.push(ojo); H.add(ojo);
-      H.add(pieza(esfera(.13), azul, .4, .53, z*1.12, 1.9, .5, .6, .3));     // la ceja ósea, pesada y en ángulo
-      H.add(pieza(esfera(.1), amarillo, .44, .6, z*1.1, 1.8, .36, .45, .32)); // ceja
-      // oreja de buey, echada hacia atrás
-      const oreja = pieza(esfera(.11), azul, -.12, .44, z*1.35, 1.9, .5, .3, .6); oreja.rotation.y = z > 0 ? -.5 : .5; H.add(oreja);
-      const dentro = pieza(esfera(.08), claro, -.1, .44, z*1.42, 1.6, .35, .15, .6); dentro.rotation.y = oreja.rotation.y; H.add(dentro);
-    }
-    H.add(pieza(esfera(.2), boca, .68, .08, 0, 2.9, .3, .66));             // el interior de la boca, largo
+    H.add(pieza(esfera(.2), boca, J ? .8 : .68, .08, 0, J ? 3.4 : 2.9, .3, J ? .56 : .66)); // el interior de la boca, largo
+    const largoBoca = J ? 1.2 : 1, anchoBoca = J ? .82 : 1;
     for(let k = 0; k < 6; k++) for(const z of [.13, -.13]){                // dientes de arriba, a lo largo de la boca
-      const d = pieza(new THREE.ConeGeometry(.024, .09, 6), blanco, .5 + k*.13, .07, z*(1.05 - k*.07)); d.rotation.z = Math.PI; H.add(d);
+      const d = pieza(new THREE.ConeGeometry(.024, .09, 6), blanco, (.5 + k*.13)*largoBoca, .07, z*(1.05 - k*.07)*anchoBoca); d.rotation.z = Math.PI; H.add(d);
     }
-    for(const z of [.14, -.14]){ const c = pieza(new THREE.ConeGeometry(.036, .22, 8), blanco, 1.08, .05, z*.9); c.rotation.z = Math.PI - .12; H.add(c); } // colmillos de adelante
+    for(const z of [.14, -.14]){ const c = pieza(new THREE.ConeGeometry(.036, .22, 8), blanco, 1.08*largoBoca, .05, z*.9*anchoBoca); c.rotation.z = Math.PI - .12; H.add(c); } // colmillos de adelante
     // la mandíbula, que gira sobre su bisagra: larga, como el hocico
     this.jaw.position.set(.2, .02, 0);
-    this.jaw.add(pieza(esfera(.2), azul, .5, -.08, 0, 2.95, .42, .85));
-    this.jaw.add(pieza(esfera(.16), claro, .48, -.14, 0, 2.6, .28, .62));
-    this.jaw.add(pieza(esfera(.12), azul, .95, -.1, 0, 1.4, .5, 1.15));   // el mentón, ancho como la punta del hocico
+    // una sola pieza esculpida: el borde de arriba plano (la línea de la boca), redondeada abajo, afinándose hacia el
+    // mentón, que vuelve a ensancharse un poco, como la punta del hocico
+    this.jaw.add(new THREE.Mesh(esculpir([
+      // atrás, los carrillos donde se articula; a lo largo, el labio de abajo; el mentón, firme
+      { x: -.12, cy: -.07, w: .24, top: .07, bot: .16, pt: 3,   pb: 2.2, pomulo: .035 },
+      { x: .2,   cy: -.07, w: .2,  top: .055, bot: .13, pt: 3.5, pb: 2.4, pomulo: .02, labioSup: .022 },
+      { x: .5,   cy: -.065, w: .165, top: .045, bot: .105, pt: 4, pb: 2.6, labioSup: .026 },
+      { x: .78,  cy: -.065, w: .145, top: .04, bot: .09, pt: 4,  pb: 2.6, labioSup: .026 },
+      { x: .98,  cy: -.07, w: .16, top: .04, bot: .095, pt: 3.5, pb: 2.6, labioSup: .02 },
+      { x: 1.1,  cy: -.065, w: .1,  top: .03, bot: .055 },
+      { x: 1.15, cy: -.065, w: .03, top: .01, bot: .02 },
+    ], 40, 28).applyMatrix4(new THREE.Matrix4()), azul));
+    { // la mandíbula, con la misma piel y las placas claras debajo (como el vientre), hasta el mentón
+      const m = this.jaw.children[this.jaw.children.length - 1] as THREE.Mesh;
+      m.geometry = this.conPiel(m.geometry, -.15, x => .85 - .35*suave(lim((x - .6)/.5, 0, 1)));
+      m.material = this.pielMat; m.userData.vivo = true; }
     for(const z of [.13, -.13]){ const c = pieza(new THREE.ConeGeometry(.032, .18, 8), blanco, .92, .0, z); c.rotation.z = -.1; this.jaw.add(c); } // colmillos de abajo
     for(let k = 0; k < 5; k++) for(const z of [.11, -.11]) this.jaw.add(pieza(new THREE.ConeGeometry(.022, .08, 6), blanco, .4 + k*.12, .0, z*(1.05 - k*.06)));
+    if(J) this.jaw.scale.set(1.18, .85, .85);   // más larga y fina, como el hocico
     fusionar(this.jaw);
     // la lengua: sale un poco y se enrosca hacia abajo
     const lc = new THREE.CatmullRomCurve3([new THREE.Vector3(.35, 0, 0), new THREE.Vector3(.85, -.02, 0), new THREE.Vector3(1.18, -.14, 0), new THREE.Vector3(1.27, -.05, 0), new THREE.Vector3(1.2, .0, 0)]);
@@ -353,6 +478,14 @@ export class DragonCuerpo {
     const hueso = mat(pintura(0xf0ad32, .2, false, .6, 36)); // dorado cálido, pulido
     const v3 = (p: number[]) => new THREE.Vector3(p[0], p[1], p[2]);
     for(const z of [.16, -.16]){
+      if(J){ // el ryū: astas largas y finas, barridas hacia atrás casi a ras del cuello, con una sola rama
+        const asta = new THREE.CatmullRomCurve3([[.1, .46, z*.9], [-.04, .66, z*1.1], [-.4, .82, z*1.3], [-.9, .88, z*1.48], [-1.45, .82, z*1.6], [-1.8, .72, z*1.65]].map(v3));
+        H.add(new THREE.Mesh(tuboAfinado(asta, 32, 10, .05, .008), hueso));
+        H.add(pieza(new THREE.TorusGeometry(.054, .018, 8, 16), hueso, .09, .48, z*.9).rotateX(Math.PI/2).rotateY(.4));
+        const o = asta.getPointAt(.3), f = z > 0 ? 1 : -1;
+        H.add(new THREE.Mesh(tuboAfinado(new THREE.CatmullRomCurve3([o, o.clone().add(new THREE.Vector3(.02, .18, f*.05)), o.clone().add(new THREE.Vector3(.1, .3, f*.08))]), 12, 8, .026, .006), hueso));
+        continue;
+      }
       const asta = new THREE.CatmullRomCurve3([[.14, .5, z], [.04, .74, z*1.22], [-.2, .94, z*1.5], [-.5, 1.04, z*1.78], [-.8, 1.02, z*1.95], [-1.02, .94, z*2.02]].map(v3));
       H.add(new THREE.Mesh(tuboAfinado(asta, 28, 10, .062, .012), hueso));
       H.add(pieza(new THREE.TorusGeometry(.066, .022, 8, 16), hueso, .13, .52, z).rotateX(Math.PI/2).rotateY(.4)); // el anillo rugoso de la base
@@ -366,14 +499,20 @@ export class DragonCuerpo {
     fusionar(H); // las piezas fijas de la cabeza: una malla por material
     H.add(this.jaw);
     // melena de llamas alrededor de la nuca, en dos capas, hacia atrás; y la barba bajo la mandíbula
-    for(const [capa, n, largo, radio, color] of [[0, 16, .62, .26, rojo], [1, 13, .48, .22, naranja], [2, 9, .34, .17, clara]] as [number, number, number, number, string][])
+    const capas = J ? [[0, 12, .95, .22, rojo], [1, 9, .75, .18, naranja], [2, 6, .5, .14, clara]] : [[0, 16, .62, .26, rojo], [1, 13, .48, .22, naranja], [2, 9, .34, .17, clara]];
+    for(const [capa, n, largo, radio, color] of capas as [number, number, number, number, string][])
       for(let k = 0; k < n; k++){
-        const f = carta(color, H), a = (k + capa*.5)/n*TAU;
-        f.userData = { a, l: largo + (k % 3)*.12, r: radio, capa };
+        const f = carta(color, H), a = (((k*.618 + capa*.31) % 1) - .5)*2.3; // repartidas por arriba y los costados altos
+        f.userData = { a, l: largo + (k % 3)*.12, r: radio, capa, k: k/n };
         this.mane.push(f);
+        // cada crin, dos láminas cruzadas: de canto una lámina sola se volvía una línea y parecía desaparecer
+        const g = carta(color, H); g.userData = { ...f.userData, cruz: true }; this.mane.push(g);
       }
-    for(let k = 0; k < 4; k++){ const f = carta(k % 2 ? naranja : rojo, this.jaw); f.userData = { barba: k }; this.mane.push(f); }
+    for(let k = 0; k < 4; k++){ const f = carta(k % 2 ? naranja : rojo, this.jaw); f.userData = { barba: k, larga: J ? 1.6 : 1 }; this.mane.push(f); }
     for(const z of [1, -1]) for(let k = 0; k < 3; k++){ const f = carta(k % 2 ? naranja : rojo, H); f.userData = { mejilla: k, z }; this.mane.push(f); } // aletas de llama en las mejillas
+    // las crines: desde las mejillas y el ángulo de la mandíbula, barridas hacia atrás sobre el cuello, tapando la unión
+    // de la cabeza con el cuerpo (como en la referencia de Eze)
+    for(const z of [1, -1]) for(let k = 0; k < 8; k++) for(const cruz of [false, true]){ const f = carta(k % 3 === 0 ? naranja : clara, H); f.userData = { crin: k, z, cruz }; this.mane.push(f); }
     this.head.scale.setScalar(S);
     this.mesh.add(this.head);
     // bigotes: los rehace cada tanto, ondeando
@@ -395,13 +534,18 @@ export class DragonCuerpo {
     const chGeo = new THREE.BufferGeometry();
     chGeo.setAttribute('position', new THREE.BufferAttribute(chPos, 3)); chGeo.setAttribute('color', new THREE.BufferAttribute(chCol, 3));
     this.chispas = new THREE.Points(chGeo, mat(new THREE.PointsMaterial({ size: .5, map: haloTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })) as unknown as THREE.PointsMaterial);
-    this.chispas.frustumCulled = false;
+    this.chispas.frustumCulled = false; this.chispas.renderOrder = 3; this.halo.renderOrder = 3;
     this.mesh.add(this.pearl, this.chispas);
 
     for(let i = 0; i <= N; i++){ this.T.push(new THREE.Vector3()); this.U.push(new THREE.Vector3()); this.Sd.push(new THREE.Vector3()); }
     for(const e of this.inst.values()){
       e.mesh = new THREE.InstancedMesh(e.geo, e.mat, e.piezas.length);
       e.mesh.frustumCulled = false;
+      // Las llamas (melena, crines, aletas, cola, barba) se dibujan después de todo lo sólido. Todo el dragón es
+      // semitransparente (para aparecer y desvanecerse), y en ese pase three.js ordena por distancia de cada malla: según
+      // se movía el cuello, el cuerpo a veces se pintaba después y borraba las crines que tenía delante (las llamas no
+      // escriben profundidad). Medido en la mesa: uno de cada cinco cuadros perdía más del 15 % de la melena.
+      if(e.mat instanceof THREE.MeshBasicMaterial) e.mesh.renderOrder = 2;
       this.mesh.add(e.mesh);
     }
     this.mesh.visible = false;
@@ -422,10 +566,10 @@ export class DragonCuerpo {
       giro[i] = lim((a.x - b.x)*this.Sd[i].x + (a.y - b.y)*this.Sd[i].y + (a.z - b.z)*this.Sd[i].z, -1, 1)*2.4;
     }
     // la onda: de lado y arriba-abajo, pequeña en el cuello y cada vez más amplia hacia la cola
-    const k2 = TAU/(L*.55), w = t*2.2;
+    const k2 = TAU/(L*this.E.ondaL), w = t*2.2, G = this.G*this.E.ondaA;
     for(let i = 1; i <= N; i++){
       const s = i/N*L, env = suave(lim(i/(N*.3), 0, 1))*(1 - .3*i/N);
-      this.spine[i].addScaledVector(this.Sd[i], Math.sin(k2*s - w)*GROSOR*.9*env).addScaledVector(this.U[i], Math.sin(k2*s - w + 1.7)*GROSOR*.55*env);
+      this.spine[i].addScaledVector(this.Sd[i], Math.sin(k2*s - w)*G*.9*env).addScaledVector(this.U[i], Math.sin(k2*s - w + 1.7)*G*.55*env);
     }
     this.marcos(); // de nuevo, sobre la columna ondulada
     // la inclinación: suavizada a lo largo del cuerpo y en el tiempo, y aplicada girando el lomo alrededor del eje
@@ -461,7 +605,12 @@ export class DragonCuerpo {
   private dibujarCuerpo(t: number){
     const p = this.bodyPos, n = this.bodyNor, dir = new THREE.Vector3();
     for(let i = 0; i <= N; i++){
-      const r = GROSOR*perfil(i/N)/2*(1 + .05*Math.sin(t*1.6)*bulto(i/N, .16, 1, .1)); // respira: el pecho se infla
+      // respira (el pecho se infla); y bajo la cabeza, desde la nuca hacia adelante, el tubo se mete adentro de la piel
+      // de la cabeza, así no se cruzan dos superficies (dibujaban un borde): sólo se ve la piel continua
+      // el tubo se mete de a poco, a lo largo de todo el tramo donde la piel de la cabeza crece (antes, de golpe)
+      const xc = .05 - i/N*L/S;                                       // dónde cae este anillo en la cabeza
+      const dentro = 1 - .1*suave(lim((xc + 1.25)/.4, 0, 1)) - .18*suave(lim((xc + .85)/.5, 0, 1));
+      const r = this.G*perfil(i/N)/2*(1 + .05*Math.sin(t*1.6)*bulto(i/N, .16, 1, .1))*dentro;
       for(let j = 0; j <= M; j++){
         const a = j/M*TAU, k = (i*(M + 1) + j)*3;
         dir.copy(this.U[i]).multiplyScalar(Math.cos(a)).addScaledVector(this.Sd[i], Math.sin(a));
@@ -474,7 +623,7 @@ export class DragonCuerpo {
     // aletas: de pie sobre el lomo, inclinadas hacia la cola, meciéndose
     // aletas: de pie sobre el lomo (en el plano del cuerpo, de perfil se ven enteras), inclinadas hacia la cola
     this.fins.forEach((f, j) => {
-      const i = 6 + j*3, r = GROSOR*perfil(i/N)/2, h = r*(1.3 + .4*Math.sin(i*1.7));
+      const i = 6 + j*3, r = this.G*perfil(i/N)/2, h = r*(1.3 + .4*Math.sin(i*1.7))*this.E.aletas;
       f.position.copy(this.spine[i]).addScaledVector(this.U[i], r*.85);
       const inclina = this.U[i].clone().multiplyScalar(.75).addScaledVector(this.T[i], -.55 - .15*Math.sin(t*6 - i*.3));
       orienta(f, inclina, this.T[i]); f.scale.set(r*1.1, h, 1);
@@ -497,8 +646,8 @@ export class DragonCuerpo {
     };
     const ciclo = 13, uu = (t % ciclo)/ciclo;
     for(const lg of this.legs){
-      const i = Math.round(lg.f*N), g = GROSOR*perfil(lg.f)/2, T = this.T[i], U = this.U[i], Sd = this.Sd[i];
-      const a = PATA*.53, b = PATA*.47, R = a + b;
+      const i = Math.round(lg.f*N), g = this.G*perfil(lg.f)/2, T = this.T[i], U = this.U[i], Sd = this.Sd[i];
+      const PATA = this.P, GARRAS = this.E.garras, a = PATA*.53, b = PATA*.47, R = a + b;
       // la masa del hombro (o del anca): un óvalo a lo largo del cuerpo, pegado al costado y asomando un poco hacia abajo,
       // que funde la pata con el cuerpo; el brazo nace adentro de ella
       const centro = this.spine[i].clone().addScaledVector(U, -g*.22).addScaledVector(Sd, g*.42*lg.lado).addScaledVector(T, lg.delantera ? g*.1 : -g*.15);
@@ -521,7 +670,7 @@ export class DragonCuerpo {
       pon(lg.brazo, A, E); pon(lg.ante, E, F); lg.mano.position.copy(F); lg.codo.position.copy(E);
       // garras: abiertas al estirarse (y siempre las delanteras en vuelo), cerradas en las traseras
       const abierta = lg.delantera ? (e > .02 ? .25 + .7*alc : .85) : .2;
-      const base = lg.delantera ? -.45 + .5*alc : Math.PI + .25, abre = .16 + .3*abierta, dobla = .25 + (1 - abierta)*1.05;
+      const base = lg.delantera ? -.45 + .5*alc : Math.PI + .25, abre = (.16 + .3*abierta)*(GARRAS < 5 ? 1.5 : 1), dobla = .25 + (1 - abierta)*1.05;
       lg.dedos.forEach((dd, k) => {
         const espolon = k === GARRAS, lado = espolon ? 0 : k - (GARRAS - 1)/2;
         const an = espolon ? base + Math.PI*.82 : base + lado*abre*.6;
@@ -542,13 +691,60 @@ export class DragonCuerpo {
     }
   }
 
+  // La unión de la cabeza con el cuello (Eze: "se nota el recorte"). La cabeza es rígida y el cuello se curva, así que
+  // atrás las dos superficies se cruzaban en ángulo. Ahora la parte de atrás de la piel de la cabeza se dobla con el
+  // cuello: cada punto detrás de los ojos se coloca también sobre la columna, a la distancia que le toca detrás de la
+  // cabeza (con el marco y la inclinación del cuello en ese punto), y se mezcla con su lugar rígido, del todo en la nuca
+  // (donde coincide con el anillo del cuello) y nada a la altura de los ojos.
+  // La ceja, estilo caricatura: un arco grueso que abraza el ojo por arriba, grueso adelante (sobre el lagrimal) y
+  // afinándose hacia atrás, con la punta levantada. `k` la escala con el ojo, `alto` la baja para el ryū.
+  private cejaArco(lado: number, m: THREE.Material, k = 1, alto = 1){
+    const z = lado*.235*k/1, v = (x: number, y: number, zz: number) => new THREE.Vector3(x, y*alto, zz);
+    const c = new THREE.CatmullRomCurve3([v(.6, .47, z*.8), v(.5, .56, z*1.02), v(.36, .58, z*1.12), v(.22, .58, z*1.12), v(.1, .66, z*1.02), v(.04, .74, z*.92)]);
+    return new THREE.Mesh(tuboAfinado(c, 30, 10, .055*k, .01), m);
+  }
+  private mNuca = new THREE.Matrix4(); private iNuca = new THREE.Matrix4();
+  private _v = new THREE.Vector3(); private _r = new THREE.Vector3(); private _P = new THREE.Vector3(); private _U = new THREE.Vector3(); private _Sd = new THREE.Vector3(); private _T = new THREE.Vector3();
+  // un punto de la cabeza (en sus coordenadas) llevado a donde lo pone el cuello doblado: lo usan la piel y la melena
+  private alCuello(p: THREE.Vector3){
+    const x = p.x, w = suave(lim((.2 - x)/.75, 0, 1));             // 0 en los ojos, 1 en el cuello
+    if(w <= 0) return p;
+    const r = this._r.copy(p).applyMatrix4(this.mNuca);              // su lugar rígido
+    const d = (.05 - x)*S, fi = lim(d/(L/N), 0, N - 1), i = Math.floor(fi), f = fi - i;
+    const P = this._P.copy(this.spine[i]).lerp(this.spine[i + 1], f);
+    const Tv = this._T.copy(this.T[i]).lerp(this.T[i + 1], f).normalize();
+    const Uv = this._U.copy(this.U[i]).lerp(this.U[i + 1], f).normalize(), Sv = this._Sd.copy(this.Sd[i]).lerp(this.Sd[i + 1], f).normalize();
+    if(d < 0) P.addScaledVector(Tv, -d);                             // delante del primer anillo
+    const v = this._v.copy(P).addScaledVector(Uv, p.y*S).addScaledVector(Sv, p.z*S); // su lugar sobre el cuello
+    return p.copy(r.lerp(v, w).applyMatrix4(this.iNuca));
+  }
+  private doblarNuca(){
+    const { geo, base } = this.nuca, pos = geo.attributes.position as THREE.BufferAttribute, arr = pos.array as Float32Array;
+    this.head.updateMatrix();
+    this.mNuca.copy(this.head.matrix); this.iNuca.copy(this.head.matrix).invert();
+    const q = new THREE.Vector3();
+    for(let k = 0; k < pos.count; k++){
+      this.alCuello(q.set(base[k*3], base[k*3 + 1], base[k*3 + 2]));
+      arr[k*3] = q.x; arr[k*3 + 1] = q.y; arr[k*3 + 2] = q.z;
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+  }
+  // una crin que nace en `raiz` hacia `d` (en la cabeza), puesta sobre el cuello doblado: no se hunde cuando se dobla
+  private crinSobreCuello(f: THREE.Object3D, raiz: THREE.Vector3, d: THREE.Vector3, hint: THREE.Vector3){
+    const punta = raiz.clone().addScaledVector(d, .3);
+    this.alCuello(raiz); this.alCuello(punta);
+    f.position.copy(raiz);
+    orienta(f, punta.sub(raiz).normalize(), hint);
+  }
+
   private dibujarCabeza(t: number){
     // estable: mira por la línea del cuello (no del último segmento), así no cabecea
     const Tc = this.spine[0].clone().sub(this.spine[6]).normalize(), up = new THREE.Vector3(0, 1, 0);
     // la perla zigzaguea delante, y la cabeza la sigue con la mirada (hasta un punto: el cuello manda)
     let Uc = up.clone().addScaledVector(Tc, -up.dot(Tc)); if(Uc.lengthSq() < .01) Uc = this.U[0].clone(); Uc.normalize();
     const Sc = new THREE.Vector3().crossVectors(Tc, Uc).normalize();
-    const perla = this.spine[0].clone().addScaledVector(Tc, S*2.15).addScaledVector(Sc, Math.sin(t*.8)*S*.55).addScaledVector(Uc, S*.3 + Math.sin(t*1.3)*S*.22);
+    const perla = this.spine[0].clone().addScaledVector(Tc, S*this.E.perla).addScaledVector(Sc, Math.sin(t*.8)*S*.55).addScaledVector(Uc, S*.3 + Math.sin(t*1.3)*S*.22);
     const T = Tc.clone().lerp(perla.clone().sub(this.spine[0]).normalize(), .35).normalize();
     let U = up.clone().addScaledVector(T, -up.dot(T));
     if(U.lengthSq() < .01) U = this.U[0].clone().addScaledVector(T, -this.U[0].dot(T)); // a pique: el arriba del cuello
@@ -556,6 +752,7 @@ export class DragonCuerpo {
     const Sd = new THREE.Vector3().crossVectors(T, U).normalize();
     this.head.position.copy(this.spine[0]).addScaledVector(T, -S*.05);
     this.head.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(T, U, Sd));
+    this.doblarNuca();
     const parpado = (t % 4.7) < .14 ? .12 : 1;    // parpadea cada tanto
     for(const o of this.ojos) o.scale.y = parpado;
     const abre = .26 + .06*Math.sin(t*3);
@@ -563,7 +760,17 @@ export class DragonCuerpo {
     this.tongue.rotation.z = Math.sin(t*2.5)*.08;
     // melena: llamas alrededor de la nuca, hacia atrás y hacia afuera, ondeando
     for(const f of this.mane){
-      const ud = f.userData as { a?: number; l?: number; barba?: number; r?: number; capa?: number; mejilla?: number; z?: number };
+      const ud = f.userData as { a?: number; l?: number; barba?: number; r?: number; capa?: number; mejilla?: number; z?: number; larga?: number; crin?: number; k?: number; cruz?: boolean };
+      if(ud.crin !== undefined){
+        const k = ud.crin, z = ud.z!, fila = k % 4, cap = Math.floor(k/4);
+        // escalonadas (no en una misma fila, que dibujaba una línea): cada una nace en otro punto de la mejilla y del
+        // costado del cuello, metida en la piel
+        const sx = [.2, .1, -.02, -.12, .15, .04, -.07, .26][k], sy = [.2, .12, .17, .08, .05, .14, .03, .11][k];
+        this.crinSobreCuello(f, new THREE.Vector3(sx, sy, z*.25), new THREE.Vector3(-1, .08 - fila*.07 + Math.sin(t*3.2 + k*.9)*.07, z*(.32 + cap*.1)).normalize(), new THREE.Vector3(0, 1, 0));
+        f.scale.set(.11 - cap*.02, .85 + fila*.1 + cap*.2, 1);
+        if(ud.cruz) f.rotateY(Math.PI/2);
+        continue;
+      }
       if(ud.mejilla !== undefined){ // abanico en la mejilla, hacia atrás y abajo
         const k = ud.mejilla, z = ud.z!;
         f.position.set(.08 - k*.04, .1 - k*.05, z*.27);
@@ -575,15 +782,21 @@ export class DragonCuerpo {
         const k = ud.barba, d = new THREE.Vector3(-.5, -1, 0).normalize();
         f.position.set(.25 + k*.1, -.2, (k - 1.5)*.05);
         f.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.applyAxisAngle(new THREE.Vector3(0, 0, 1), Math.sin(t*5 + k)*.15));
-        f.scale.set(.12, .3 + (k % 2)*.08, 1);
+        f.scale.set(.12, (.3 + (k % 2)*.08)*(ud.larga ?? 1), 1);
         continue;
       }
-      const a = ud.a!, l = ud.l!, rr = (ud as { r?: number }).r ?? .26, capa = (ud as { capa?: number }).capa ?? 0;
-      const radial = new THREE.Vector3(0, Math.cos(a), Math.sin(a)); // alrededor del eje del cuello
-      const d = new THREE.Vector3(-.85 - capa*.15, 0, 0).addScaledVector(radial, .75 - capa*.12 + Math.sin(t*5 + a*3 + capa)*.12).normalize();
-      f.position.set(.02 - capa*.03, .18, 0).addScaledVector(radial, rr);
-      orienta(f, d, new THREE.Vector3(1, 0, 0).cross(radial)); // de canto alrededor del cuello, como pétalos
-      f.scale.set(.24, l, 1);
+      // La melena: no un collar en anillo alrededor de la nuca (Eze vio ahí el "recorte": una línea dura de llamas
+      // saliendo en todas direcciones en un mismo punto), sino crines que nacen a lo largo de la nuca y la parte alta del
+      // cuello, escalonadas hacia atrás, tendidas sobre el lomo y ondeando, como en su referencia.
+      const a = ud.a!, l = ud.l!, capa = ud.capa ?? 0, q = (ud as { k?: number }).k ?? 0;
+      const J = this.estilo === 'japones';
+      const radial = new THREE.Vector3(0, Math.cos(a), Math.sin(a));
+      const x = .06 - q*.5 - capa*.05;                                   // de la nuca hacia atrás
+      const cy = .06 + (x + .36)*.33, rr = .24*(J ? .85 : 1)*(1 - capa*.04);
+      const d = new THREE.Vector3(-1, 0, 0).addScaledVector(radial, (J ? .22 : .32) - capa*.06 + Math.sin(t*(J ? 3 : 4) + a*2 + q*6 + capa)*.08).normalize();
+      this.crinSobreCuello(f, new THREE.Vector3(x, cy, 0).addScaledVector(radial, rr), d, new THREE.Vector3(1, 0, 0).cross(radial));
+      f.scale.set(J ? .16 : .2, l*(1.15 - q*.35), 1);
+      if(ud.cruz) f.rotateY(Math.PI/2);
     }
     // bigotes: desde el hocico, ondeando hacia atrás (en coordenadas del mundo)
     // los bigotes se rehacen cada tres cuadros; si la cabeza saltó (el bucle de la mesa vuelve a empezar), en el acto
@@ -591,7 +804,9 @@ export class DragonCuerpo {
     const dtb = lim(t - this.tBig, 0, .1); this.tBig = t;
     this.whiskers.forEach((w, k) => {
       const z = k ? -.14 : .14, ola = (j: number) => Math.sin(t*4.5 + j + k*1.7);
-      const loc = [[1.2, .2, z*1.1], [.7, .5 + ola(0)*.15, z*2.6], [-.2, .5 + ola(1)*.2, z*4], [-.9, .75 + ola(2)*.2, z*5], [-1.6, .5 + ola(3)*.2, z*5.5]];
+      const loc = this.estilo === 'japones'
+        ? [[1.48, .18, z*.9], [.9, .45 + ola(0)*.15, z*2.4], [-.1, .4 + ola(1)*.25, z*3.6], [-1.0, .6 + ola(2)*.3, z*4.4], [-2.0, .4 + ola(3)*.35, z*4.8], [-2.9, .55 + ola(4)*.35, z*5]]
+        : [[1.2, .2, z*1.1], [.7, .5 + ola(0)*.15, z*2.6], [-.2, .5 + ola(1)*.2, z*4], [-.9, .75 + ola(2)*.2, z*5], [-1.6, .5 + ola(3)*.2, z*5.5]];
       const meta = loc.map(([x, y, zz]) => new THREE.Vector3(x, y, zz).multiplyScalar(S).applyQuaternion(this.head.quaternion).add(this.head.position));
       // inercia: cada punto sigue a su lugar con retraso, más hacia la punta
       if(!this.bigotes[k] || salto) this.bigotes[k] = meta.map(p => p.clone());

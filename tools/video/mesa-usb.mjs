@@ -1,7 +1,7 @@
 // El video del dragón para el USB del proyector del restaurante: exactamente una pasada de /dragon/, en 1920×1080,
 // cuadro por cuadro (perfecto aunque el Mac esté ocupado), sin la ayuda ni el contorno. Puesto en bucle en el proyector,
 // no se nota el salto (al empezar y al terminar la mesa está vacía).
-// node tools/video/mesa-usb.mjs [salida.mp4] [mesa=180x90] [segundos=14] [fps=30]
+// node tools/video/mesa-usb.mjs [salida.mp4] [mesa=180x90] [segundos=14] [fps=30]   (ESTILO=2 para el japonés)
 // Necesita: `npm run dev` en el puerto 4361 (o BASE=…), ffmpeg, y Puppeteer del proyecto cv (o PUPPETEER=…).
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
 const puppeteer = require(process.env.PUPPETEER || `${os.homedir()}/Desktop/dev/cv/node_modules/puppeteer`);
 const [OUT = `${os.homedir()}/Desktop/dragon-mesa-USB.mp4`, MESA = '180x90', SEG = '14', FPS_ = '30'] = process.argv.slice(2);
+const ESTILO = process.env.ESTILO || '1';
 const FPS = Number(FPS_), BASE = process.env.BASE || 'http://localhost:4361';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mesa-'));
 
@@ -23,10 +24,10 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 await page.evaluateOnNewDocument(() => {
   const css = document.createElement('style');
-  css.textContent = '#ui,astro-dev-toolbar{display:none!important}';
+  css.textContent = '#ui,#estilos,astro-dev-toolbar{display:none!important}';
   document.addEventListener('DOMContentLoaded', () => document.head.append(css));
 });
-await page.goto(`${BASE}/dragon/?mesa=${MESA}&seg=${SEG}`, { waitUntil: 'load' });
+await page.goto(`${BASE}/dragon/?mesa=${MESA}&seg=${SEG}&estilo=${ESTILO}`, { waitUntil: 'load' });
 await page.waitForFunction(() => window.__mesa, { timeout: 20000 });
 await page.evaluate(() => { window.requestAnimationFrame = () => 0; }); // el reloj lo llevamos nosotros
 const P = await page.evaluate(() => window.__mesa.PERIODO);
