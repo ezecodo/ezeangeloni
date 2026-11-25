@@ -15,6 +15,8 @@
  * la foto entera.
  *
  * Teclas: espacio pausa (← → saltan de cara) · H oculta la ayuda · F pantalla completa. ?quieta=1.6&paso=2.4 (segundos).
+ * ?cosmos: las caras sobre un cosmos animado (nebulosa violeta y azul que se mueve lento, estrellas que titilan, polvo,
+ * y una sombra suave detrás del rostro), dibujado aquí mismo: nada del archivo de la galaxia. Es la variante 4 de /dragon/.
  * ?obra=1: como obra en la galaxia (WORKS en index.astro): fondo transparente (la cara flota entre las estrellas), avisa
  * `cvReady` al universo cuando ya dibujó, y le devuelve todas las teclas (`cvKey`) sin usarlas.
  */
@@ -41,7 +43,10 @@
     import * as THREE from 'three';
     if(window.parent !== window) document.getElementById('ui')!.remove(); // dentro de /dragon/ (el 3) o de la galaxia: la ayuda es la de allí
     const OBRA = new URLSearchParams(location.search).has('obra') && window.parent !== window;
-    if(OBRA){ document.documentElement.style.background = 'transparent'; }
+    // ?alfa: fondo transparente también fuera de la galaxia (para grabarla encima de otra cosa: tools/video/caras-galaxia.mjs)
+    const COSMOS = new URLSearchParams(location.search).has('cosmos') && !OBRA;
+    const ALFA = OBRA || COSMOS || new URLSearchParams(location.search).has('alfa'); // con cosmos, las caras van con alfa encima del fondo
+    if(ALFA){ document.documentElement.style.background = 'transparent'; }
     const Q = new URLSearchParams(location.search);
     const QUIETA = (Number(Q.get('quieta')) || 1.6)*1000, PASO = (Number(Q.get('paso')) || 2.4)*1000, CICLO = QUIETA + PASO;
 
@@ -57,23 +62,69 @@
     const fondo = new THREE.Color(datos.fondo ?? '#000'), negro = Math.max(fondo.r, fondo.g, fondo.b) + .025;
 
     const cv = document.getElementById('c') as HTMLCanvasElement;
-    const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: OBRA });
+    const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: ALFA });
     renderer.setPixelRatio(Math.min(2, devicePixelRatio));
     // toda la pantalla del color del fondo de las fotos (un gris muy oscuro, no negro puro): no se nota el cuadro de la imagen
-    renderer.setClearColor(0x000000, OBRA ? 0 : 1); document.body.style.background = OBRA ? 'transparent' : '#000';
+    renderer.setClearColor(0x000000, ALFA ? 0 : 1); document.body.style.background = ALFA ? 'transparent' : '#000';
     const escenaA = new THREE.Scene(), escenaB = new THREE.Scene();
     // las dos imágenes intermedias (una por cara), del tamaño del lienzo, y la mezcla final: la que se va 1-f, la que llega f
     const rt = () => new THREE.WebGLRenderTarget(1, 1, { samples: 4, depthBuffer: false });
     const rtA = rt(), rtB = rt();
     const mezcla = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
-      depthTest: false, blending: THREE.NoBlending,
-      uniforms: { tA: { value: rtA.texture }, tB: { value: rtB.texture }, uF: { value: 0 }, uOpaco: { value: OBRA ? 0 : 1 } },
+      // sobre el cosmos, encima con su alfa (premultiplicado); si no, tal cual
+      depthTest: false, blending: COSMOS ? THREE.CustomBlending : THREE.NoBlending,
+      blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+      uniforms: { tA: { value: rtA.texture }, tB: { value: rtB.texture }, uF: { value: 0 }, uOpaco: { value: ALFA ? 0 : 1 } },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`,
       fragmentShader: `uniform sampler2D tA, tB; uniform float uF, uOpaco; varying vec2 vUv;
         void main(){ vec4 c = mix(texture2D(tA, vUv), texture2D(tB, vUv), uF); gl_FragColor = vec4(c.rgb, max(c.a, uOpaco)); }`, // negro sólido, salvo en la galaxia
     }));
     mezcla.frustumCulled = false;
     const escenaMezcla = new THREE.Scene(); escenaMezcla.add(mezcla);
+    // el cosmos: un plano a pantalla completa detrás de todo, con su reloj (el de la animación, así las grabaciones salen
+    // iguales): nebulosa de ruido fractal con el dominio deformado, que deriva despacio; estrellas en una grilla
+    // aleatoria que titilan; y la sombra redonda detrás del rostro
+    const cosmos = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+      depthTest: false, blending: THREE.NoBlending,
+      uniforms: { uT: { value: 0 }, uAsp: { value: 1 } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`,
+      fragmentShader: `uniform float uT, uAsp; varying vec2 vUv;
+        // azar sin senos (los senos pierden precisión en la GPU y el ruido salía cuadriculado)
+        float h(vec2 p){ vec3 q = fract(vec3(p.xyx)*.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y)*q.z); }
+        float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3. - 2.*f);
+          return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+        float fbm(vec2 p){ float v = 0., a = .5; for(int k = 0; k < 5; k++){ v += a*n(p); p = p*2.03 + 7.1; a *= .5; } return v; }
+        void main(){
+          vec2 p = (vUv - .5)*vec2(uAsp, 1.)*2.2, c = p;
+          float t = uT*.018;
+          // la nebulosa: ruido deformado por ruido, derivando
+          vec2 q = vec2(fbm(p + vec2(t, -t*.6)), fbm(p + vec2(5.2, 1.3) - t*.4));
+          float neb = fbm(p*1.1 + q*1.8 + vec2(-t*.5, t*.3));
+          float vena = smoothstep(.45, .9, fbm(p*2.3 - q + t*.2));
+          vec3 col = vec3(.008, .006, .02);
+          col = mix(col, vec3(.16, .07, .36), smoothstep(.38, .85, neb));       // violeta
+          col = mix(col, vec3(.04, .13, .36), smoothstep(.5, .9, q.x)*.55);     // azul
+          col += vec3(.42, .10, .36)*vena*.4*smoothstep(.45, .85, neb);        // venas magenta
+          col *= .55 + .45*smoothstep(.2, .7, neb);                            // huecos oscuros entre las nubes
+          // estrellas: una por celda, en lugares y brillos al azar, titilando
+          for(int k = 0; k < 2; k++){
+            float esc = k == 0 ? 60. : 140.;
+            vec2 g = vUv*vec2(uAsp, 1.)*esc + float(k)*13.;
+            vec2 id = floor(g), f = fract(g) - .5;
+            float r = h(id), b = step(.86 - float(k)*.06, r);
+            vec2 o = vec2(h(id + 3.1), h(id + 7.7)) - .5;
+            float d = length(f - o*.7), tw = .55 + .45*sin(uT*(.6 + r*1.8) + r*40.);
+            col += vec3(.9, .92, 1.)*b*smoothstep(.09 - float(k)*.03, 0., d)*tw*(k == 0 ? 1. : .55);
+          }
+          // la sombra redonda detrás del rostro, y un viñeteado suave
+          float r0 = length(c*vec2(1., .82));
+          col *= mix(.35, 1., smoothstep(.55, 1.45, r0));
+          col *= 1. - .35*smoothstep(1.2, 2.6, length(c));
+          gl_FragColor = vec4(col, 1.);
+        }`,
+    }));
+    cosmos.frustumCulled = false;
+    const escenaCosmos = new THREE.Scene(); escenaCosmos.add(cosmos);
     const camMezcla = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     // la cámara mira la imagen en píxeles (y hacia abajo, como la imagen)
     const camera = new THREE.OrthographicCamera(0, W, 0, H, -1, 1);
@@ -130,7 +181,11 @@
       renderer.setRenderTarget(rtA); renderer.clear(); renderer.render(escenaA, camera);
       if(f > 0){ poner(B, b, fa, fb, f, 1); renderer.setRenderTarget(rtB); renderer.clear(); renderer.render(escenaB, camera); }
       (mezcla.material as THREE.ShaderMaterial).uniforms.uF.value = f;
-      renderer.setRenderTarget(null); renderer.render(escenaMezcla, camMezcla);
+      renderer.setRenderTarget(null);
+      if(COSMOS){
+        const u = (cosmos.material as THREE.ShaderMaterial).uniforms; u.uT.value = t/1000; u.uAsp.value = cv.width/cv.height;
+        renderer.autoClear = false; renderer.clear(); renderer.render(escenaCosmos, camMezcla); renderer.render(escenaMezcla, camMezcla); renderer.autoClear = true;
+      } else renderer.render(escenaMezcla, camMezcla);
     }
 
     // el lienzo: la cara entera y lo más grande posible, centrada, el resto negro (el fondo de las caras es negro)
