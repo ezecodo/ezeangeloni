@@ -61,7 +61,20 @@
     renderer.setPixelRatio(Math.min(2, devicePixelRatio));
     // toda la pantalla del color del fondo de las fotos (un gris muy oscuro, no negro puro): no se nota el cuadro de la imagen
     renderer.setClearColor(0x000000, OBRA ? 0 : 1); document.body.style.background = OBRA ? 'transparent' : '#000';
-    const scene = new THREE.Scene();
+    const escenaA = new THREE.Scene(), escenaB = new THREE.Scene();
+    // las dos imágenes intermedias (una por cara), del tamaño del lienzo, y la mezcla final: la que se va 1-f, la que llega f
+    const rt = () => new THREE.WebGLRenderTarget(1, 1, { samples: 4, depthBuffer: false });
+    const rtA = rt(), rtB = rt();
+    const mezcla = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+      depthTest: false, blending: THREE.NoBlending,
+      uniforms: { tA: { value: rtA.texture }, tB: { value: rtB.texture }, uF: { value: 0 }, uOpaco: { value: OBRA ? 0 : 1 } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`,
+      fragmentShader: `uniform sampler2D tA, tB; uniform float uF, uOpaco; varying vec2 vUv;
+        void main(){ vec4 c = mix(texture2D(tA, vUv), texture2D(tB, vUv), uF); gl_FragColor = vec4(c.rgb, max(c.a, uOpaco)); }`, // negro sólido, salvo en la galaxia
+    }));
+    mezcla.frustumCulled = false;
+    const escenaMezcla = new THREE.Scene(); escenaMezcla.add(mezcla);
+    const camMezcla = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     // la cámara mira la imagen en píxeles (y hacia abajo, como la imagen)
     const camera = new THREE.OrthographicCamera(0, W, 0, H, -1, 1);
 
@@ -76,12 +89,10 @@
       g.setAttribute('aM', new THREE.BufferAttribute(aM, 1));
       // el eje y va hacia abajo (como la imagen), así que los triángulos quedan de espaldas: se dibujan de los dos lados
       const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
-        // las dos caras se suman sobre el negro, cada una con su parte (la que se va 1-f, la que llega f): un fundido
-        // exacto, también en el borde difuminado. Antes la nueva iba encima y por el borde se veía la vieja debajo, que al
-        // terminar la transición desaparecía de golpe (Eze: "hace pamm").
-        // (sumadas también en el alfa, premultiplicado: en la galaxia el lienzo es transparente y la cara flota)
-        transparent: true, depthTest: false, side: THREE.DoubleSide, blending: THREE.CustomBlending,
-        blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneFactor,
+        // Cada cara se dibuja sola en su propia imagen (sin mezclar: si unos triángulos del costado se dan vuelta en la
+        // transición y se pisan con sus vecinos, uno tapa al otro), y después las dos imágenes se funden (`mezcla`).
+        // Sumadas directamente, esos triángulos pisados sumaban dos veces: líneas claras junto a las orejas (Eze las vio).
+        depthTest: false, side: THREE.DoubleSide, blending: THREE.NoBlending,
         uniforms: { uMap: { value: null }, uMask: { value: null }, uOpacity: { value: 1 }, uNegro: { value: negro }, uMascara: { value: MASCARA ? 1 : 0 } },
         vertexShader: `attribute float aM; varying vec2 vUv; varying float vM;
           void main(){ vUv = uv; vM = aM; gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.); }`,
@@ -92,10 +103,10 @@
             // el borde: la máscara pintada (pareja, redonda, con el nacimiento del pelo), con una caída suave al final
             float mk = texture2D(uMask, vUv).r;
             float m = mix(1., mk*mk*(3. - 2.*mk), uMascara);
-            gl_FragColor = vec4(c*m*uOpacity, m*uOpacity);
+            gl_FragColor = vec4(c*m*uOpacity, m*uOpacity);   // premultiplicado (en la galaxia el lienzo es transparente)
           }`,
       }));
-      m.renderOrder = orden; m.frustumCulled = false; scene.add(m);
+      m.renderOrder = orden; m.frustumCulled = false; (orden ? escenaB : escenaA).add(m);
       return m;
     };
     const A = malla(0), B = malla(1);
@@ -115,10 +126,11 @@
       const k = Math.floor(t/CICLO), dentro = t - k*CICLO, a = ((k % N) + N) % N, b = (a + 1) % N;
       const f = dentro < QUIETA ? 0 : suave((dentro - QUIETA)/PASO);
       const fa = datos.formas[a], fb = datos.formas[b];
-      poner(A, a, fa, fb, f, 1 - f);
-      poner(B, b, fa, fb, f, f);
-      B.visible = f > 0;
-      renderer.render(scene, camera);
+      poner(A, a, fa, fb, f, 1);
+      renderer.setRenderTarget(rtA); renderer.clear(); renderer.render(escenaA, camera);
+      if(f > 0){ poner(B, b, fa, fb, f, 1); renderer.setRenderTarget(rtB); renderer.clear(); renderer.render(escenaB, camera); }
+      (mezcla.material as THREE.ShaderMaterial).uniforms.uF.value = f;
+      renderer.setRenderTarget(null); renderer.render(escenaMezcla, camMezcla);
     }
 
     // el lienzo: la cara entera y lo más grande posible, centrada, el resto negro (el fondo de las caras es negro)
@@ -134,6 +146,7 @@
     function medir(){
       const w = innerWidth, h = innerHeight;
       renderer.setSize(w, h, false); renderer.setViewport(0, 0, w, h);
+      const pr = renderer.getPixelRatio(); rtA.setSize(w*pr, h*pr); rtB.setSize(w*pr, h*pr);
       // la caja, centrada y entera, estirada al formato de la pantalla (lo de afuera es negro igual)
       const cx = (caja.x0 + caja.x1)/2, cy = (caja.y0 + caja.y1)/2, bw = caja.x1 - caja.x0, bh = caja.y1 - caja.y0;
       const s = Math.min(w/bw, h/bh), hw = w/s/2, hh = h/s/2;
