@@ -240,7 +240,65 @@ colours): `new DragonCuerpo('chino' | 'japones')`, parameters in `ESTILOS`. The 
 galaxy): five claws and a spur, deer antlers, sturdy head. The Japanese ryū: three claws (the legend of the dragon losing
 claws as it travelled from China: four in Korea, three in Japan), a slimmer body (`grosor` .8) with a longer, wider wave,
 finer legs, a long slender snout with small nostrils, long thin antlers swept back with one tine, a mane flowing back
-like water, long whiskers, the pearl further ahead. A Korean yong (four claws, pearl in the mouth or claw) or a naga
+like water, long whiskers, the pearl further ahead. **Seen from above** (`'cenital'`, option **5** on `/dragon/`, 2026-11-26; Eze, after the Paris restaurant's
+effect): the Chinese dragon, wider side to side (`ancho` 1.55: the tube is an ellipse, and the neck mapping `alCuello`,
+the head group's z scale and the whiskers widen by the same factor, so the head–neck join stays seamless), bigger legs
+splayed out to the sides (`abiertas`: the leg's IK "up" turned outwards round the spine, so the feet fall sideways and
+read from above). Reworked the same day (Eze: the zigzag was mechanical, the skin texture didn't work from above;
+"act as a motion designer"): the head draws one wide, lazy S across the table (two slow sines, no crests) and stays
+serene, while what snakes is the body: one long side-to-side wave (`ondaL` .85) growing slowly from the neck
+(`ondaDesde` .55), almost nothing up and down (`ondaV`), the pearl barely weaving (`vaiven`); the pace surges ±6 % with
+the strokes (`impulso`, whole cycles per pass so the loop stays seamless). Measured per frame: head turns ≤ 19°/s, the
+tail swings ±35° every ~3 s. Bigger scales (`esc` 72×12; 150×22 from above was bubble-wrap noise), and in every style
+the scale pattern fades where a scale gets only a few pixels wide (`fwidth`, no shimmer). The dorsal flames lie back flat
+along the spine as a crest, and the tail fan lies in the back's plane, so both open up seen from above.
+On the table page `montarVista(true)`: the camera straight above, the dragon ~0.78 of the table long. The other styles
+have `ancho` 1, `abiertas` 0 (unchanged).
+**The flat dragon** (option **6** on `/dragon/`, `src/cronovisor/dragon/dragon2d.ts`, `DragonPlano`; 2026-11-26, after
+Eze's video of Miss Ko's table in Paris: "not 3D, flat like this"): a graphic drawing in Canvas 2D seen from above, in
+the same palette: thick cream outlines (`C.borde`) that read when projected, a big head (`H` .14 of the body: skull and
+widening snout as one silhouette, ring eyes that blink, yellow brows and nostrils, deer antlers, long whiskers, cheek
+flames), a blue body with broad yellow crescent bands, four tapered clawed limbs drawn first, under the fur of flames (Eze: as in Miss Ko, the legs go under the fur, not over it), long enough that the hands and claws come out beyond it, and above all wavy flame strands
+coming off both flanks, the nape (the mane) and the tail: that's what makes it wide. The strands were redone after Eze's
+second screenshot ("more irregular, look at the wings"): `llama` gives each strand its own character from a hash of its
+`fase` (stable frame to frame): wave count, sway, thickness, a small curl at the tip; one in five is a long ribbon that
+waves several times. Even thickness almost to a rounded tip, swaying more than their own width, flowing back; separated
+by a near-black shadow, not a cream outline; the cream is only a light rim on one side, cut before the tip, and not on
+every strand (less white). The wings (Eze: "bigger, open"): over the shoulders and chest (`ala`, a bump round f .26) the strands are up to
+twice as long, denser, and open out sideways (`abre` up to ~.9), breathing open and closed slowly with a wave running
+back; the S of the flight is flatter here (±.22 of the half height) so the open wings stay on the table. The legs swim:
+same frequency as the body wave, diagonal pairs, each stroke a quick reach forward with the hand opening (40 %) and a
+slow pull back with it closing (60 %), the forearm lagging so the hand trails in the pull. Then (Eze: "too much noise", "seen from above the torso can't be bare"): the back is covered by a coat of
+calm flames lying back (rows every 4 rings, 2–3 per row by width, overlapping like scales from the tail forwards,
+`regular`, thin shadow), the flanks have fewer and steadier strands (one every 3 rings, little variation, ribbons 1 in
+10), the nape 6 strands; the blue body shows only at its edges. The coat and the flank strands point along the chord to the body further back
+(`atrasDe`), not the local tangent: the tangent turns with the body wave at every ring, and a long stiff strand along it
+swept side to side fast and jerkily (Eze saw it mid-back); their own sway is slow (coat 1.6 rad/s, flanks 2.8). The hands
+are claws: four short thick fingers (one a thumb turned back) each with a big hooked talon, a filled crescent, cream
+with a dark shadow, fanning open on the reach and curling shut on the pull. A strand's character is seeded from its `fase` and `lado` only, never its length or width: the chest
+breathes, so a seed with the coat's length in it changed every frame and 51 of 190 strands, from the head to the hind
+legs, changed shape every frame (Eze: "too fast, out of flow"; measured by wrapping `llama` and comparing two frames;
+now 0). `__mesa.plano` exposes the instance for such checks. Then (Eze: "same coverage, fewer elements"; "the wings must stand apart"; smaller claws): the
+flank fur is one strand every 5 rings, wider; the coat rows every 6 rings, 1–2 wider strands; the wings are their own
+piece (first, from each shoulder, a fan of seven big flame feathers in orange and gold (the fur is red), roots spread
+along the shoulder at the body's edge, open and swept back (~7° to ~70° from the side), curving towards the tail,
+flapping slowly (the fan opens and closes, back feathers more, each a little after the one before), drawn over the
+coat). Finally (Eze's photo of felt dragon wings: "fewer elements", "be a dragonologist") membrane wings, bat or
+wyvern style: per side an arm bone (shoulder to wrist, the leading edge with a cream rim), four long fingers fanning
+back from the wrist, one membrane stretched between them (gold to orange radial gradient) with a scalloped trailing
+edge (each stretch between tips curves towards the wrist) returning to the body behind the shoulder; bones dark red;
+the wings open and fold a little and sweep slowly. Drawn under the fur and the coat (right after the legs), roots inside the body, so the fur hides where they join. Then the same silhouette filled with scales instead of a smooth membrane (Eze: "size and shape perfect, but in the
+style of the scales"): the outline clips, a dark red ground fills any gap, and four rows of flame scales run along ten
+rays from the shoulder to the edge (wrist, finger tips and between them), outer rows first so the inner ones cover
+their roots, like the coat; no bones; dark outline and the cream rim on the leading edge. Finally the silhouette went too (Eze: "remove that wing shape, scales only, not so many"): nothing clips or
+fills; five rays from the shoulder (to the wrist and each finger tip, the same flapping skeleton) and three rows of larger
+scales on each, the outer row reaching the old edge, so the size and overall shape stay with 15 scales a wing. The hand claws are small (fingers ~.13, talons ~.19 of the flame
+scale). The mane fans at most ~40° from straight back (it used to reach 90° and read as spikes); the
+pearl's flames are `regular`. The pearl ahead. Same flight as the 3D top view
+(one lazy S, the body snaking, ±6 % surge). Stateless: `draw(ctx, u, t)` from the pass position and the clock, so the
+loop and the frame-by-frame video are exact; the table is empty at both ends of the pass. Its own canvas `#plano`
+(`body.modo-plano` hides the WebGL one; G records it). ~0.5 ms a frame.
+A Korean yong (four claws, pearl in the mouth or claw) or a naga
 (legless; a religious figure, handle with care) would be further styles; not made yet.
 
 **A model dragon was tried and dropped** (2026-11-25): "Chinese Red Dragon" (Sketchfab, CC BY 4.0), a static sculpture
@@ -258,7 +316,7 @@ to show and ends once the last of the tail has left the table, computed by proje
 must be updated before that). The camera's frame *is* the table (viewport + scissor), so everything else stays black.
 `renderer.outputColorSpace = LinearSRGBColorSpace` to match the Cronovisor's colours (which renders through its
 composer); whiskers are rebuilt at once when the head jumps (the loop's restart). Keys O, P, G (MediaRecorder, one pass),
-H, F, space to pause (and ← → a frame at a time while paused, for screenshots), and 1 / 2 (or the buttons bottom left, hidden with H, or `?estilo=1|2`) for the Chinese or the Japanese dragon; `?mesa=WxH` cm, `?seg=`. The 2D original stays in `~/Desktop/dev/dragon-mesa`. **The USB video:** `node tools/video/mesa-usb.mjs [out.mp4] [mesa] [seg] [fps]` (`ESTILO=2` for the Japanese; dev server running) renders exactly one pass frame by frame (two warm-up passes first), 1920×1080 H.264, black at both ends so the projector's loop doesn't show the seam; default `~/Desktop/dragon-mesa-USB.mp4`. `tools/video/dragon-story.mjs` does the Instagram story in the galaxy the same way (the page's clock made manual).
+H, F, space to pause (and ← → a frame at a time while paused, for screenshots), and 1 / 2 / 5 / 6 (or the buttons bottom left, hidden with H, or `?estilo=1|2|5|6`) for the Chinese, the Japanese, the Chinese seen from above or the flat one; `?mesa=WxH` cm, `?seg=`. The 2D original stays in `~/Desktop/dev/dragon-mesa`. **The USB video:** `node tools/video/mesa-usb.mjs [out.mp4] [mesa] [seg] [fps]` (`ESTILO=2` for the Japanese, `ESTILO=5` seen from above, `ESTILO=6` the flat one; dev server running) renders exactly one pass frame by frame (two warm-up passes first), 1920×1080 H.264, black at both ends so the projector's loop doesn't show the seam; default `~/Desktop/dragon-mesa-USB.mp4`. `tools/video/dragon-story.mjs` does the Instagram story in the galaxy the same way (the page's clock made manual).
 
 ## Morphing faces (for the restaurant client, 2026-11-25)
 

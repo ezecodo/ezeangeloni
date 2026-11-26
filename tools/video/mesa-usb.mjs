@@ -1,7 +1,7 @@
 // El video del dragón para el USB del proyector del restaurante: exactamente una pasada de /dragon/, en 1920×1080,
 // cuadro por cuadro (perfecto aunque el Mac esté ocupado), sin la ayuda ni el contorno. Puesto en bucle en el proyector,
 // no se nota el salto (al empezar y al terminar la mesa está vacía).
-// node tools/video/mesa-usb.mjs [salida.mp4] [mesa=180x90] [segundos=14] [fps=30]   (ESTILO=2 para el japonés)
+// node tools/video/mesa-usb.mjs [salida.mp4] [mesa=180x90] [segundos=14] [fps=30]   (ESTILO=2 para el japonés, ESTILO=5 el cenital, ESTILO=6 el plano)
 // Necesita: `npm run dev` en el puerto 4361 (o BASE=…), ffmpeg, y Puppeteer del proyecto cv (o PUPPETEER=…).
 import { createRequire } from 'node:module';
 import os from 'node:os';

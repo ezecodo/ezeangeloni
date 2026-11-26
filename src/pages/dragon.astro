@@ -6,7 +6,7 @@
  * es negro (en proyección, negro = luz apagada). Unlisted y sin indexar: es para mostrarle al dueño.
  * El prototipo 2D original sigue en ~/Desktop/dev/dragon-mesa.
  *
- * Ajustes (en la dirección): ?mesa=180x90 (cm) · ?seg=14 (segundos de una pasada) · ?estilo=1 chino, 2 japonés, 3 caras, 4 caras sobre el cosmos.
+ * Ajustes (en la dirección): ?mesa=180x90 (cm) · ?seg=14 (segundos de una pasada) · ?estilo=1 chino, 2 japonés, 3 caras, 4 caras sobre el cosmos, 5 el chino visto desde arriba (cenital, serpenteando), 6 el plano (2D, dibujado como el de Miss Ko, desde arriba).
  * El 3 son las caras que mutan (/caras/), cargadas dentro de esta misma página (un iframe encima): se cambia sin salir de
  * la pantalla completa, y espacio, ← → y H se le pasan a ella.
  * El selector de abajo a la izquierda (o las teclas 1 y 2) cambia de dragón; se oculta con H, como la ayuda.
@@ -35,19 +35,24 @@
     /* las caras: encima del dragón, sin tomar el ratón ni el teclado (las teclas se las pasa esta página) */
     #caras { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 2; pointer-events: none; display: none; background: #000; }
     body.modo-caras #caras { display: block; }
+    /* el dragón plano (6): su propio canvas 2D, el de WebGL se oculta */
+    #plano { display: none; }
+    body.modo-plano #plano { display: block; }
+    body.modo-plano #c { visibility: hidden; }
   </style>
 </head>
 <body>
-  <div id="stage"><canvas id="c" width="1920" height="1080"></canvas><canvas id="over" width="1920" height="1080"></canvas></div>
-  <div id="estilos"><button data-e="1" title="chino (long)">1</button><button data-e="2" title="japonés (ryū)">2</button><button data-e="3" title="caras">3</button><button data-e="4" title="caras sobre el cosmos">4</button></div>
+  <div id="stage"><canvas id="c" width="1920" height="1080"></canvas><canvas id="plano" width="1920" height="1080"></canvas><canvas id="over" width="1920" height="1080"></canvas></div>
+  <div id="estilos"><button data-e="1" title="chino (long)">1</button><button data-e="2" title="japonés (ryū)">2</button><button data-e="3" title="caras">3</button><button data-e="4" title="caras sobre el cosmos">4</button><button data-e="5" title="chino, visto desde arriba">5</button><button data-e="6" title="plano (2D), desde arriba">6</button></div>
   <iframe id="caras" title="caras" tabindex="-1"></iframe>
   <div id="ui">
-    <b>espacio</b> pausa (<b>← →</b> cuadro a cuadro) · <b>1</b> <b>2</b> <b>3</b> <b>4</b> dragón chino / japonés / caras / caras sobre el cosmos · <b>O</b> contorno de la mesa · <b>P</b> platos de prueba · <b>G</b> grabar un bucle (.webm) · <b>H</b> ocultar esto · <b>F</b> pantalla completa
+    <b>espacio</b> pausa (<b>← →</b> cuadro a cuadro) · <b>1</b> <b>2</b> <b>3</b> <b>4</b> <b>5</b> <b>6</b> dragón chino / japonés / caras / caras sobre el cosmos / chino desde arriba / plano · <b>O</b> contorno de la mesa · <b>P</b> platos de prueba · <b>G</b> grabar un bucle (.webm) · <b>H</b> ocultar esto · <b>F</b> pantalla completa
     <div id="msg"></div>
   </div>
   <script>
     import * as THREE from 'three';
     import { DragonCuerpo, LARGO, type Estilo } from '../cronovisor/dragon/dragon3d';
+    import { DragonPlano } from '../cronovisor/dragon/dragon2d';
     THREE.ColorManagement.enabled = false; // como el Cronovisor: los mismos colores
 
     const Q = new URLSearchParams(location.search);
@@ -65,66 +70,94 @@
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // como el Cronovisor (que dibuja por su post-procesado): los colores sin lavar
     const scene = new THREE.Scene();
 
-    // la cámara: de tres cuartos, elevada 35°, y su cuadro es exactamente la mesa (viewport + scissor = la mesa)
-    const ELEV = 35*Math.PI/180, FOV = 30, aspect = mesa.w/mesa.h;
-    const tanH = Math.tan(FOV*Math.PI/360);
-    const halfW = LARGO/.9/2, D = halfW/(tanH*aspect), halfH = D*tanH; // el cuerpo, casi tan largo como el ancho de la mesa
-    const camera = new THREE.PerspectiveCamera(FOV, aspect, 1, D*4);
-    camera.position.set(0, D*Math.sin(ELEV), D*Math.cos(ELEV)); camera.lookAt(0, 0, 0);
-    camera.updateMatrixWorld(); // antes de proyectar puntos para calcular el arranque y el final de la pasada
-    const derecha = new THREE.Vector3(1, 0, 0), arriba = new THREE.Vector3(0, Math.cos(ELEV), -Math.sin(ELEV)), hacia = new THREE.Vector3(0, Math.sin(ELEV), Math.cos(ELEV));
-
-    // el recorrido: de la esquina de arriba a la izquierda a la de abajo a la derecha (en la pantalla), ondulando arriba
-    // y abajo y acercándose y alejándose un poco de la cámara, para que se lea su volumen
-    const camino = (x: number) => {
-      const f = x/halfW;
-      const y = -.7*halfH*f + Math.sin(f*Math.PI*1.4)*halfH*.18 + Math.sin(f*Math.PI*.6 + 1)*halfH*.06;
-      const z = Math.sin(f*Math.PI*1.1 + .4)*halfH*.35;
-      return new THREE.Vector3().addScaledVector(derecha, x).addScaledVector(arriba, y).addScaledVector(hacia, z);
-    };
-    // tabla del largo de arco a lo largo de x
-    const X0 = -halfW - LARGO*2.2, X1 = halfW + LARGO*2.2, PASOS = 5000;
-    const arco = new Float64Array(PASOS + 1), xs = new Float64Array(PASOS + 1);
-    { let prev = camino(X0); xs[0] = X0;
-      for(let j = 1; j <= PASOS; j++){ const x = X0 + (X1 - X0)*j/PASOS, p = camino(x); arco[j] = arco[j-1] + p.distanceTo(prev); xs[j] = x; prev = p; } }
-    const enArco = (s: number) => {
-      let lo = 0, hi = PASOS;
-      if(s <= 0) return camino(X0);
-      while(hi - lo > 1){ const m = (lo + hi) >> 1; if(arco[m] < s) lo = m; else hi = m; }
-      const f = (s - arco[lo])/((arco[hi] - arco[lo]) || 1);
-      return camino(xs[lo] + (xs[hi] - xs[lo])*f);
-    };
-    const arcoDeX = (x: number) => arco[Math.round((x - X0)/(X1 - X0)*PASOS)];
-    // ¿se ve este punto en la mesa? (con margen para el grosor, la onda, las patas, los cuernos)
-    const enPantalla = (p: THREE.Vector3, pad: number) => {
-      const v = p.clone().project(camera), m = pad/halfW;
-      return Math.abs(v.x) < 1 + m && Math.abs(v.y) < 1 + m*aspect;
-    };
-    // la pasada: empieza con la cabeza (y la perla, delante) fuera por la izquierda y termina cuando la última punta de
-    // la cola salió de la mesa; en el salto del bucle no hay nada en la mesa
-    // el arranque: la última posición en que la cabeza, la perla de adelante y los cuernos todavía no asoman
-    let S_INI = LARGO*1.05;
-    for(let s = LARGO*1.05; s < arco[PASOS]; s += .25){
-      if(enPantalla(enArco(s + LARGO*.32), 4) || enPantalla(enArco(s), 6)){ S_INI = s - .5; break; }
+    // Dos vistas. De tres cuartos (1, 2): la cámara elevada 35°, cruzando la mesa en diagonal, de la esquina de arriba a
+    // la izquierda a la de abajo a la derecha. Cenital (5; Eze, 2026-11-26, el efecto del restaurante de París): la
+    // cámara justo encima de la mesa y el dragón serpenteando de un lado al otro, ancho, casi tan largo como la mesa.
+    // El cuadro de la cámara es exactamente la mesa (viewport + scissor = la mesa).
+    const FOV = 30, aspect = mesa.w/mesa.h, tanH = Math.tan(FOV*Math.PI/360);
+    interface Vista { camera: THREE.PerspectiveCamera; enArco: (s: number) => THREE.Vector3; S_INI: number; S_FIN: number; impulso: number }
+    function montarVista(cenital: boolean): Vista {
+      const ELEV = cenital ? Math.PI/2 - 1e-4 : 35*Math.PI/180;
+      // el cuerpo, casi tan largo como el ancho de la mesa (cenital: algo menos, para que el zigzag tenga lugar)
+      const halfW = LARGO/(cenital ? .78 : .9)/2, D = halfW/(tanH*aspect), halfH = D*tanH;
+      const camera = new THREE.PerspectiveCamera(FOV, aspect, 1, D*4);
+      camera.position.set(0, D*Math.sin(ELEV), D*Math.cos(ELEV)); camera.lookAt(0, 0, 0);
+      camera.updateMatrixWorld(); // antes de proyectar puntos para calcular el arranque y el final de la pasada
+      const derecha = new THREE.Vector3(1, 0, 0), arriba = new THREE.Vector3(0, Math.cos(ELEV), -Math.sin(ELEV)), hacia = new THREE.Vector3(0, Math.sin(ELEV), Math.cos(ELEV));
+      // el recorrido. Tres cuartos: ondulando arriba y abajo y acercándose y alejándose un poco de la cámara, para que se
+      // lea su volumen. Cenital (rehecho 2026-11-26: el zigzag de ida y vuelta se veía mecánico): la cabeza dibuja una
+      // sola S amplia y tendida, de curvatura que cambia despacio (dos senos lentos, sin crestas), entrando un poco desde
+      // arriba y saliendo un poco hacia abajo; lo que serpentea es el cuerpo (la onda que lo recorre hacia la cola), como
+      // una anguila o un dragón de papel: la cabeza va serena y la cola es la que se mueve
+      const camino = cenital
+        ? (x: number) => { const f = x/halfW;
+            const y = halfH*(.34*Math.sin(f*Math.PI*.5 + .2) + .04*Math.sin(f*Math.PI*1.1 + 2.1) - .08*f);
+            const z = Math.sin(f*Math.PI*.7 + 1.1)*halfH*.08;
+            return new THREE.Vector3().addScaledVector(derecha, x).addScaledVector(arriba, y).addScaledVector(hacia, z); }
+        : (x: number) => { const f = x/halfW;
+            const y = -.7*halfH*f + Math.sin(f*Math.PI*1.4)*halfH*.18 + Math.sin(f*Math.PI*.6 + 1)*halfH*.06;
+            const z = Math.sin(f*Math.PI*1.1 + .4)*halfH*.35;
+            return new THREE.Vector3().addScaledVector(derecha, x).addScaledVector(arriba, y).addScaledVector(hacia, z); };
+      // tabla del largo de arco a lo largo de x
+      const X0 = -halfW - LARGO*2.2, X1 = halfW + LARGO*2.2, PASOS = 5000;
+      const arco = new Float64Array(PASOS + 1), xs = new Float64Array(PASOS + 1);
+      { let prev = camino(X0); xs[0] = X0;
+        for(let j = 1; j <= PASOS; j++){ const x = X0 + (X1 - X0)*j/PASOS, p = camino(x); arco[j] = arco[j-1] + p.distanceTo(prev); xs[j] = x; prev = p; } }
+      const enArco = (s: number) => {
+        let lo = 0, hi = PASOS;
+        if(s <= 0) return camino(X0);
+        while(hi - lo > 1){ const m = (lo + hi) >> 1; if(arco[m] < s) lo = m; else hi = m; }
+        const f = (s - arco[lo])/((arco[hi] - arco[lo]) || 1);
+        return camino(xs[lo] + (xs[hi] - xs[lo])*f);
+      };
+      // ¿se ve este punto en la mesa? (con margen para el grosor, la onda, las patas, los cuernos)
+      const enPantalla = (p: THREE.Vector3, pad: number) => {
+        const v = p.clone().project(camera), m = pad/halfW;
+        return Math.abs(v.x) < 1 + m && Math.abs(v.y) < 1 + m*aspect;
+      };
+      // la pasada: empieza con la cabeza (y la perla, delante) fuera por la izquierda y termina cuando la última punta de
+      // la cola salió de la mesa; en el salto del bucle no hay nada en la mesa. Cenital, más margen: es más ancho y sus
+      // patas se abren a los lados
+      const pad = cenital ? 1.5 : 1;
+      let S_INI = LARGO*1.05;
+      for(let s = LARGO*1.05; s < arco[PASOS]; s += .25){
+        if(enPantalla(enArco(s + LARGO*.32), 4*pad) || enPantalla(enArco(s), 6*pad)){ S_INI = s - .5; break; }
+      }
+      let S_FIN = arco[PASOS] - 1;
+      for(let s = S_INI + LARGO; s < arco[PASOS] - 1; s += .5){
+        let fuera = true;
+        for(let q = 0; q <= 40 && fuera; q++) fuera = !enPantalla(enArco(s - q/40*LARGO), 7*pad);
+        if(fuera){ S_FIN = s + 2; break; }
+      }
+      // cenital: el avance no es constante, cada brazada de la onda empuja un poco (±6 % de la velocidad, ciclos enteros
+      // por pasada, así el bucle sigue sin salto)
+      return { camera, enArco, S_INI, S_FIN, impulso: cenital ? 5 : 0 };
     }
-    let S_FIN = arco[PASOS] - 1;
-    for(let s = S_INI + LARGO; s < arco[PASOS] - 1; s += .5){
-      let fuera = true;
-      for(let q = 0; q <= 40 && fuera; q++) fuera = !enPantalla(enArco(s - q/40*LARGO), 7);
-      if(fuera){ S_FIN = s + 2; break; }
-    }
-    let sCab = S_INI;
-    const llenar = (out: THREE.Vector3[], paso: number) => { for(let i = 0; i < out.length; i++) out[i].copy(enArco(sCab - i*paso)); };
+    const vistas: { tres?: Vista; arriba?: Vista } = {};
+    let V!: Vista;
+    let sCab = 0;
+    const llenar = (out: THREE.Vector3[], paso: number) => { for(let i = 0; i < out.length; i++) out[i].copy(V.enArco(sCab - i*paso)); };
 
-    // los dragones: 1 el chino, 2 el japonés; se arma cada uno la primera vez que se lo elige
-    const ESTILO: Record<string, Estilo> = { '1': 'chino', '2': 'japones' };
+    // los dragones: 1 el chino, 2 el japonés, 5 el cenital (visto desde arriba); se arma cada uno la primera vez que se lo elige
+    const ESTILO: Record<string, Estilo> = { '1': 'chino', '2': 'japones', '5': 'cenital' };
     const hechos: Partial<Record<Estilo, DragonCuerpo>> = {};
     let dragon!: DragonCuerpo;
     const caras = document.getElementById('caras') as HTMLIFrameElement;
-    let modoCaras = false;
+    let modoCaras = false, modoPlano = false;
+    // 6: el dragón plano, dibujado en 2D en su propio canvas (se arma la primera vez)
+    const planoCv = document.getElementById('plano') as HTMLCanvasElement, pctx = planoCv.getContext('2d')!;
+    let plano: DragonPlano | null = null;
     function elegir(n: string){
       modoCaras = n === '3' || n === '4';
       document.body.classList.toggle('modo-caras', modoCaras);
+      modoPlano = n === '6';
+      document.body.classList.toggle('modo-plano', modoPlano);
+      if(modoPlano){
+        plano ??= new DragonPlano(mesa.w, mesa.h);
+        document.querySelectorAll<HTMLButtonElement>('#estilos button').forEach(b => b.classList.toggle('on', b.dataset.e === n));
+        const u = new URL(location.href); u.searchParams.set('estilo', n); history.replaceState(null, '', u);
+        return;
+      }
       if(modoCaras){
         // 3 las caras sobre negro, 4 sobre el cosmos (/caras/?cosmos); se carga al elegirla
         const src = n === '4' ? '/caras/?cosmos' : '/caras/';
@@ -136,12 +169,13 @@
       const e = ESTILO[n]; if(!e) return;
       if(dragon) scene.remove(dragon.mesh);
       dragon = hechos[e] ??= new DragonCuerpo(e);
+      V = e === 'cenital' ? (vistas.arriba ??= montarVista(true)) : (vistas.tres ??= montarVista(false));
       scene.add(dragon.mesh);
       document.querySelectorAll<HTMLButtonElement>('#estilos button').forEach(b => b.classList.toggle('on', b.dataset.e === n));
       const u = new URL(location.href); u.searchParams.set('estilo', n); history.replaceState(null, '', u);
       if((window as any).__mesa) (window as any).__mesa.dragon = dragon;
     }
-    elegir(ESTILO[Q.get('estilo') ?? ''] || Q.get('estilo') === '3' || Q.get('estilo') === '4' ? Q.get('estilo')! : '1');
+    elegir(ESTILO[Q.get('estilo') ?? ''] || ['3', '4', '6'].includes(Q.get('estilo') ?? '') ? Q.get('estilo')! : '1');
     document.querySelectorAll<HTMLButtonElement>('#estilos button').forEach(b => b.addEventListener('click', () => elegir(b.dataset.e!)));
 
     let contorno = false, platos = false, grabando: { rec: MediaRecorder; desde: number } | null = null;
@@ -151,14 +185,25 @@
     const reloj = (now: number) => pausa ?? now - t0 - corrido;
     function dibujar(t: number){
       const u = (t % PERIODO)/PERIODO;
-      sCab = S_INI + (S_FIN - S_INI)*u;
+      if(modoPlano && plano){
+        pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.fillStyle = '#000'; pctx.fillRect(0, 0, W, H);
+        pctx.save(); pctx.beginPath(); pctx.rect(mesa.x, mesa.y, mesa.w, mesa.h); pctx.clip(); pctx.translate(mesa.x, mesa.y);
+        plano.draw(pctx, u, t/1000);
+        pctx.restore();
+        guias();
+        return;
+      }
+      sCab = V.S_INI + (V.S_FIN - V.S_INI)*(u + (V.impulso ? .06/(2*Math.PI*V.impulso)*Math.sin(2*Math.PI*V.impulso*u) : 0));
       dragon.pose(llenar, t/1000, 1);
       renderer.setScissorTest(false); renderer.setViewport(0, 0, W, H); renderer.clear();
       // sólo la mesa (el origen del viewport de WebGL es abajo a la izquierda)
       const vy = H - (mesa.y + mesa.h);
       renderer.setViewport(mesa.x, vy, mesa.w, mesa.h); renderer.setScissor(mesa.x, vy, mesa.w, mesa.h); renderer.setScissorTest(true);
-      renderer.render(scene, camera);
-      // encima, sólo para ver (no se graba): el contorno y los platos
+      renderer.render(scene, V.camera);
+      guias();
+    }
+    // encima, sólo para ver (no se graba): el contorno y los platos
+    function guias(){
       o.clearRect(0, 0, W, H);
       if(platos){
         const n = Math.max(2, Math.round(MESA_W/60));
@@ -174,20 +219,20 @@
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
-    (window as any).__mesa = { dibujar, PERIODO, dragon, camera, mesa };
+    (window as any).__mesa = { dibujar, PERIODO, dragon, get camera(){ return V.camera; }, mesa, get plano(){ return plano; }, pctx };
 
     // G: graba exactamente una pasada (el bucle no salta); sólo el dragón y la mesa, sin el contorno ni los platos
     function grabar(){
       if(grabando) return;
       const msg = document.getElementById('msg')!;
       const tipo = ['video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m))!;
-      const rec = new MediaRecorder(cv.captureStream(60), { mimeType: tipo, videoBitsPerSecond: 16e6 });
+      const rec = new MediaRecorder((modoPlano ? planoCv : cv).captureStream(60), { mimeType: tipo, videoBitsPerSecond: 16e6 });
       const partes: Blob[] = [];
       rec.ondataavailable = e => partes.push(e.data);
       rec.onstop = () => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob(partes, { type: 'video/webm' }));
-        a.download = `dragon-${dragon.estilo}-mesa-${MESA_W}x${MESA_H}-${PERIODO/1000}s.webm`;
+        a.download = `dragon-${modoPlano ? 'plano' : dragon.estilo}-mesa-${MESA_W}x${MESA_H}-${PERIODO/1000}s.webm`;
         a.click();
         msg.textContent = 'listo: el .webm está en Descargas (para el USB, pasarlo a .mp4)';
       };
@@ -197,7 +242,7 @@
     }
     addEventListener('keydown', e => {
       const key = e.key.toLowerCase();
-      if(key === '1' || key === '2' || key === '3' || key === '4'){ elegir(key); return; }
+      if(key === '1' || key === '2' || key === '3' || key === '4' || key === '5' || key === '6'){ elegir(key); return; }
       if(key === 'h'){ document.body.classList.toggle('clean'); caras.contentDocument?.body.classList.toggle('clean', document.body.classList.contains('clean')); return; }
       if(key === 'f'){ document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); return; }
       if(modoCaras){
