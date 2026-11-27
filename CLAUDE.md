@@ -235,7 +235,7 @@ made in code from primitives with the 2D design's proportions, parts and festive
 - Dev: `window.__dragon` (`.wait = 0` sends it out now; `.spine`, `.T` to ride along). Testing it, a joystick left
   connected kept taking the balloon up: `navigator.getGamepads = () => []` in the tab.
 
-**Two styles, one palette** (2026-11-25, for the restaurant's Japanese / Korean / Southeast Asian fusion; Eze kept the
+**Two styles, one palette** (2026-11-25, for the restaurant, first described as Japanese / Korean / Southeast Asian fusion (it turned out to be Japanese fusion, Eze 2026-11-27); Eze kept the
 colours): `new DragonCuerpo('chino' | 'japones')`, parameters in `ESTILOS`. The Chinese long (default, and the one in the
 galaxy): five claws and a spur, deer antlers, sturdy head. The Japanese ryū: three claws (the legend of the dragon losing
 claws as it travelled from China: four in Korea, three in Japan), a slimmer body (`grosor` .8) with a longer, wider wave,
@@ -293,11 +293,51 @@ rays from the shoulder to the edge (wrist, finger tips and between them), outer 
 their roots, like the coat; no bones; dark outline and the cream rim on the leading edge. Finally the silhouette went too (Eze: "remove that wing shape, scales only, not so many"): nothing clips or
 fills; five rays from the shoulder (to the wrist and each finger tip, the same flapping skeleton) and three rows of larger
 scales on each, the outer row reaching the old edge, so the size and overall shape stay with 15 scales a wing. The hand claws are small (fingers ~.13, talons ~.19 of the flame
-scale). The mane fans at most ~40° from straight back (it used to reach 90° and read as spikes); the
+scale). The legs are deep red (`C.pata`, #9c2216) with orange scale arcs and the flames' dark outline, not the body's blue (Eze: the light blue didn't match); then the head too (a gradient from that deep red at the nape to the bright red at the snout, orange ridges, golden eyes with a dark pupil, the cream rim kept so it stays the focus) and the body under the coat, so no blue is left. The eyes, seen from above (Eze: they didn't read; they were two white googly discs outside the skull): an almond set into the side of the skull, tilted back and out, nearly all amber iris (radial gradient) with a slit pupil and a glint, a dark socket shadow, and a thick bony brow (dark red with a gold crest line) hugging it from outside to a point behind; the blink closes the almond across. Then the whole head was redone with the body's elements (Eze: it had no relation to the body; gold brows on red
+looked like the Spanish flag; "like a biologist of the age of dragons"): a reptile's wedge skull in deep red covered
+with scutes (rows of small calm flame scales lying back, clipped by the silhouette, front rows over the roots of the
+ones behind, like the coat), a row of bigger ones on the snout ridge, supraorbital crests of three scale spines over
+each eye (drawn before the skull so their roots hide under it), keratin horns swept back (dark at the base to light at
+the tip, with growth rings), raised nostrils with a dark slit, long orange barbels, the flame cheek fins; a thin very dark red
+edge (the thick black outline didn't suit it) and a cream rim only along the snout, as on the flames. The head is 1.25× bigger than before (`H` = .175 of the body, Eze: in proportion to the body with its wings). The mane fans at most ~40° from straight back (it used to reach 90° and read as spikes); the
 pearl's flames are `regular`. The pearl ahead. Same flight as the 3D top view
 (one lazy S, the body snaking, ±6 % surge). Stateless: `draw(ctx, u, t)` from the pass position and the clock, so the
 loop and the frame-by-frame video are exact; the table is empty at both ends of the pass. Its own canvas `#plano`
 (`body.modo-plano` hides the WebGL one; G records it). ~0.5 ms a frame.
+**The flat dragon from the deep** (option **7** on `/dragon/`, `new DragonPlano(w, h, undefined, true)`, 2026-11-26;
+Eze: "coming up from the bottom", depth while you eat; chose this 2.5D route over rebuilding it in real 3D): the same
+drawing, but every spine point has a depth under the glass (`z`, 0 at the glass). It's projected in perspective towards
+the table's centre (`k = 1/(1 + z·.55)`: deeper, smaller; every size and outline at that point scaled by `kk[i]`) and
+fades into the black abyss (`vis`, gone by z ≈ 3.2, through `globalAlpha` per element). The route (`armarHondo`), redone after Eze found
+the turns jerky (measured: the head spun >1000°/s where the old Catmull-Rom route rose almost vertically, so seen from
+above it barely moved and its heading jumped; then 3700°/s where the head left the table on the right and the
+perspective, as it sank, brought it back as if turning round): what's seen from above is always a wide regular curve, a
+spiral (`R0` .62 of the half height, on the left) leaving tangentially into a gentle crossing; the depth is separate,
+a smooth function along the way (rises with the spiral, grazes the glass, then sinks no faster than lets it keep
+moving outwards on screen: `x·k` must keep growing); it dives right of centre, inside the table. Now the head turns at
+most ~87°/s (the spiral itself) with no jerk (max ~130°/s², was ~30,000). Real 3D wouldn't have fixed it by itself:
+the route was the problem. Embers (`brasas`) rise from the deep
+in perspective, driven by the pass position with whole cycles so the loop is seamless (first vs last frame: mean
+difference ~0). Its pass is 26 s (`PERIODO` per option unless `?seg=`). Next, if it works for Eze: more choreographies
+(the look: stops by a diner and rises to the glass to look and blink; chasing the pearl).
+**The fish** (option **8**, `new DragonPlano(w, h, w*.7, 'pez')`, 20 s; Eze: "like a fish rising to the surface"):
+it rises from the deep at the left end, surfaces, runs the length of the screen grazing the glass, and sinks at the
+right end. Built differently from 7 so it can't jerk: the route is designed as it LOOKS on screen (a Catmull-Rom curve
+in screen units) and the depth separately along it; the position in space comes from undoing the perspective (world =
+screen · (1 + .55 z)), so on screen it always follows that curve and only its size and light change. It comes in from beyond the left edge (Eze: not
+appearing inside the screen, "from the middle", but from the end opposite to where it leaves): the route starts off
+screen at depth 2.4 and rises while it enters (to point 2.7 of the curve), grazes the glass, and sinks from point 4.69
+of the curve: from the 4th control point on it is the original route untouched, and the dive is anchored to the same
+point of the curve as in the first version (Eze: the ending was perfect, only the beginning was wrong; anchoring the dive
+to a percentage of the longer route had moved and steepened it). Then the dive itself (Eze: it didn't look like going
+down, it deformed badly, no sense of depth): depth is now darkness, not transparency, in 7 and 8 alike (`envolver`, a
+Proxy on the context that takes every colour set towards a faintly blue black by `osc`, gradients by opacity; pure black
+at the deepest so no ghost silhouette): the overlapping flames, made transparent, showed through each other and the
+dragon came apart; now every piece stays solid and just goes dark, head first while the tail still glows. And the end of
+the curve slows and converges on a point, so the whole body goes down through the same spot, like a fish diving. The pass
+starts when the pearl and its halo, ahead of the (depth-scaled) head, are about to show at the edge; before the route's
+start the body continues backwards along the curve (piled on one point, it spun the head). Measured: the head turns at
+most ~14°/s, no jerk; seamless loop. Also in the bar configurator.
 A Korean yong (four claws, pearl in the mouth or claw) or a naga
 (legless; a religious figure, handle with care) would be further styles; not made yet.
 
@@ -317,6 +357,299 @@ must be updated before that). The camera's frame *is* the table (viewport + scis
 `renderer.outputColorSpace = LinearSRGBColorSpace` to match the Cronovisor's colours (which renders through its
 composer); whiskers are rebuilt at once when the head jumps (the loop's restart). Keys O, P, G (MediaRecorder, one pass),
 H, F, space to pause (and ← → a frame at a time while paused, for screenshots), and 1 / 2 / 5 / 6 (or the buttons bottom left, hidden with H, or `?estilo=1|2|5|6`) for the Chinese, the Japanese, the Chinese seen from above or the flat one; `?mesa=WxH` cm, `?seg=`. The 2D original stays in `~/Desktop/dev/dragon-mesa`. **The USB video:** `node tools/video/mesa-usb.mjs [out.mp4] [mesa] [seg] [fps]` (`ESTILO=2` for the Japanese, `ESTILO=5` seen from above, `ESTILO=6` the flat one; dev server running) renders exactly one pass frame by frame (two warm-up passes first), 1920×1080 H.264, black at both ends so the projector's loop doesn't show the seam; default `~/Desktop/dragon-mesa-USB.mp4`. `tools/video/dragon-story.mjs` does the Instagram story in the galaxy the same way (the page's clock made manual).
+
+## The bar with a screen (for the restaurant client, 2026-11-26)
+
+`/barra/` (`src/pages/barra.astro`, noindex): a 3D sketch of what the client asked for after the meeting: a long bar
+(250 cm) with an LED screen 60 cm wide along the middle, wood on both sides to eat on (35 cm each by default, 130 cm in
+all), and one tempered glass over all of it (no joints to clean). Sliders for length, total width and screen width, bar (105) or table (75) height, views (general,
+diner, from above), toggles for glass, dragon and place settings; it reads out the wood left per side (red under 30 cm:
+a 27 cm plate doesn't fit), the screen's aspect, the glass area and weight (laminated 12 mm, 2.5 kg/m²/mm) and the
+covers. The screen shows the flat dragon at the strip's real proportion (`new DragonPlano(w, h, largo)`: the optional
+body length, for strips narrower than the table's 2:1). (At first I read 60 cm as the whole width; Eze: 60 is the
+screen.) A **pros y contras** sheet (button, key T, or `?tradeoffs`): the one-piece glass (cleaning and protected wood for;
+scratches where people eat and replacing the whole ~100 kg piece if it's damaged against, with the three-piece
+alternative; laminated safety, fabrication, sealed edge with a drip), the screen under glass (reflections solved by the
+lighting design, AR glass as plan B; gap and double image; LED fine pitch vs LCD; heat; service access from below;
+cost) and the content. Three heights (Eze: "the chairs will be low; then the table lower too"): bar 105 with 76 stools, table 75 with 46
+chairs, low 65 with 40 lounge chairs (`MODOS`); the panel reads the thigh room under the wood and the knee room under
+the screen (`BAJO_PANTALLA`, 10 cm of module and box), red under 20 cm; the sheet has a section on it. Wood (Eze: choose types and colours): seven species with an approximate natural matte colour each (`MADERAS`:
+light oak, oak, ash, cherry, teak, walnut, wengé; the grain drawn per species with a fixed seed), one for the top and
+one for the body, as swatches. Structure: **isla** (default; Eze: "more like an island") a solid central body with a
+recessed plinth, the top overhanging all round, the long sides by `voladizo()` (what knees need, 30 bar / 35 table, never
+more than the wood), housing the screen's electronics with vents; or **patas**, four legs and a thin box under the
+screen. Screen presets (`MODELOS`, from lg.com/es on 2026-11-26): the two LG Ultra Stretch that fit, **88BH7G-B** (2158 × 611
+× 85 mm, 3840 × 1080 32:9, 700 nits, 450 W typ., 33.9 kg; the default) and **86BH5F-M** (2158 × 349 × 82 mm, 3840 × 600
+58:9, 500 nits, 220 W, 20.5 kg), or "a medida" (the old free width over the whole length). A model fixes the strip to
+its outer size, leaves 35 cm of wood a side, fills the strip's two ends with wood (~17 cm on a 250 bar), sizes the image
+(outer minus bezels; LG doesn't publish the active area) and lists its specs, with the heat flagged and "face-up: ask LG
+(N/D)": neither sheet says it may lie face up. A new screen size rebuilds the canvas texture (`pantallaTex.dispose()`),
+or the image came out split. The glass is subtle (Eze: too shiny, the wood's real colour must show): opacity .05, little clearcoat and environment;
+the green edge says "glass". Tone mapping `NeutralToneMapping` (ACES washed and shifted the wood) and near-neutral lights.
+The wood is computed per pixel with value noise (`texturaMadera`, 2048 × 512, cached per species, map + bumpMap):
+growth rings along the board at irregular spacing that changes slowly along it (lines converge and part), a wide
+cathedral arch here and there, the latewood band of each ring darker and uneven, fine elongated pores, soft tone
+patches. More realistic (Eze: "make the sketch more realistic"): a room (polished microcement floor from noise, dark plaster
+walls and ceiling, `scene.environmentIntensity` .35 so the white studio environment doesn't light a dim restaurant);
+two linear pendants hung over the wood strips (RectAreaLight, warm; not over the screen, as the pros/cons sheet
+advises) plus a high key light for the shadows (2048 map); the screen tints the tableware with its average colour
+(`luzPantalla`, a weak PointLight sampled from the canvas every 6 frames); rounded edges on every box (`RoundedBoxGeometry`)
+and wood UVs from world position (`aEscala`: 250 × 40 cm per texture, grain along the bar; before, the island's front
+had giant grain). GTAO, an MSAA composer, transmission glass and a quality button were tried and removed (Eze: "it all
+gets slow; the quality before was more than enough"): plain render with antialias, pixel ratio up to 2, light glass. The screen plays the dragon variants that share the 2D engine (Eze: see each animation on the table): **en la
+pantalla** 6 (flat, 16 s pass), 7 (from the deep, 26 s, body a bit shorter, `ph*1.7`, so its spiral has room in a
+strip), or off; built for the screen's real proportion (`hacerDragon`, cached per option). 8 (the fish, 20 s) too; in the panel the fish is "desde el fondo (8)" and the default, the spiral "espiral (7)" (Eze looked for the fish under "from the deep"). The screen's width label sits on the end wood, not over the image where the dragon comes in, and a **medidas** button hides all the labels. The 3D variants (1, 2, 5)
+and the faces aren't there: they'd need a second render per frame. Japanese fusion (Eze: the restaurant is Japanese fusion; the low chairs didn't convince him; cutlery?): no cutlery but
+lacquered chopsticks lying across in front of the diner, tips to the left on a ceramic rest (hashioki); dark stoneware
+plates (`gres`, the plate lathe at .82), a soy dish on the right and a low glass on the left, both behind the plate
+(`enZ`: depth from the diner's edge); light-oak seats: bar stools with four splayed legs and a foot ring; chairs in a
+minimal Japanese style (frame, woven paper-cord seat from a canvas texture, back legs rising to one curved rail; the low
+one wider, deeper, lower back). A sketch to discuss, not a fabrication drawing.
+
+## The table project's pages and the style (2026-11-27)
+
+**`/mesa/`** (`src/pages/mesa/index.astro`, noindex) is the entry to everything for the restaurant (Eze: one page that
+reaches all that's done, plus an elements section): cards with thumbnails for the bar simulator, the flat dragon (8, 7,
+6), the 3D dragon (5, 1, 2), the faces (3, 4), the style guide and the elements. Thumbnails in
+`public/mesa/miniaturas/*.jpg` (this ffmpeg has no WebP encoder), shot with Puppeteer from each page (the dragons at a
+fixed point of their pass through `__mesa.dibujar`). A shared navigation bar (`src/components/CabeceraMesa.astro`, Mesa · Simulador · Dragón · Guía de estilo · Elementos · Escenas)
+is always in view (Eze: to jump between the modules): sticky at the top of the /mesa/ pages, fixed at the top of
+`/barra/` (its panels moved down to 50 px) and `/dragon/`, where H hides it with the rest of the interface (it's what
+goes to the projector) and `tools/video/mesa-usb.mjs` hides it from recordings.
+
+**The style** (`src/cronovisor/dragon/estilo.ts`): the flat dragon's graphic rules extracted as code, the base for
+designing the elements (Eze chose designing them here in code over Claude Design, so they're born animatable in the
+same engine): the palette (`C`, `PALETA` with each colour's role), `SOMBRA`, the flame `llama()` (the base shape, its
+character from its seed), the reptile eye `ojoReptil()`, depth as darkness (`Hondura`, `escalaHondura`, `luzHondura`),
+and the rules in words at the top. `DragonPlano` uses it; the refactor changed nothing on screen (6, 7, 8 compared pixel
+for pixel: 0 difference). **`/mesa/estilo/`** draws the guide live with that same code: the rules, the palette, free
+flames / ribbons / regular ones, outline and light, a scale surface, the eye blinking, the same piece at five depths.
+
+**The elements** (`src/cronovisor/elementos/index.ts`, `ELEMENTOS`): each element has an id, a name, a line, and a
+stateless `dibujar(ctx, w, h, t)`, drawn with the style; **`/mesa/elementos/`** is a menu on the left (by group) and the chosen one large
+on the right with its description and planned movement, where its animation will play (only the chosen one is drawn;
+`#id` in the URL opens one, ↑ ↓ / j k walk the menu; Eze, 2026-11-27). An **animado / estático** switch (E; remembered in
+localStorage): static draws each element at its best second, `FOTO` in `elementos/index.ts` (the ensō written, the bowl
+repaired, the neon lit, the fireworks open; 0 when absent). To add one: a file in that folder exporting its `Elemento`, added to `ELEMENTOS`; then a thumbnail.
+Elements are 2D and static for now (Eze: design first); each keeps its planned movement, Eze's own description, in
+`animacion` (shown as "movimiento previsto"), and may have a `grupo` (the page groups them).
+- **Wagara** (`wagara.ts`, group "Patrones tradicionales (wagara)"; planned: pulse or change colour to the restaurant's
+  music): **Seigaiha** (fans of concentric rings, deep red outside to pale gold inside, rows overlapping like tiles, cream
+  rim on the outer ring's upper left; **animated**, the first element to move, 2026-11-27: a broad swell crosses the
+  pattern diagonally, lifting the fans a little at its crest and lighting them (each ring takes some of the colour of the
+  one inside, `mezcla`), the cream rim growing like foam, and the whole sea drifts sideways; an exact loop, 18 s: the
+  swell turns every `OLA` 9 s and the drift moves one module, 2R, every 18 s), **Asanoha** (a triangle grid, each triangle split into three kites, one per
+  vertex; the six kites round a vertex form a six-point star, three colours so neighbouring stars differ; **animated**:
+  heartbeats born at the centre open in rings, `LATIDO` 4.5 s; as the front passes each star flashes towards pale gold,
+  its radii glow, and it moves to the next of the three colours (all on a ring at once, so neighbours never match),
+  settling slowly; three beats bring every star back, an exact loop of 13.5 s; the traditional
+  lines, sides and centre-to-vertex, in shadow; colouring each third by its side's direction looked like Escher cubes
+  instead), **Shippo** (circles on a square grid crossing their four neighbours: orange lenses, red four-point stars,
+  deep red inside, a small gold diamond at each centre, cream rim on some circles; **animated**: four gold glints run round each
+  ring, alternating direction like a checkerboard and starting at the crossings, so neighbours mirror each other, meet
+  at every crossing at once and the light seems to pass from ring to ring; the lenses light up as they meet, the
+  diamonds twinkle each in its own time; an exact loop, a quarter turn every `VUELTA` 4 s).
+- **Shodō** (`shodo.ts`, group "Caligrafía (shodō) y tinta"; planned: brush strokes that write themselves in the air and
+  turn into smoke or golden particles). Black ink wouldn't show on the black table, so it's **ink that burns**: the
+  stroke is a reddish black sumi (`SUMI`) with a wet sheen along it, dry-brush gaps (kasure) opening towards the end, an
+  ember glow round it and a red edge with an orange rim on one side; the brush lands round (an arc behind the stroke; the
+  other way made a notch); and the tip dissolves into golden particles, a frozen moment of the transformation
+  (`pincelada(linea, ancho(q), …)`, reusable for any stroke). **Ensō** (the zen circle in one stroke, heavy landing at
+  the upper left, thinning, drying before it closes into gold dust); **animated** (`ENSO` 13 s cycle): the brush lands, the circle
+  writes itself (slow at the landing, fast round, slow at the lift, an ember at the tip), stays breathing while the tip's
+  dust drifts off as gold smoke (`soplo` in `pincelada`), then comes apart from where it began, erased on its own
+  canvas with a feathered edge while the ink becomes gold particles that rise and fade; a dark pause, again and **火** (fire, four strokes: two dots, the long
+  stroke sweeping down left, the right sweep widening; both sweeps end in gold dust; **animated** (`FUEGO` 14 s): the four strokes write
+  themselves in calligraphy's stroke order, `ORDEN`, the brush lifting between them, the kanji stays burning, then comes
+  apart in gold dust). Both share `vivos()`: strokes half written with an ember tip, the dust drifting as smoke, and
+  the coming apart on their own canvas.
+- **Kintsugi** (`kintsugi.ts`, group "Kintsugi · reparar con oro"; planned: a dark ceramic or stone texture that cracks,
+  liquid gold flowing through the cracks; "fusion" and luxury). The surface is a warm black (ceramic glaze or grainier
+  stone) computed per pixel once per size (`cache`), only copied each frame; the cracks (`grietas`) are near-straight
+  runs with sharp kinks and few branches (smooth wandering ones looked like veins or lightning); the gold (`oro`): a dark
+  shadow under it, deep gold with a glow, gold, a light rim on one side, small pools where branches start. **Chawan
+  reparado** (a black tea bowl from above: rim lip with a cream rim at the upper left, glaze pooling in the well, cracks
+  from a blow at the rim) and **Piedra agrietada** (full-screen stone with a gold crack network, a background). **Animated** (`reparar`, `CICLO` 16 s):
+  whole, then it breaks (dark cracks run fast from the blow, a flash where it hits; each `Grieta` knows its `inicio`,
+  how far from the blow it's born, so cracks and gold run in order), the liquid gold flows slowly along every crack
+  with a lit drop at each front (a branch fills when the gold reaches where it's born: `oro(…, hasta)`), once repaired
+  a glint runs along the gold seams, then it fades to dark and comes back whole (`telon`).
+- **Neo-Tokio** (`neon.ts`, group "Neo-Tokio · carteles de neón"; planned: neon flicker). Warm neon, not the usual pink
+  and cyan (the dragon's rule is fire): red, orange and gold tubes with a near-white hot core (`neon()`: halo, glass,
+  core, each a glowing stroke), the Japanese text as hollow tube letters (`strokeText` of each glyph's outline), on a
+  dark board with a metal edge and screws, a glow on the wall, and the Spanish word under it so diners understand.
+  **融合** (yūgō, "fusión", a vertical street sign), **味** (aji, "sabor", a big kanji in a neon ring like a ramen shop),
+  **ようこそ** (yōkoso, "bienvenidos", a horizontal sign underlined in red). **Animated** (`brillo`, stateless, `CICLO` 22 s):
+  the sign starts dark (the unlit glass tubes show) and each tube lights in turn with a starting neon's stutter, then
+  hums, now and then a tube stutters for an instant, each sign has one loose tube (`flojo`) that stutters more and
+  sometimes sits at half light; at the end the power cuts, one last flash, and again. Each kana of ようこそ is its own
+  tube, lighting left to right; the wall glow follows the tubes. The Japanese font is the system's
+  (Hiragino, Yu Gothic, Noto): if the table's player has none, serve Noto Sans JP from our own server.
+- **Daruma** (`daruma.ts`, group "Daruma"; planned: rolling or winking, for livelier moments). Red by tradition, so it
+  sits in the palette: an egg-shaped body with the dark shadow round it, a red radial shading and a cream rim at the upper
+  left; gold dragon flames rising from the bottom and sweeping out on both sides (`llama`, free ones; regular ones
+  stacked looked like corn); the face in a warm bone tone (the one exception to "cream only as a rim": a Daruma's face
+  is light) with its traditional gold border, crane eyebrows, turtle beard, small nose and mouth; 福 (fuku, fortune) in
+  gold on the belly (system Japanese serif font). **Daruma · el deseo** (front, one eye painted, the other blank: the
+  wish made) and **Daruma · guiño** (tilted mid-roll, winking). **Animated**: the deseo (`DESEO` 16 s): a self-righting
+  okiagari rocking gently; the second eye gets painted (the ink sweeps round like a brush, `pinta`), the wish come
+  true; it shakes with joy, a damped wobble, among gold sparkles (`destellos`); fades and returns with one eye. The
+  guiño (`GUINO` 12 s): rolls in from the left (turning on its centre, `rueda`, angle = distance / radius, slowing),
+  rights itself with a damped wobble, winks with a little hop, rolls off to the right accelerating.
+- **Torii** (`torii.ts`, group "Torii"; planned: floating on water with moving reflections, or an "infinite tunnel" the
+  camera moves through). `torii()` draws a myōjin torii from the front: vermilion (our red) pillars leaning in a little,
+  with shade on one side and a cream rim on the other, black nemaki bases, the nuki crossbeam sticking out, the gakuzuka
+  with its tablet, the red shimaki, and the black curved kasagi with raised ends (black by tradition, but outlined in
+  deep red with a warm rim along its top: plain black with a dark shadow vanished against the night and the gate looked
+  roofless). **Torii sobre el agua** (dark water under a low gold moon with its trail; the gate's reflection flipped
+  below the horizon in many thin strips shifted by the ripples, gentler near the horizon; the gate kept small enough for
+  the whole reflection, beams included, to fit) and **Túnel de torii** (gates one behind another towards a vanishing
+  point like Fushimi Inari, smaller and darker with distance through `Hondura`, the dragon's depth rule, over a path). **Animated**:
+  on the water (`AGUA` 24 s) the ripples run through the reflection, the moon's trail shimmers, and paper lanterns (tōrō
+  nagashi) drift across with their reflections; the gate's layer is drawn once per size. The tunnel walks forward
+  endlessly (`PASO` 2.6 s per gate: the nearest passes over the camera, a new one is born in the dark at the back, the
+  path's joints come towards you, the view sways a little like walking; exact loop after one step).
+- **Sensu y wagasa** (`sensu.ts`, group "Abanicos (sensu) y sombrillas (wagasa)"; planned: opening and closing in sync,
+  revealing geometric patterns). What they reveal are the wagara already designed (drawn once into their own canvas,
+  `patron()`, and clipped into the paper), so the elements speak to each other. `sensu()`: the paper an annular sector
+  folded into facets alternating light and shade, dark lacquer ribs under it, the two thick outer guards over it with a
+  light rim, a gold edge, a gold rivet. **Sensu · abanico abierto** (seigaiha), **Wagasa · desde abajo** (the paper
+  umbrella from below: gores alternating light and shade, the asanoha drawn large (small, its lines plus the ribs were
+  noise), light through the paper, ribs, the coloured thread rings round the hub) and **Coreografía de abanicos** (five
+  fans in a row, each more open than the last: the synchronised opening frozen, revealing the three wagara). **Animated**
+  (`abierto()`: closed, opening with a small bounce like a flick of the wrist, open, closing evenly): the sensu opens,
+  fans itself (swaying round its pivot) and closes (`SENSU` 10 s); the wagasa opens from a small slack circle, turns
+  slowly as in a dance (ten gores exactly, so the loop doesn't jump) and closes (`WAGASA` 13 s); the row opens in a
+  wave left to right, sways in sync, closes in a wave (`FILA` 12 s).
+- **Chōchin** (`chochin.ts`, group "Linternas de papel (chōchin)"; planned: hanging and swaying gently, a warm light
+  that lights the rest of the scene). `chochin()`: a cord and gold hook, a barrel of red paper lit from inside (gold at
+  the centre to red and deep red at the edge, with an outer glow), shade on the right, the kanji in slightly transparent
+  ink, bamboo ribs as arcs following the barrel, black lacquer caps with a warm rim, a cream rim on one side, a tassel;
+  `halo()` the warm light on what's around (drawn first). **Chōchin · 祭** (matsuri, festival) and **Hilera de faroles**
+  (lanterns on a sagging cord, each caught at another point of its sway: 酒 sake, 食 food, 宴 banquet; their light adds
+  up over the scene). **Animated**: each lantern swings gently from its hook (a pendulum with a smaller sway on top, as
+  a breeze pushes it), the candle inside flickers (`vela`: a few oscillations, now and then a brief dip as the flame
+  leans; `fuego` lights or dims the paper) and the halo follows the lantern and its flame; on the row the breeze passes
+  left to right, each lantern a little after the last, the cord's sag breathing.
+- **Monte Fuji** (`fuji.ts`, group "Monte Fuji"; planned: clouds passing over the summit, lighting changes). Flat
+  minimalist shapes: the mountain with concave slopes (height rising with q^1.8: gentle at the base, steep near the
+  top; the first try bulged out), a flat notched summit, a snow cap with a jagged lower edge (tongues down the gullies)
+  and gully lines, a light rim on the left slope; two small ukiyo-e clouds (bands with round ends, a dark outline and a
+  light rim), one across the summit. Three lights in the fire palette (`Luz`): **amanecer** (deep red to peach sky, a big
+  low sun behind the right slope, snow in a fiery pink), **noche estrellada** (near-black sky, warm stars, a crescent
+  moon clipped with an even-odd path (a dark disc showed over the glow), dim snow, moon-rimmed clouds), **eclipse** (a
+  black disc over the summit with a gold corona, rays and a diamond-ring glint, the mountain in silhouette). **Animated** (`CICLO` 30 s): the clouds drift past the summit and come back in (an
+  exact loop); dawn: the sun rises behind the slope, a dark curtain at the cycle's ends; night: the stars twinkle and a
+  shooting star crosses once; eclipse: the moon crosses the sun to totality (the corona and its rays fade in and turn
+  slowly, the mountain dims, a diamond-ring flash just before and after) and uncovers it.
+- **Bambú** (`bambu.ts`, group "Bambú"; planned: swaying in the wind, light beams through the leaves; freshness and
+  elegance). Bamboo is green but the rule is fire, no greens: warm key (told Eze; green would be an exception to the
+  palette if he wants it). `tallo()`: a round cane (light on one side, shade on the other) with nodes (a dark ring and a
+  light line above); `ramo()`: a thin arching twig with leaves alternating along it, drooping a little (fanned from one
+  point they looked like palm fronds); `haces()`: diagonal light beams added with "lighter". **Bosque de bambú al
+  atardecer** (three layers of canes, the far ones thinner and darker through `Hondura`, leaves in silhouette with an
+  orange rim, golden beams between the layers) and **Bambú dorado** (golden bamboo, Phyllostachys aurea, which exists:
+  amber canes, reddish-gold leaf sprays with a light rim, dappled light). **Animated** (the wind, `rafaga`: gusts crossing left to right over a slow sway, stateless):
+  canes bend from the ground up (the offset grows with the square of the height, `enTallo`; near canes move more, and
+  the sprays stay on their cane), twigs nod and every leaf flutters at its own rate, the beams breathe and the dappled
+  spots drift and pulse; up close the thick canes barely sway and the leaves do the moving.
+- **Sakura y momiji** (`sakura.ts`, group "Sakura y momiji"; planned: petals falling gently in the wind, for
+  transitions between animations or depth in the background). Momiji is the fire palette itself; sakura is pink, in the
+  peach "fire pink" of the Fuji dawn. `momiji()`: a seven-lobed Japanese maple leaf (the shadow of all lobes first, then
+  the fill, so the outline is only outside), stem, veins, a light rim; `petalo()`: an oval petal with a small notch (a
+  deep one made it a heart), darker at the base, a light rim; both turned and tilted (scaled by the cosine of the
+  tilt). Depth like the dragon (`caida`: smaller and darker far away through `Hondura`). Hundreds of pieces, so each
+  piece's picture is drawn once per size (`enCache`) and only copied each frame. **Momiji cayendo** (background depth),
+  **Sakura cayendo**, **Cortina de transición** (a wide dense diagonal band of both crossing the screen, thinning
+  outside it: the moment of a transition between animations; **animated**: every piece is painted once as a sprite, `figura`, by
+  type, colour and one of `NIVELES` darkness levels, then only copied, turned, shrunk by depth and squashed by the
+  cosine of its tumble, so it turns from face to edge; they fall, near ones faster (parallax), the wind carrying them
+  sideways in waves; the curtain's band sweeps across the screen perpendicular to itself, from lower right to upper
+  left, in `CORTINA` 9 s with an empty pause).
+- **La gran ola** (`ola.ts`, group "La gran ola"; planned: the water's movement with stylised foam, hypnotic on LED;
+  Eze suggested gold, turquoise or neon: turquoise clashes with the rule, gold and warm neon fit). An own wave in
+  Hokusai's style (his, of 1831, is public domain): the shape in normalised coordinates (`LOMO` the back rising from the
+  lower left to the crest, `LABIO` the lip curling forward into a hook, `FRENTE` the face), Catmull-Rom. **La gran ola
+  dorada**: bands parallel to the back in deep reds and gold, the hollow under the lip as a soft dark cavity with a few
+  curved bands (a rectangle shading first showed hard edges), the crest foam as Hokusai's "claws" made with the dragon's
+  `llama` in cream and gold (almost the same shape), gold spray, a smaller wave behind, a little Fuji far away. **Animated** (`RESPIRA` 7 s): the wave breathes
+  (`marea`: the crest rises and the lip curls further, as if about to break, then relaxes), the bands run up its face
+  towards the crest (each keeps its colour as it moves), the foam claws sway (the `llama` moves on its own) and the
+  drops leap from the lip in arcs and fall; the small wave behind breathes at another time. **La gran
+  ola en neón**: the same wave only in warm neon tube lines (open at the bottom: closed it looked like a mound), gold
+  curls along the crest.
+- **Maneki-neko** (`neko.ts`, group "Maneki-neko"; planned: waving gently; a pop/urban take). One silhouette
+  (`formas`: sitting, front, a paw raised well clear of the head, collar with bell, koban coin) in two styles. **Negro y
+  oro**: the cat in deep black against a warm halo, only a few glowing gold strokes (all outlines stroked first and the
+  black filled over them, so there's one outer outline; stroked after, they crossed inside), and the dragon's reptile
+  eyes (`ojoReptil`), gold and slit, perfect on a cat. **Streetwear**: a pop sticker, flat reds, thick outline, the
+  sticker's offset shadow in gold, happy closed eyes, blush, the chest printed with shippo, 福 on the koban, gold
+  four-point sparkles around. **Animated**: the raised arm beckons, turning from the shoulder (`saludo`: down quickly, back
+  slowly, a pause up; the path is built already rotated, so stroke and fill match); the black-and-gold one blinks its
+  reptile eyes and a light runs round its gold outline (a moving dash); the streetwear one sways with each wave and its
+  sparkles pulse.
+- **Kitsune** (`kitsune.ts`, group "Kitsune"; planned: a mask with neon details or a fox in spirit fire, "fusion").
+  **Máscara de kitsune · neón**: the traditional mask in a warm bone tone (light faces are the exception, like the
+  Daruma), red ear insides, red flame marks over the eyes and on the forehead, red whiskers, slanted dark eyes, and warm
+  neon tubes on the outline (red) and the marks (gold, orange). **Kyūbi**: the sitting fox with the dragon's reptile
+  eyes and nine tails fanned behind, each a big dragon `llama` (fox tails and our flames are nearly the same shape: the
+  fox and the dragon of one lineage), with kitsunebi around. Kitsunebi is usually blue; the rule is fire, so here a pale
+  gold, almost white ghost fire with a glow (blue would be an exception to ask Eze about). **Animated**: the mask floats (bobs and tilts), each
+  neon tube breathes at its own time, a light runs round its outline, and every `MASCARA` 11 s the spirit lights up
+  behind the eye slits (a gold glow that grows and fades, the neon rising with it); the kyūbi's nine tails sway in a
+  wave and ripple like flames, it blinks, and the kitsunebi circle slowly round their places and flicker.
+- **Tsuru** (`tsuru.ts`, group "Grullas (tsuru)"; planned: flying in slow motion over a giant red sun or among
+  stylised clouds). The red-crowned crane (white body in a warm bone tone, black neck and secondaries, red crown) seen
+  from below with wings spread, like the emblems (in profile with the wings up it read as a sail): `grulla()` with open
+  primaries as fingers, the black secondaries as a scalloped band on the trailing edge, a deep red rim so the black
+  doesn't vanish at night, `u` shortening the span for the wingbeat pose; flocks in depth through `Hondura`.
+  **Grullas sobre el sol rojo** (a giant red sun with thin cloud bands) and **Grullas entre nubes** (gold curl clouds,
+  `kumo`, one in front so the cranes fly between them). **Animated** (slow motion): every crane flaps slowly at its own
+  phase (the span shortens up and down, `u` = cosine of the beat, flattened so they glide between beats) and flies
+  towards its heading, near ones faster, wrapping round the frame; the cloud bands over the sun and the gold clouds
+  drift the other way, the front cloud faster.
+- **Koi** (`koi.ts`, group "Peces koi"; planned: relaxing loops, swimming in a circle as the yin-yang, trails of
+  shining water or sumi-e ink). Koi are already in the palette: kohaku (bone white, red patches), ogon (gold), showa
+  (black with small red and white patches). `koi()` draws one from above along a curved spine (stout: a long thin one
+  looked like a snake), patches clipped to the body, small scale arcs, butterfly fins and tail made with the dragon's
+  `llama`, a light rim on one side. **Koi · yin-yang** (a kohaku and a showa chasing head to tail, the circle and the S
+  as shining gold water trails, `estela`, the symbol's two eyes as pearls of light) and **Koi · estanque de tinta**
+  (three koi circling one centre at different radii, a loop, each leaving a trail of burning ink: `pincelada`, now
+  exported from `shodo.ts`; faint ripple rings on dark water). **Animated**: the body undulates (a wave running head to tail,
+  wider at the tail) and the fins sway; the whole yin-yang turns slowly the way the two koi swim (`YINYANG` 24 s, an
+  exact loop) with the water's sparks twinkling; in the pond each koi swims its ring at its own speed (inner ones
+  faster) with its ink trail behind, and the ripples open and fade.
+- **Hanabi** (`hanabi.ts`, group "Hanabi"; planned: a festive moment, a birthday or a toast; bursts opening, falling,
+  fading, the sparkler crackling). Japanese fireworks are the fire palette itself. `estallido()` draws the classic
+  types: kiku (chrysanthemum: stars on a Fibonacci sphere seen from the front, so the rim is denser and it reads round,
+  each with a trail that droops a little), botan (peony: stars without trails), yanagi (willow: long gold trails that
+  fall), all with "lighter". **Hanabi sobre el río** (a double-hearted kiku, a gold willow, a peony and senrinka, a
+  thousand small flowers, over a river: the sky reflected in thin strips moved by ripples, a far shore with lanterns),
+  **Kiku · el crisantemo** (one huge three-layer burst) and **Senkō hanabi · la bengala** (the Japanese paper sparkler:
+  a hanging ball of fire with sparks branching into pine needles, `chispa`, recursive; the table's own scale). Each
+  picture was drawn once per size. **Animated**: `estallido(…, e)` takes the burst's age (opens fast and slows, the
+  trail shortens towards the star, gravity pulls it down, a flash at the burst, stars twinkle before going out);
+  `sube` is the shell rising with its spark trail; `programa` plays a list of shells (`Carcasa`: when, where, type,
+  colour, life). The river (`RIO` 16 s): a peony, the gold willow falling long, the double-hearted chrysanthemum, a
+  red kiku and a willow, then a finale of nine small ones almost at once, all reflected in the moving river (the sky
+  layer is one cached canvas). The kiku (7 s): rises, bursts in its three layers a beat apart, falls, fades. The
+  sparkler (`SENKO` 19 s) lives its whole Japanese life: the ball forms (tsubomi), crackles more and more (botan),
+  pine-needle sparks at full (matsuba), calmer falling sparks (yanagi), fading, then the ball drops; each spark lives
+  ~0.3 s and is reborn with another seed.
+
+**The scenes** (`src/cronovisor/escenas/index.ts`, **`/mesa/escenas/`**, 2026-11-27; Eze: a module where the
+animations combine into scenes, "a tu criterio"): eight compositions of a Japanese night, each a few elements in layers
+(`capa`: an element drawn shifted and scaled, on its own clock, optionally through `sinFondo`, a Proxy of the context
+that ignores fillRect/clearRect covering the whole canvas, so the cranes come without their sky, the petals without
+their black; the elements themselves are untouched): **La llegada** (the torii tunnel, a row of swaying lanterns,
+falling momiji), **El estanque** (koi and their ink, cherry petals), **El templo en el agua** (torii on the water with
+its floating lanterns, cranes among gold clouds), **Amanecer en el Fuji** (dawn, cranes), **El dragón en el mar** (the
+flat dragon 8, the fish, over a dimmed seigaiha sea), **Matsuri** (fireworks on the river, the lanterns, the Daruma
+rolling and winking), **El espíritu del bambú** (the kitsune mask floating in the swaying bamboo), **Zen** (the stone
+cracking into gold, the ensō writing itself). **La función completa** (`funcion`, `DURACION` ~3 min) plays them in a
+loop; at each change the petal curtain crosses (its band covers the centre exactly at the cut, `MEDIA`) and a brief
+dark veil hides the cut. The page: menu on the left (the function first, then each scene), the canvas on the right,
+a progress bar of the function by scene, F fullscreen (only the canvas, as it would go to the table), `#id`.
 
 ## Morphing faces (for the restaurant client, 2026-11-25)
 

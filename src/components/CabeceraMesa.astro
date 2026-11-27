@@ -1,0 +1,23 @@
+---
+// La barra de navegación del proyecto de la mesa: Mesa · Simulador · Dragón · Guía de estilo · Elementos · Escenas. Siempre a la
+// vista (Eze: poder saltar entre los módulos): en las páginas que scrollean, pegada arriba (`sticky`); en las de pantalla
+// completa (el simulador, /dragon/), fija arriba (`fija`). En /dragon/ se oculta con H junto con el resto de la interfaz
+// (es lo que va al proyector), y las herramientas de video la esconden.
+const { actual = '', fija = false } = Astro.props;
+const enlaces = [
+  ['inicio', '/mesa/', 'Mesa'], ['simulador', '/barra/', 'Simulador'], ['dragon', '/dragon/?estilo=8', 'Dragón'],
+  ['estilo', '/mesa/estilo/', 'Guía de estilo'], ['elementos', '/mesa/elementos/', 'Elementos'], ['escenas', '/mesa/escenas/', 'Escenas'],
+];
+---
+<nav class:list={['cabecera', { fija }]}>
+  {enlaces.map(([id, href, texto]) => <a href={href} class={id === actual ? 'on' : ''}>{texto}</a>)}
+</nav>
+<style is:global>
+  .cabecera { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font: 11px ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase;
+    position: sticky; top: 0; z-index: 20; background: rgba(11,9,8,.92); backdrop-filter: blur(6px); border-bottom: 1px solid #2a241f; padding: 12px 0 10px; }
+  .cabecera.fija { position: fixed; left: 0; right: 0; padding: 10px 16px 9px; transition: opacity .4s; }
+  .cabecera a { color: #8d857b; text-decoration: none; }
+  .cabecera a:hover { color: #f0ede8; }
+  .cabecera a.on { color: #e8b04a; }
+  body.clean .cabecera, body.limpio .cabecera { opacity: 0; pointer-events: none; }
+</style>

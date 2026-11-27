@@ -1,0 +1,631 @@
+---
+/**
+ * Boceto 3D de la barra con pantalla (Eze, 2026-11-26, después de la reunión con el cliente del restaurante): una
+ * barra/mesa larga (250 cm) con una pantalla LED de 60 cm de ancho a lo largo, en el medio, y madera a los dos lados
+ * para comer (35 cm por lado por defecto: 130 cm en total); encima, un único vidrio templado que cubre todo (pantalla y madera), sin juntas donde se acumule suciedad o se
+ * metan líquidos. En la pantalla corre el dragón plano (src/cronovisor/dragon/dragon2d.ts) a la proporción real de la
+ * franja, para ver cómo se lee el contenido.
+ * Unlisted y sin indexar, como /dragon/: es para mostrarle la idea al dueño. Medidas en cm (1 unidad = 1 cm).
+ */
+import Cabecera from '../components/CabeceraMesa.astro';
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Barra con pantalla · boceto</title>
+  <style is:global>
+    html, body { margin: 0; height: 100%; background: #0c0a09; overflow: hidden; font: 12px/1.45 ui-monospace, monospace; color: #cfc8bf; }
+    #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+    #panel { position: fixed; left: 14px; top: 50px; width: 270px; max-height: calc(100vh - 92px); overflow-y: auto; background: rgba(12,10,9,.82); border: 1px solid #3a332c; padding: 12px 14px; z-index: 2; }
+    #panel h1 { font: italic 300 22px/1.1 Georgia, serif; margin: 0 0 10px; color: #f0ede8; }
+    #panel label { display: block; margin: 8px 0 2px; color: #9d958b; }
+    #panel input[type=range] { width: 100%; }
+    #panel .v { float: right; color: #f0ede8; }
+    #panel .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    #panel button { font: inherit; background: #1b1714; color: #cfc8bf; border: 1px solid #4a4038; padding: 4px 8px; cursor: pointer; }
+    #panel button.on { border-color: #e8b04a; color: #fff; }
+    .muestras { display: flex; gap: 5px; margin-top: 3px; }
+    .muestras button { width: 28px; height: 20px; padding: 0; border: 1px solid #4a4038; cursor: pointer; }
+    .muestras button.on { outline: 2px solid #e8b04a; outline-offset: 1px; }
+    #datos { margin-top: 10px; border-top: 1px solid #3a332c; padding-top: 8px; }
+    #datos div { display: flex; justify-content: space-between; }
+    #datos b { font-weight: 400; color: #f0ede8; }
+    #datos .mal b { color: #ff7a5a; }
+    #datos .bien b { color: #9fe08a; }
+    #nota { margin-top: 8px; color: #8d857b; font-size: 11px; }
+    .cota { font: 11px ui-monospace, monospace; color: #fff; background: rgba(0,0,0,.6); padding: 1px 5px; border: 1px solid rgba(255,255,255,.25); white-space: nowrap; pointer-events: none; }
+    .cota.mal { border-color: #ff7a5a; color: #ffb3a0; }
+    body.limpio #panel, body.limpio .cota, body.limpio #tradeoffs { display: none; }
+    body.sin-cotas .cota { display: none; }
+    /* pros y contras: una hoja a la derecha */
+    #tradeoffs { position: fixed; top: 50px; right: 14px; bottom: 34px; width: 430px; overflow-y: auto; background: rgba(12,10,9,.92); border: 1px solid #3a332c; padding: 14px 16px; z-index: 2; display: none; }
+    body.con-tradeoffs #tradeoffs { display: block; }
+    /* la pestaña para abrirla, siempre a la vista (Eze: que se encuentre desde el boceto) */
+    #pestana { position: fixed; top: 50px; right: 14px; z-index: 2; font: italic 300 18px Georgia, serif; color: #f0ede8; background: rgba(12,10,9,.85); border: 1px solid #e8b04a; padding: 8px 14px; cursor: pointer; }
+    #pestana span { font: 11px ui-monospace, monospace; color: #e8b04a; margin-left: 8px; }
+    body.con-tradeoffs #pestana, body.limpio #pestana { display: none; }
+    #tradeoffs h2 { font: italic 300 24px/1.1 Georgia, serif; margin: 0 0 4px; color: #f0ede8; }
+    #tradeoffs .sub { color: #8d857b; margin: 0 0 12px; }
+    #tradeoffs h3 { font: 11px ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; color: #9d958b; margin: 16px 0 6px; border-top: 1px solid #3a332c; padding-top: 10px; }
+    #tradeoffs .item { margin: 0 0 10px; padding-left: 10px; border-left: 2px solid #4a4038; }
+    #tradeoffs .item.bien { border-color: #7fbf6a; } #tradeoffs .item.ojo { border-color: #e8b04a; } #tradeoffs .item.riesgo { border-color: #ff7a5a; }
+    #tradeoffs .item b { display: block; color: #f0ede8; font-weight: 400; margin-bottom: 2px; }
+    #tradeoffs .item p { margin: 0; color: #bdb5ab; }
+    #tradeoffs .item .como { margin-top: 3px; color: #e8d9b8; }
+    #tradeoffs .item .como::before { content: '→ '; color: #e8b04a; }
+    #tradeoffs .leyenda span { margin-right: 10px; } #tradeoffs .leyenda i { display: inline-block; width: 8px; height: 8px; margin-right: 4px; }
+    #tradeoffs .cerrar { position: absolute; top: 10px; right: 12px; background: none; border: 0; color: #8d857b; font: 18px ui-monospace, monospace; cursor: pointer; }
+    #ayuda { position: fixed; right: 14px; bottom: 10px; color: #6d655c; z-index: 2; }
+  </style>
+</head>
+<body>
+  <Cabecera actual="simulador" fija />
+  <canvas id="c"></canvas>
+  <div id="panel">
+    <h1>Barra con pantalla</h1>
+    <label>largo <span class="v" id="vL"></span></label><input id="L" type="range" min="200" max="320" step="5" value="250">
+    <label>ancho total <span class="v" id="vD"></span></label><input id="D" type="range" min="80" max="200" step="5" value="130">
+    <label>pantalla</label>
+    <div class="row" style="margin-top:2px">
+      <button id="p-88" class="on">LG 88BH7G · 61 cm</button><button id="p-86">LG 86BH5F · 35 cm</button><button id="p-medida">a medida</button>
+    </div>
+    <label>ancho de la pantalla <span class="v" id="vS"></span></label><input id="S" type="range" min="20" max="90" step="1" value="61">
+    <div class="row">
+      <button id="m-barra" class="on">barra 105 · taburetes</button><button id="m-mesa">mesa 75 · sillas</button><button id="m-baja">baja 65 · sillas bajas</button>
+    </div>
+    <label>en la pantalla</label>
+    <div class="row" style="margin-top:2px">
+      <button id="c-8" class="on">desde el fondo (8)</button><button id="c-7">espiral (7)</button><button id="c-6">plano (6)</button><button id="c-off">apagada</button>
+    </div>
+    <div class="row">
+      <button id="e-isla" class="on">isla</button><button id="e-patas">patas</button>
+    </div>
+    <label>madera de la tapa <span class="v" id="nTapa"></span></label><div class="muestras" id="mTapa"></div>
+    <label>madera del cuerpo <span class="v" id="nCuerpo"></span></label><div class="muestras" id="mCuerpo"></div>
+    <div class="row">
+      <button id="vGeneral">general</button><button id="vComensal">comensal</button><button id="vArriba">desde arriba</button>
+    </div>
+    <div class="row">
+      <button id="tVidrio" class="on">vidrio</button><button id="tGente" class="on">vajilla y asientos</button><button id="tCotas" class="on">medidas</button>
+    </div>
+    <div class="row">
+      <button id="tTrade">pros y contras</button>
+    </div>
+    <div id="datos"></div>
+    <div id="nota">Un solo vidrio templado laminado extraclaro sobre todo. Medidas aproximadas: es un boceto para discutir la idea, no un plano de fabricación.</div>
+  </div>
+  <button id="pestana">Pros y contras <span>T</span></button>
+  <aside id="tradeoffs">
+    <button class="cerrar" id="cerrarTrade" title="cerrar">×</button>
+    <h2>Pros y contras</h2>
+    <p class="sub">Barra de 250 cm, pantalla de 60 cm en el medio, madera a los lados y un solo vidrio templado encima.</p>
+    <p class="leyenda"><span><i style="background:#7fbf6a"></i>a favor</span><span><i style="background:#e8b04a"></i>se resuelve con diseño</span><span><i style="background:#ff7a5a"></i>riesgo a asumir</span></p>
+
+    <h3>El vidrio de una sola pieza</h3>
+    <div class="item bien"><b>Limpieza</b><p>Sin juntas arriba: se limpia de una pasada, no hay ranuras donde se acumule suciedad ni por donde entre líquido a la pantalla o la madera.</p></div>
+    <div class="item bien"><b>La madera queda protegida</b><p>Ni manchas de vino ni aceite ni marcas de vasos: la madera se ve siempre nueva.</p><p class="como">A cambio, no se toca: se ve, pero al tacto es vidrio.</p></div>
+    <div class="item riesgo"><b>Rayas en la zona donde se come</b><p>El aro sin esmaltar de la base de platos y vasos raya el vidrio con el uso; en un año se nota a contraluz.</p><p class="como">Platos con base esmaltada o con fieltro, individuales o bajoplatos; o, como opción, esmerilado satinado sólo sobre la madera, que disimula las rayas (pero marca más las huellas).</p></div>
+    <div class="item riesgo"><b>Si se daña, se cambia entero</b><p>Una rotura o un desportillado en cualquier punto obliga a cambiar la pieza completa (~250 × 130 cm, ~100 kg).</p><p class="como">La alternativa son tres piezas (una sobre la pantalla y una por cada lado) con juntas a ras selladas: se cambia sólo la dañada, pero vuelven las juntas. Es justo lo que se quiere evitar: decidirlo con el cliente.</p></div>
+    <div class="item ojo"><b>Seguridad</b><p>Templado laminado (dos hojas de 6 mm con lámina entre medio): si se rompe, queda pegado y no cae sobre la pantalla ni la gente. Cantos pulidos y redondeados.</p></div>
+    <div class="item ojo"><b>Fabricación e instalación</b><p>~98 kg. Después de templado no se puede cortar ni agujerear: todos los agujeros y cortes van de fábrica. Instalación con ventosas, entre 3 o 4 personas; la estructura tiene que estar calculada para ese peso.</p></div>
+    <div class="item ojo"><b>Perímetro</b><p>Sin juntas arriba, pero el borde del vidrio sí es una junta con la madera de abajo.</p><p class="como">Sellado perimetral y un canto con goterón, para que lo que se derrame caiga al suelo y no se meta por debajo.</p></div>
+
+    <h3>La pantalla bajo el vidrio</h3>
+    <div class="item ojo"><b>Reflejos</b><p>Toda lámpara que quede en el ángulo de espejo entre la pantalla y el ojo del comensal se refleja en el vidrio.</p><p class="como">Se resuelve con el diseño de luz: lámparas sobre la madera y los platos, no sobre el centro de la pantalla; luz cálida y difusa; techo oscuro o mate. Plan B: vidrio con capa antirreflejo (más caro).</p></div>
+    <div class="item ojo"><b>Nitidez y doble imagen</b><p>Si entre la pantalla y el vidrio queda aire, se ve un doble reflejo y la imagen pierde contraste.</p><p class="como">Pantalla lo más pegada posible al vidrio, y vidrio extraclaro (el común tiñe de verde).</p></div>
+    <div class="item ojo"><b>Tipo de pantalla</b><p>Se ve a menos de un metro: un LED común muestra los puntitos. 244 × 58 cm (4,2:1) no es un tamaño estándar de LCD; con LED en módulos se arma a medida.</p><p class="como">LED de paso fino (1,2 mm o menos) o varios LCD (con marcos visibles entre ellos). Pedir cotización de las dos.</p></div>
+    <div class="item riesgo"><b>Calor</b><p>~1,4 m² de pantalla encendida muchas horas, debajo de un vidrio: se calienta la pantalla y el vidrio se entibia donde apoyan los platos.</p><p class="como">Ventilación por el cuerpo de la barra, sin sellarla; ventiladores silenciosos (están a centímetros de las piernas); brillo moderado (el local es oscuro, no hace falta el máximo).</p></div>
+    <div class="item riesgo"><b>Mantenimiento</b><p>Con el vidrio pegado arriba, a la pantalla no se llega desde arriba.</p><p class="como">Acceso por debajo: tapa de servicio en el cuerpo de la barra y pantalla de mantenimiento trasero. Si hay que sacar el vidrio, son ~100 kg.</p></div>
+    <div class="item ojo"><b>Costo</b><p>La pantalla es la parte cara del proyecto, bastante más que el vidrio y la madera.</p></div>
+
+    <h3>La altura</h3>
+    <div class="item ojo"><b>Sillas bajas, mesa baja</b><p>Con sillas bajas la mesa baja también (silla de 46 → mesa de 75; silla baja de 40 → mesa de 65). Pero el grosor de la tapa y lo que ocupa la pantalla por debajo le roban sitio a las piernas: con sillas bajas quedan ~20 cm para los muslos bajo la madera, justo, y menos bajo la pantalla, adonde llegan las rodillas.</p><p class="como">Pantalla y caja lo más finas posible (la electrónica, en la cabecera o en un mueble aparte, no bajo la mesa), tapa fina, y sillas sin apoyabrazos que choquen. Conviene probar sentado con una maqueta de cartón a la altura real.</p></div>
+
+    <h3>El contenido</h3>
+    <div class="item bien"><b>La proporción funciona</b><p>En 4,2:1 un dragón que cruza a lo largo se ve grande y entero; el mismo sistema de /dragon/ se adapta a esta medida.</p></div>
+    <div class="item ojo"><b>Comer y mirar</b><p>Los platos están al lado de la pantalla, no encima: no tapan la imagen. Pero si el contenido es muy rápido o brillante, cansa durante una cena.</p><p class="como">Movimientos lentos, fondo oscuro, brillo bajo; y una pasada cada tanto, no imagen continua.</p></div>
+  </aside>
+  <div id="ayuda">arrastrá para girar · rueda para acercar · H oculta el panel · T pros y contras</div>
+  <script>
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+    import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+    import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+    import { DragonPlano } from '../cronovisor/dragon/dragon2d';
+
+    const cv = document.getElementById('c') as HTMLCanvasElement;
+    const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    RectAreaLightUniformsLib.init();
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.2;   // neutro: ACES lavaba y corría el color de la madera
+    const etiquetas = new CSS2DRenderer(); etiquetas.domElement.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:1';
+    document.body.appendChild(etiquetas.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0c0a09);
+    scene.fog = new THREE.Fog(0x0c0a09, 700, 1500);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
+    scene.environmentIntensity = .35;   // el estudio blanco del entorno, apagado: es un restaurante en penumbra
+    const camera = new THREE.PerspectiveCamera(40, 1, 1, 5000);
+    const controls = new OrbitControls(camera, cv);
+    controls.enableDamping = true; controls.maxPolarAngle = Math.PI*.495;
+
+    // La luz (más realista, Eze 2026-11-26): un relleno bajo de sala, una luz clave alta y casi cenital que da las sombras
+    // (como si fueran las de las lámparas), y en `armar` las dos lámparas lineales colgadas sobre la madera (luz de área,
+    // como recomienda la hoja de pros y contras: no sobre la pantalla, para no reflejarse) y la pantalla misma, que
+    // ilumina un poco la vajilla con sus colores.
+    scene.add(new THREE.HemisphereLight(0xfff3e6, 0x1a1612, .22));
+    const lampara = new THREE.DirectionalLight(0xffeedd, .9);
+    lampara.position.set(-40, 420, 70); lampara.castShadow = true;
+    lampara.shadow.mapSize.set(2048, 2048); lampara.shadow.bias = -.0004; lampara.shadow.normalBias = .4;
+    Object.assign(lampara.shadow.camera, { left: -230, right: 230, top: 170, bottom: -170, near: 100, far: 700 });
+    scene.add(lampara);
+    // la sala: piso de microcemento pulido (refleja un poco), paredes de revoque oscuro y techo, para que la luz rebote
+    // y los reflejos no salgan de la nada
+    function texturaCemento(){
+      const W = 1024, c = document.createElement('canvas'); c.width = c.height = W; const g = c.getContext('2d')!;
+      const img = g.createImageData(W, W), n = ruido(9), n2 = ruido(11);
+      for(let y = 0; y < W; y++) for(let x = 0; x < W; x++){
+        const u = x/W, v = y/W, k = (y*W + x)*4;
+        const val = 62 + (n(u*6, v*6, 5) - .5)*34 + (n2(u*40, v*40, 3) - .5)*10 + (n(u*1.5, v*1.5, 2) - .5)*20;
+        img.data[k] = val*1.04; img.data[k + 1] = val; img.data[k + 2] = val*.94; img.data[k + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 8); t.anisotropy = 8;
+      return t;
+    }
+    const piso = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), new THREE.MeshStandardMaterial({ map: texturaCemento(), roughness: .32, metalness: 0, envMapIntensity: .8 }));
+    piso.rotation.x = -Math.PI/2; piso.receiveShadow = true; scene.add(piso);
+    const sala = new THREE.Mesh(new THREE.BoxGeometry(1600, 340, 1100), new THREE.MeshStandardMaterial({ color: 0x2b2420, roughness: .95, side: THREE.BackSide }));
+    sala.position.y = 170.1; sala.receiveShadow = true; scene.add(sala);
+
+    // madera: una veta dibujada en un canvas, por especie (Eze: elegir tipos y colores de madera). Colores aproximados
+    // de cada madera con un acabado natural mate; la veta: líneas onduladas más oscuras y más claras que la base.
+    const MADERAS = {
+      'roble claro': { base: '#c9a46e', osc: '110,72,32', clara: '238,210,165', rugosa: .55 },
+      'roble':       { base: '#a8743f', osc: '80,45,15', clara: '205,160,105', rugosa: .55 },
+      'fresno':      { base: '#d8c6a2', osc: '140,115,80', clara: '245,232,205', rugosa: .5 },
+      'cerezo':      { base: '#9c5232', osc: '70,25,10', clara: '200,120,80', rugosa: .45 },
+      'teca':        { base: '#8d5a2f', osc: '60,32,12', clara: '180,125,75', rugosa: .5 },
+      'nogal':       { base: '#5b3b24', osc: '32,18,8', clara: '140,95,62', rugosa: .5 },
+      'wengué':      { base: '#3a2a20', osc: '14,9,6', clara: '110,85,65', rugosa: .6 },
+    } as const;
+    type Madera = keyof typeof MADERAS;
+    // La veta, más natural (Eze: "que la madera tenga textura más natural"): calculada píxel a píxel con ruido. Los anillos
+    // de crecimiento corren a lo largo de la tabla y ondulan (el ruido los desvía, y a veces se abren en arcos como el
+    // corte de una tabla de verdad); el leño tardío de cada anillo, más oscuro; poros finos alargados; manchas suaves de
+    // tono a lo largo; y la misma veta como relieve (bumpMap), así la luz rasante la marca. Con semilla fija: siempre igual.
+    const texturas = new Map<Madera, { mapa: THREE.CanvasTexture; relieve: THREE.CanvasTexture }>();
+    const hex = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+    function ruido(semilla: number){
+      const h = (x: number, y: number) => { const s = Math.sin(x*127.1 + y*311.7 + semilla*74.7)*43758.5453; return s - Math.floor(s); };
+      const suav = (t: number) => t*t*(3 - 2*t);
+      const v = (x: number, y: number) => {
+        const xi = Math.floor(x), yi = Math.floor(y), xf = suav(x - xi), yf = suav(y - yi);
+        const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
+        return a + (b - a)*xf + (c - a)*yf + (a - b - c + d)*xf*yf;
+      };
+      return (x: number, y: number, oct = 4) => { let s = 0, a = .5, f = 1; for(let o = 0; o < oct; o++){ s += a*v(x*f, y*f); a *= .5; f *= 2.03; } return s; };
+    }
+    function texturaMadera(nombre: Madera){
+      if(texturas.has(nombre)) return texturas.get(nombre)!;
+      const m = MADERAS[nombre], W = 2048, H = 512;
+      const base = hex(m.base), osc = m.osc.split(',').map(Number), clara = m.clara.split(',').map(Number);
+      const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d')!;
+      const cb = document.createElement('canvas'); cb.width = W; cb.height = H; const gb = cb.getContext('2d')!;
+      const img = g.createImageData(W, H), bump = gb.createImageData(W, H);
+      const n1 = ruido(1), n2 = ruido(2), n3 = ruido(3);
+      const anillos = nombre === 'wengué' ? 46 : nombre === 'fresno' || nombre.startsWith('roble') ? 34 : 28;
+      for(let y = 0; y < H; y++) for(let x = 0; x < W; x++){
+        const u = x/W, v = y/H;
+        // el desvío de los anillos: lento a lo largo, y un arco ancho que se abre en algunos tramos
+        const desvio = n1(u*3, v*2)*1.6 + Math.pow(Math.max(0, Math.sin(u*Math.PI*2.3 + n1(u, v)*2)), 6)*.45*Math.sin(v*Math.PI);
+        // separación irregular entre anillos (años de más o menos crecimiento), que además cambia despacio a lo largo:
+        // las líneas se juntan y se separan como en una tabla de verdad
+        const t = v*anillos + n2(u*1.2, v*5, 3)*7 + desvio*anillos*.1;
+        const f = t - Math.floor(t);
+        const tardio = (Math.pow(f, 4 + 6*n3(Math.floor(t)*.37, 0, 1))*.75 + .08*n2(u*40, v*anillos*.6, 2))*(.6 + .8*n1(u*5, v*3, 2));   // la banda oscura de cada anillo, irregular
+        const poro = Math.max(0, n3(u*320, v*60, 2) - .66)*1.6;                 // poros: puntos alargados a lo largo
+        const mancha = n2(u*2.5, v*1.5, 3) - .5;                              // variaciones suaves de tono
+        const k = (y*W + x)*4;
+        for(let ch = 0; ch < 3; ch++){
+          let col = base[ch]*(1 + mancha*.14);
+          col += (clara[ch] - base[ch])*Math.max(0, .3 - tardio)*.35;           // el leño temprano, más claro
+          col += (osc[ch] - col)*Math.min(1, tardio*.55 + poro*.35);              // el tardío y los poros, más oscuros
+          img.data[k + ch] = Math.max(0, Math.min(255, col));
+        }
+        img.data[k + 3] = 255;
+        const b = 200 - tardio*50 - poro*60;
+        bump.data[k] = bump.data[k + 1] = bump.data[k + 2] = Math.max(0, Math.min(255, b)); bump.data[k + 3] = 255;
+      }
+      g.putImageData(img, 0, 0); gb.putImageData(bump, 0, 0);
+      const mapa = new THREE.CanvasTexture(c); mapa.colorSpace = THREE.SRGBColorSpace; mapa.wrapS = mapa.wrapT = THREE.RepeatWrapping; mapa.anisotropy = 8;
+      const relieve = new THREE.CanvasTexture(cb); relieve.wrapS = relieve.wrapT = THREE.RepeatWrapping; relieve.anisotropy = 8;
+      const par = { mapa, relieve };
+      texturas.set(nombre, par);
+      return par;
+    }
+    const madera = new THREE.MeshStandardMaterial({ map: texturaMadera('roble').mapa, bumpMap: texturaMadera('roble').relieve, bumpScale: .35, roughness: .55, metalness: 0 });
+    const maderaSilla = new THREE.MeshStandardMaterial({ map: texturaMadera('roble claro').mapa, bumpMap: texturaMadera('roble claro').relieve, bumpScale: .3, roughness: .55 });
+    const maderaOscura = new THREE.MeshStandardMaterial({ map: texturaMadera('nogal').mapa, bumpMap: texturaMadera('nogal').relieve, bumpScale: .35, roughness: .7 });
+    function vestir(){
+      madera.map = texturaMadera(P.tapa).mapa; madera.bumpMap = texturaMadera(P.tapa).relieve; madera.roughness = MADERAS[P.tapa].rugosa; madera.needsUpdate = true;
+      maderaOscura.map = texturaMadera(P.cuerpo).mapa; maderaOscura.bumpMap = texturaMadera(P.cuerpo).relieve; maderaOscura.roughness = MADERAS[P.cuerpo].rugosa + .1; maderaOscura.needsUpdate = true;
+      document.getElementById('nTapa')!.textContent = P.tapa; document.getElementById('nCuerpo')!.textContent = P.cuerpo;
+      for(const [id, sel] of [['mTapa', P.tapa], ['mCuerpo', P.cuerpo]] as [string, Madera][])
+        document.querySelectorAll<HTMLButtonElement>(`#${id} button`).forEach(b => b.classList.toggle('on', b.dataset.m === sel));
+    }
+    const negro = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: .4 });
+    // el vidrio, sutil (Eze: menos brillo, que se vea el color real de la madera): casi transparente, un reflejo suave; lo que
+    // dice "vidrio" es el canto verdoso del extraclaro y algún reflejo de las lámparas
+    const vidrioMat = new THREE.MeshPhysicalMaterial({ color: 0xf6fbfa, transparent: true, opacity: .05, roughness: .04, metalness: 0, clearcoat: .35, clearcoatRoughness: .05, envMapIntensity: .45, depthWrite: false });
+    const cantoMat = new THREE.MeshPhysicalMaterial({ color: 0x9fd8c8, transparent: true, opacity: .55, roughness: .05, envMapIntensity: 1.2 });
+    const loza = new THREE.MeshPhysicalMaterial({ color: 0xf6f2ea, roughness: .28, clearcoat: .7, clearcoatRoughness: .08 });
+    // la copa: transparente con reflejos fuertes, para que se lea sobre la madera
+    const copa = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: .28, roughness: 0, metalness: 0, clearcoat: 1, side: THREE.DoubleSide, envMapIntensity: 3, depthWrite: false });   // cristal liviano (la transmisión real costaba una pasada más)
+    // Japonés fusión (Eze, 2026-11-26): palillos con su apoyapalillos en vez de cubiertos, gres oscuro, platito de soja,
+    // vaso bajo; asientos de madera clara con asiento de cuerda trenzada, en vez de tapizados genéricos
+    const gres = new THREE.MeshPhysicalMaterial({ color: 0x2f2d2b, roughness: .55, clearcoat: .3, clearcoatRoughness: .3 });
+    const laca = new THREE.MeshPhysicalMaterial({ color: 0x3a1410, roughness: .3, clearcoat: .8 });
+    function texturaTrenzado(){
+      const W = 256, c = document.createElement('canvas'); c.width = c.height = W; const g = c.getContext('2d')!;
+      g.fillStyle = '#c8ad80'; g.fillRect(0, 0, W, W);
+      // cuerda de papel trenzada: pasadas en las dos direcciones, alternando por encima y por debajo
+      for(let i = 0; i < 16; i++) for(let j = 0; j < 16; j++){
+        const x = i*16, y = j*16, horiz = (i + j) % 2 === 0;
+        const gr = horiz ? g.createLinearGradient(x, y, x, y + 16) : g.createLinearGradient(x, y, x + 16, y);
+        gr.addColorStop(0, '#8f7650'); gr.addColorStop(.5, '#dcc49a'); gr.addColorStop(1, '#8f7650');
+        g.fillStyle = gr; g.fillRect(x + .5, y + .5, 15, 15);
+      }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3); t.anisotropy = 8;
+      return t;
+    }
+    const trenzado = new THREE.MeshStandardMaterial({ map: texturaTrenzado(), roughness: .85 });
+
+    const metal = new THREE.MeshStandardMaterial({ color: 0x1e1b19, roughness: .4, metalness: .85 });
+
+    // la pantalla: el dragón plano en un canvas, a la proporción real de la franja
+    const pantallaCv = document.createElement('canvas'); const pctx = pantallaCv.getContext('2d')!;
+    const pantallaTex = new THREE.CanvasTexture(pantallaCv); pantallaTex.colorSpace = THREE.SRGBColorSpace; pantallaTex.anisotropy = 8;
+    const pantallaMat = new THREE.MeshBasicMaterial({ map: pantallaTex, toneMapped: false });
+    let dragon: DragonPlano | null = null;
+    let dragones: Record<string, DragonPlano> = {};
+    function hacerDragon(pw: number, ph: number){
+      const c = P.contenido;
+      return dragones[c] ??= c === '7' ? new DragonPlano(pw, ph, Math.min(pw*.7, ph*1.7), true)
+        : c === '8' ? new DragonPlano(pw, ph, Math.min(pw*.7, ph*2.2), 'pez')
+        : new DragonPlano(pw, ph, Math.min(pw*.8, ph*2.4));
+    }
+    const pasada = () => P.contenido === '7' ? 26 : P.contenido === '8' ? 20 : 16;   // segundos, como en /dragon/
+
+    // las alturas (Eze: "las sillas serán bajas": si las sillas son bajas, la mesa baja también). Medidas usuales de
+    // hostelería: barra 105 con taburete de 76; mesa 75 con silla de 46; mesa baja 65 con silla baja (lounge) de 40.
+    // Entre el asiento y la cara de abajo de la tapa tiene que quedar sitio para los muslos (~20 cm o más).
+    type Modo = 'barra' | 'mesa' | 'baja';
+    const MODOS: Record<Modo, { mesa: number; asiento: number; nombre: string }> = {
+      barra: { mesa: 105, asiento: 76, nombre: 'taburete' },
+      mesa: { mesa: 75, asiento: 46, nombre: 'silla' },
+      baja: { mesa: 65, asiento: 40, nombre: 'silla baja' },
+    };
+    // Las dos LG Ultra Stretch que encajan (fichas de lg.com/es, 2026-11-26): medidas exteriores y marcos en mm, el resto
+    // como lo da LG. La imagen es el exterior menos los marcos (LG no publica el área activa: aproximada).
+    // Ninguna de las dos fichas dice si se puede instalar boca arriba (N/D): preguntarle a LG.
+    const MODELOS = {
+      '88': { nombre: 'LG 88BH7G-B', ext: [2158.3, 611.2, 84.8], marco: [5.9, 4.4], res: '3840 × 1080 (32:9)', brillo: 700, w: [450, 530], btu: 1535, kg: 33.9 },
+      '86': { nombre: 'LG 86BH5F-M', ext: [2158.3, 348.5, 81.7], marco: [5.9, 4.4], res: '3840 × 600 (58:9)', brillo: 500, w: [220, 240], btu: 751, kg: 20.5 },
+    } as const;
+    type Modelo = keyof typeof MODELOS;
+    // la pantalla en cm: exterior (largo, ancho, fondo) e imagen (largo, ancho)
+    function pantalla(){
+      const m = P.modelo ? MODELOS[P.modelo] : null;
+      if(!m) return { largo: P.L - 2, ancho: P.S, fondo: 6, imgL: P.L - 6, imgA: P.S - 2 };
+      return { largo: m.ext[0]/10, ancho: m.ext[1]/10, fondo: m.ext[2]/10, imgL: (m.ext[0] - 2*m.marco[1])/10, imgA: (m.ext[1] - 2*m.marco[0])/10 };
+    }
+    // lo que ocupa la pantalla bajo la tapa (módulo + su caja), en la franja del medio
+    const bajoPantalla = () => pantalla().fondo + 4;
+    const P = { modelo: '88' as Modelo | null, L: 250, D: 131, S: 61.1, modo: 'barra' as Modo, estructura: 'isla' as 'isla' | 'patas', tapa: 'roble' as Madera, cuerpo: 'nogal' as Madera, vidrio: true, conDragon: true, contenido: '8' as '6' | '7' | '8', gente: true };
+    let grupo = new THREE.Group(); scene.add(grupo);
+    // La madera a escala real: las coordenadas de textura de cada cara salen de su posición en cm (una tabla de la textura
+    // = 250 × 40 cm), proyectadas según hacia dónde mira la cara, con la veta siempre a lo largo de la barra (x). Antes
+    // la textura se estiraba a cada cara entera, y en el frente de la isla la veta salía gigante.
+    function aEscala(geo: THREE.BufferGeometry){
+      const pos = geo.attributes.position, nor = geo.attributes.normal, uv = geo.attributes.uv;
+      for(let i = 0; i < pos.count; i++){
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), nx = Math.abs(nor.getX(i)), ny = Math.abs(nor.getY(i)), nz = Math.abs(nor.getZ(i));
+        if(ny >= nx && ny >= nz) uv.setXY(i, x/250 + .5, z/40);
+        else if(nz >= nx) uv.setXY(i, x/250 + .5, y/40);
+        else uv.setXY(i, z/250 + .5, y/40);
+      }
+      uv.needsUpdate = true;
+    }
+    const caja = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, sombra = true) => {
+      // cantos redondeados (nada en un mueble de verdad tiene una arista viva perfecta)
+      const rad = Math.min(.8, w/4, h/4, d/4);
+      const geo = rad > .15 ? new RoundedBoxGeometry(w, h, d, 3, rad) : new THREE.BoxGeometry(w, h, d);
+      if(m === madera || m === maderaOscura || m === maderaSilla) aEscala(geo);
+      const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = sombra; o.receiveShadow = true; grupo.add(o); return o;
+    };
+    const cota = (texto: string, x: number, y: number, z: number, mal = false) => {
+      const d = document.createElement('div'); d.className = 'cota' + (mal ? ' mal' : ''); d.textContent = texto;
+      const o = new CSS2DObject(d); o.position.set(x, y, z); grupo.add(o);
+    };
+
+    // vajilla: platos y copas torneados (LatheGeometry, perfiles en cm), y el asiento del taburete con el canto redondo
+    const torno = (pts: number[][], seg = 48) => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+    const PLATO = torno([[0, .9], [9, .9], [11, 1.4], [13.4, 2.1], [13.9, 2.15], [14, 1.95], [13.4, 1.8], [11, 1.05], [9.2, .45], [9, 0], [8.3, 0], [8.1, .45], [0, .45]]);
+    const COPA = torno([[0, 0], [3.6, 0], [3.7, .15], [3.4, .35], [.55, .7], [.4, 2], [.38, 8.5], [.6, 9.2], [2.4, 10.4], [3.6, 12.5], [4, 15], [3.8, 18], [3.55, 20.5]], 40);
+    const SOJA = torno([[0, .45], [3, .45], [4.2, 1.3], [4.6, 1.6], [4.7, 1.35], [4.2, .9], [3.2, .2], [3, 0], [2.4, 0], [2.3, .2], [0, .2]], 32);
+    const VASO = torno([[0, 0], [3.3, 0], [3.5, .4], [3.9, 9.5], [3.7, 9.5], [3.3, .9], [0, .9]], 32);
+    const PALILLO = new THREE.CylinderGeometry(.42, .2, 23, 8);    // de la punta fina (+y) al extremo grueso
+    const ASIENTO = torno([[0, 0], [16.5, 0], [18.5, .8], [19, 2.5], [19, 4.5], [18, 6], [15.5, 6.6], [0, 6.8]]);
+
+    let luzPantalla: THREE.PointLight | null = null;
+    function armar(){
+      // limpiar lo anterior (también las etiquetas, que viven en el DOM)
+      grupo.traverse(o => { if((o as any).isCSS2DObject) (o as CSS2DObject).element.remove(); if((o as THREE.Mesh).geometry) (o as THREE.Mesh).geometry.dispose(); });
+      scene.remove(grupo); grupo = new THREE.Group(); scene.add(grupo);
+      if(P.modelo) P.L = Math.max(P.L, Math.ceil(MODELOS[P.modelo].ext[0]/10 + 4));   // la mesa nunca más corta que la pantalla
+      const { L, D, S } = P, M = MODOS[P.modo], ALTO = M.mesa, TAPA = 4, VIDRIO = 1.2;
+      const lado = (D - S)/2;                     // la madera de cada lado (lo que queda para comer)
+      const top = ALTO - VIDRIO;                  // la cara de arriba de la madera y la pantalla, bajo el vidrio
+      // la tapa: madera a los dos lados, la pantalla en el medio (en un rebaje, enrasada con la madera)
+      if(lado > 0) for(const s of [1, -1]) caja(L, TAPA, lado, madera, 0, top - TAPA/2, s*(S/2 + lado/2));
+      // la pantalla: el marco negro (el módulo, más grueso) y la imagen, a ras del vidrio
+      const PA = pantalla();
+      caja(PA.largo, PA.fondo, PA.ancho, negro, 0, top - PA.fondo/2, 0, false);
+      // si la pantalla es más corta que la mesa, madera en las dos puntas de la franja del medio
+      const punta = (L - PA.largo)/2;
+      if(punta > .5) for(const sx of [1, -1]) caja(punta, TAPA, S, madera, sx*(PA.largo/2 + punta/2), top - TAPA/2, 0);
+      const imagen = new THREE.Mesh(new THREE.PlaneGeometry(PA.imgL, PA.imgA), pantallaMat);
+      imagen.rotation.x = -Math.PI/2; imagen.position.set(0, top + .05, 0); grupo.add(imagen);
+      // el vidrio: una sola pieza sobre todo, con su canto verdoso
+      if(P.vidrio){
+        const v = new THREE.Mesh(new THREE.BoxGeometry(L + 1, VIDRIO, D + 1), [cantoMat, cantoMat, vidrioMat, vidrioMat, cantoMat, cantoMat]);
+        v.position.set(0, top + VIDRIO/2 + .1, 0); v.renderOrder = 5; grupo.add(v);
+      }
+      // las lámparas: dos lineales colgadas del techo, una sobre cada franja de madera (no sobre la pantalla: así no se
+      // reflejan en el vidrio encima de la imagen), a ~75 cm de la mesa; cada una es una luz de área cálida hacia abajo
+      const largoLamp = Math.min(L - 40, 200), alturaLamp = Math.min(ALTO + 75, 300);
+      for(const s of [1, -1]){
+        const z = s*(S/2 + lado*.5);
+        caja(largoLamp, 3, 5, metal, 0, alturaLamp + 1.5, z, false);
+        const tubo = new THREE.Mesh(new THREE.BoxGeometry(largoLamp - 4, .4, 3), new THREE.MeshBasicMaterial({ color: 0xfff1dc }));
+        tubo.position.set(0, alturaLamp - .1, z); grupo.add(tubo);
+        for(const sx of [-1, 1]){
+          const cable = new THREE.Mesh(new THREE.CylinderGeometry(.15, .15, 340 - alturaLamp - 3, 6), metal);
+          cable.position.set(sx*(largoLamp/2 - 15), alturaLamp + 3 + (340 - alturaLamp - 3)/2, z); grupo.add(cable);
+        }
+        const area = new THREE.RectAreaLight(0xffe3c2, 7, largoLamp - 4, 3);
+        area.position.set(0, alturaLamp - .3, z); area.lookAt(0, 0, z); grupo.add(area);
+      }
+      // la pantalla también ilumina: una luz de área sobre la imagen, hacia arriba, con el color medio de lo que muestra
+      luzPantalla = new THREE.PointLight(0x000000, 0, 120, 1.5);
+      luzPantalla.position.set(0, top + 12, 0); grupo.add(luzPantalla);
+      // la estructura. Isla (Eze: "más a modo isla"): un cuerpo macizo central, con zócalo retranqueado y la tapa volando
+      // por los cuatro lados; el vuelo de los lados largos deja entrar las rodillas (~30 cm o más), y adentro va la
+      // electrónica de la pantalla, con rejillas de ventilación y tapa de servicio por debajo. Patas: cuatro patas y, bajo
+      // la pantalla, sólo su módulo en una caja fina.
+      const vuelo = voladizo();
+      if(P.estructura === 'isla'){
+        const anchoIsla = Math.max(20, D - 2*vuelo), altoIsla = ALTO - TAPA - 1.2 - 10;
+        caja(L - 2*Math.min(vuelo, 25), altoIsla, anchoIsla, maderaOscura, 0, 10 + altoIsla/2, 0);
+        caja(L - 2*Math.min(vuelo, 25) - 8, 10, anchoIsla - 8, negro, 0, 5, 0);
+        for(const s of [1, -1]) caja(L - 2*Math.min(vuelo, 25) - 40, 3, .6, negro, 0, 18, s*(anchoIsla/2 + .2), false);
+      } else {
+        for(const x of [-1, 1]) for(const z of [-1, 1]) caja(6, ALTO - TAPA, 6, maderaOscura, x*(L/2 - 12), (ALTO - TAPA)/2, z*(D/2 - 10));
+        caja(L - 40, 4, Math.max(S + 4, 20), maderaOscura, 0, top - PA.fondo - 2, 0);
+      }
+      // platos, copas y taburetes a los dos lados
+      if(P.gente){
+        const puestos = Math.max(2, Math.floor(L/62));
+        for(let k = 0; k < puestos; k++){
+          const x = -L/2 + L*(k + .5)/puestos;
+          for(const s of [1, -1]){
+            // el comensal está del lado s y mira hacia el centro: su derecha es +x si s = 1. De su borde hacia la pantalla:
+            // los palillos acostados delante (puntas a la izquierda, sobre el apoyapalillos), el plato, y detrás el platito
+            // de soja a la derecha y el vaso a la izquierda
+            const yMesa = top + VIDRIO + .1, borde = s*D/2, hacia = -s;   // hacia el centro
+            const enZ = (d: number) => borde + hacia*d;
+            const zPlato = enZ(Math.min(19, lado*.55));
+            const plato = new THREE.Mesh(PLATO, gres); plato.scale.set(.82, 1, .82); plato.position.set(x, yMesa, zPlato); plato.castShadow = plato.receiveShadow = true; grupo.add(plato);
+            const zPalillos = enZ(5.5);
+            const apoyo = new THREE.Mesh(new RoundedBoxGeometry(1.5, 1.1, 4.4, 2, .45), loza); apoyo.position.set(x - s*9, yMesa + .55, zPalillos); apoyo.castShadow = true; grupo.add(apoyo);
+            for(const dz of [-.55, .55]){
+              const pal = new THREE.Mesh(PALILLO, laca); pal.rotation.z = s*Math.PI/2; pal.rotation.y = .02*dz;
+              pal.position.set(x + s*1.5, yMesa + .75, zPalillos + dz); pal.castShadow = true; grupo.add(pal);
+            }
+            const zFondo = enZ(Math.min(29, lado*.82));
+            const soja = new THREE.Mesh(SOJA, gres); soja.position.set(x + s*15, yMesa, zFondo); soja.castShadow = true; grupo.add(soja);
+            const vaso = new THREE.Mesh(VASO, copa); vaso.position.set(x - s*16, yMesa, zFondo); vaso.castShadow = true; grupo.add(vaso);
+            // el asiento, afuera del borde: taburete de madera (barra) o silla de madera con asiento de cuerda trenzada
+            const alto = M.asiento;
+            if(P.modo === 'barra'){
+              const zT = s*(D/2 + 24);
+              const asiento = new THREE.Mesh(ASIENTO, maderaSilla); asiento.scale.set(.88, .7, .88); asiento.position.set(x, alto - 4.7, zT); asiento.castShadow = true; grupo.add(asiento);
+              // cuatro patas abiertas hacia el suelo y un aro para apoyar los pies
+              for(let k = 0; k < 4; k++){
+                const a = Math.PI/4 + k*Math.PI/2, arriba = new THREE.Vector3(x + Math.cos(a)*11, alto - 4.7, zT + Math.sin(a)*11), abajo = new THREE.Vector3(x + Math.cos(a)*17, 0, zT + Math.sin(a)*17);
+                const d = abajo.clone().sub(arriba), l = d.length();
+                const pata = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.3, l, 10), maderaSilla);
+                pata.position.copy(arriba).addScaledVector(d, .5); pata.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); pata.castShadow = true; grupo.add(pata);
+              }
+              const aro = new THREE.Mesh(new THREE.TorusGeometry(15.3, .9, 8, 40), maderaSilla); aro.rotation.x = Math.PI/2; aro.position.set(x, 28, zT); aro.castShadow = true; grupo.add(aro);
+            } else {
+              // silla japonesa minimalista: bastidor de roble claro, asiento de cuerda trenzada, patas traseras que suben y un
+              // travesaño curvo de respaldo; la baja, más ancha, más honda y con el respaldo más bajo (para estar a gusto)
+              const baja = P.modo === 'baja', ancho = baja ? 50 : 44, fondo = baja ? 46 : 42, zT = s*(D/2 + fondo/2 - 4);
+              const atras = zT + s*(fondo/2 - 2), adelante = zT - s*(fondo/2 - 2);
+              caja(ancho - 2, 2.5, fondo - 2, trenzado, x, alto - 1.5, zT);
+              for(const dx of [-1, 1]) caja(2.6, 4, fondo, maderaSilla, x + dx*(ancho/2 - 1.3), alto - 3, zT);
+              for(const z of [atras, adelante]) caja(ancho, 4, 2.6, maderaSilla, x, alto - 3, z);
+              const altoResp = baja ? 26 : 34;
+              for(const dx of [-1, 1]){
+                caja(3, alto - 1, 3, maderaSilla, x + dx*(ancho/2 - 1.5), (alto - 1)/2, adelante);
+                const trasera = caja(3, alto + altoResp, 3, maderaSilla, x + dx*(ancho/2 - 1.5), (alto + altoResp)/2, atras);
+                trasera.rotation.x = s*.05;
+              }
+              const resp = caja(ancho, 7, 2.2, maderaSilla, x, alto + altoResp - 5, atras + s*1.2); resp.rotation.x = s*.08;
+              caja(ancho - 6, 2, 2, maderaSilla, x, 14, zT);   // travesaño bajo
+            }
+          }
+        }
+      }
+      // cotas
+      cota(`${L} cm`, 0, top + 4, D/2 + 6);
+      cota(`${D} cm`, L/2 + 14, top + 4, 0);
+      // la medida de la pantalla, en la madera de la punta (sobre la imagen tapaba por donde entra el dragón)
+      cota(`pantalla ${+S.toFixed(1)} cm`, -L/2 - 14, top + 4, 0);
+      if(lado > 0) for(const s of [1, -1]) cota(`para comer ${lado.toFixed(lado % 1 ? 1 : 0)} cm`, L/2 - 45, top + 6, s*(S/2 + lado/2), lado < 30);
+      // la pantalla: el dragón a la proporción real (largo × ancho de la franja)
+      const pw = 2048, ph = Math.max(64, Math.round(pw*PA.imgA/PA.imgL));
+      if(pantallaCv.width !== pw || pantallaCv.height !== ph){ pantallaCv.width = pw; pantallaCv.height = ph; pantallaTex.dispose(); }   // otra medida: la textura se rehace (si no, queda con la vieja y la imagen sale partida)
+      // el contenido: las variantes de /dragon/ que comparten el motor 2D, a la proporción de esta pantalla. El 7 (desde
+      // el fondo) va un poco más chico: en una franja angosta necesita sitio a lo alto para su espiral
+      dragones = {};
+      dragon = hacerDragon(pw, ph);
+      datos();
+    }
+
+    // cuánto vuela la tapa sobre la isla por los lados largos: lo que necesitan las rodillas, sin pasar de la madera
+    function voladizo(){ const lado = (P.D - P.S)/2; return Math.max(15, Math.min(lado, P.modo === 'barra' ? 30 : 35)); }
+    function datos(){
+      const { L, D, S } = P, lado = (D - S)/2, PA = pantalla(), MO = P.modelo ? MODELOS[P.modelo] : null;
+      const area = L*D/1e4, peso = area*12*2.5;                 // laminado 6+6 mm: 2,5 kg por m² y mm
+      const puestos = Math.max(2, Math.floor(L/62))*2;
+      const M = MODOS[P.modo], top = M.mesa - 1.2;
+      const libreMadera = top - 4 - M.asiento, librePantalla = top - bajoPantalla() - M.asiento;   // entre el asiento y lo de arriba
+      const fila = (t: string, v: string, cls = '') => `<div class="${cls}"><span>${t}</span><b>${v}</b></div>`;
+      document.getElementById('datos')!.innerHTML =
+        fila('madera por lado', `${lado.toFixed(1)} cm`, lado < 30 ? 'mal' : 'bien') +
+        fila('plato de 27 cm', lado >= 30 ? 'entra' : 'no entra', lado >= 30 ? 'bien' : 'mal') +
+        (MO ? fila('modelo', MO.nombre) + fila('resolución', MO.res) + fila('brillo', `${MO.brillo} nits`) +
+              fila('consumo (calor en la isla)', `${MO.w[0]} W, máx. ${MO.w[1]}`, MO.w[0] > 300 ? 'mal' : '') +
+              fila('peso de la pantalla', `${MO.kg} kg`) + fila('boca arriba', 'consultar a LG (N/D)', 'mal') : '') +
+        fila('imagen', `${PA.imgL.toFixed(1)} × ${PA.imgA.toFixed(1)} cm (${(PA.imgL/PA.imgA).toFixed(1)}:1)`) +
+        (PA.largo < L - .5 ? fila('madera en cada punta', `${((L - PA.largo)/2).toFixed(1)} cm`) : '') +
+        fila('vidrio', `${L} × ${D} cm, ${area.toFixed(2)} m²`) +
+        fila('peso del vidrio (12 mm)', `~${Math.round(peso)} kg`) +
+        fila('comensales', `${puestos}`) +
+        fila('altura de la mesa', `${M.mesa} cm (${M.nombre} ${M.asiento})`) +
+        fila('muslos, bajo la madera', `${libreMadera.toFixed(0)} cm`, libreMadera < 20 ? 'mal' : 'bien') +
+        (P.estructura === 'isla'
+          ? fila('vuelo para las rodillas', `${voladizo().toFixed(0)} cm`, voladizo() < 25 ? 'mal' : 'bien')
+          : (P.modo === 'barra' ? '' : fila('rodillas, bajo la pantalla', `${librePantalla.toFixed(0)} cm`, librePantalla < 20 ? 'mal' : 'bien')));
+      for(const [id, v] of [['vL', `${L} cm`], ['vD', `${D} cm`], ['vS', `${+S.toFixed(1)} cm`]]) document.getElementById(id)!.textContent = v;
+    }
+
+    // controles
+    const rango = (id: 'L' | 'D' | 'S') => {
+      const el = document.getElementById(id) as HTMLInputElement;
+      el.addEventListener('input', () => {
+        P[id] = Number(el.value);
+        if(id === 'S') elegirModelo(null, false);
+        if(P.S > P.D - 4){ P.S = P.D - 4; (document.getElementById('S') as HTMLInputElement).value = String(P.S); }
+        armar();
+      });
+    };
+    rango('L'); rango('D'); rango('S');
+    // un modelo de LG: fija el ancho de la pantalla a su medida y deja 35 cm de madera por lado; "a medida" libera el
+    // ancho (y la pantalla vuelve a ocupar todo el largo)
+    function elegirModelo(m: Modelo | null, rearmar = true){
+      P.modelo = m;
+      if(m){
+        P.S = MODELOS[m].ext[1]/10; P.D = Math.round((P.S + 70)/5)*5;
+        (document.getElementById('S') as HTMLInputElement).value = String(Math.round(P.S));
+        (document.getElementById('D') as HTMLInputElement).value = String(P.D);
+        if(P.L < MODELOS[m].ext[0]/10 + 4){ P.L = 250; (document.getElementById('L') as HTMLInputElement).value = '250'; }
+      }
+      for(const [id, v] of [['p-88', '88'], ['p-86', '86'], ['p-medida', null]] as const) document.getElementById(id)!.classList.toggle('on', v === m);
+      if(rearmar) armar();
+    }
+    document.getElementById('p-88')!.addEventListener('click', () => elegirModelo('88'));
+    document.getElementById('p-86')!.addEventListener('click', () => elegirModelo('86'));
+    document.getElementById('p-medida')!.addEventListener('click', () => elegirModelo(null));
+    const boton = (id: string, f: (b: HTMLButtonElement) => void) => { const b = document.getElementById(id) as HTMLButtonElement; b.addEventListener('click', () => f(b)); };
+    for(const e of ['isla', 'patas'] as const) boton('e-' + e, () => {
+      P.estructura = e; document.getElementById('e-isla')!.classList.toggle('on', e === 'isla'); document.getElementById('e-patas')!.classList.toggle('on', e === 'patas'); armar();
+    });
+    for(const [id, campo] of [['mTapa', 'tapa'], ['mCuerpo', 'cuerpo']] as const){
+      const cont = document.getElementById(id)!;
+      for(const nombre of Object.keys(MADERAS) as Madera[]){
+        const b = document.createElement('button'); b.dataset.m = nombre; b.title = nombre; b.style.background = MADERAS[nombre].base;
+        b.addEventListener('click', () => { P[campo] = nombre; vestir(); }); cont.appendChild(b);
+      }
+    }
+    vestir();
+    for(const m of ['barra', 'mesa', 'baja'] as Modo[]) boton('m-' + m, () => {
+      P.modo = m;
+      for(const o of ['barra', 'mesa', 'baja']) document.getElementById('m-' + o)!.classList.toggle('on', o === m);
+      armar(); vista('general');
+    });
+    boton('tVidrio', b => { P.vidrio = !P.vidrio; b.classList.toggle('on', P.vidrio); armar(); });
+    for(const c of ['6', '7', '8', 'off'] as const) boton('c-' + c, () => {
+      P.conDragon = c !== 'off';
+      if(c !== 'off'){ P.contenido = c; dragon = hacerDragon(pantallaCv.width, pantallaCv.height); }
+      for(const o of ['6', '7', '8', 'off']) document.getElementById('c-' + o)!.classList.toggle('on', o === c);
+    });
+    boton('tCotas', b => { const on = !b.classList.contains('on'); b.classList.toggle('on', on); document.body.classList.toggle('sin-cotas', !on); });
+    boton('tGente', b => { P.gente = !P.gente; b.classList.toggle('on', P.gente); armar(); });
+    const trade = (abrir?: boolean) => { const on = document.body.classList.toggle('con-tradeoffs', abrir); document.getElementById('tTrade')!.classList.toggle('on', on); };
+    boton('tTrade', () => trade()); boton('cerrarTrade', () => trade(false)); boton('pestana', () => trade(true));
+    if(new URLSearchParams(location.search).has('tradeoffs')) trade(true);
+    // vistas: la cámara viaja suave hasta cada una
+    let viaje: { p0: THREE.Vector3; p1: THREE.Vector3; t0: THREE.Vector3; t1: THREE.Vector3; desde: number } | null = null;
+    function vista(cual: string, inmediato = false){
+      const alto = MODOS[P.modo].mesa;
+      const poses: Record<string, [number[], number[]]> = {
+        general: [[-280, alto + 190, 320 + P.D*.5], [0, alto - 25, 0]],
+        comensal: [[-40, alto + 45, P.D/2 + 45], [30, alto, -P.D*.1]],
+        arriba: [[0, alto + 460, .1], [0, alto, 0]],
+      };
+      const [p, t] = poses[cual];
+      if(inmediato){ camera.position.set(p[0], p[1], p[2]); controls.target.set(t[0], t[1], t[2]); return; }
+      viaje = { p0: camera.position.clone(), p1: new THREE.Vector3(...p), t0: controls.target.clone(), t1: new THREE.Vector3(...t), desde: performance.now() };
+    }
+    boton('vGeneral', () => vista('general')); boton('vComensal', () => vista('comensal')); boton('vArriba', () => vista('arriba'));
+    addEventListener('keydown', e => { const k = e.key.toLowerCase(); if(k === 'h') document.body.classList.toggle('limpio'); if(k === 't') trade(); });
+
+    function tamano(){
+      renderer.setSize(innerWidth, innerHeight, false); etiquetas.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+    }
+    addEventListener('resize', tamano);
+    tamano(); armar(); vista('general', true);
+
+    const t0 = performance.now();
+    let cuadro = 0;
+    const mediaCv = document.createElement('canvas'); mediaCv.width = mediaCv.height = 1;
+    const mediaCtx = mediaCv.getContext('2d', { willReadFrequently: true })!;
+    function frame(now: number){
+      requestAnimationFrame(frame);
+      if(viaje){
+        const q = Math.min(1, (now - viaje.desde)/1200), e = q*q*(3 - 2*q);
+        camera.position.lerpVectors(viaje.p0, viaje.p1, e); controls.target.lerpVectors(viaje.t0, viaje.t1, e);
+        if(q >= 1) viaje = null;
+      }
+      controls.update();
+      // la pantalla: el dragón cruzando la franja (o apagada, en negro)
+      const t = (now - t0)/1000;
+      pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.fillStyle = '#000'; pctx.fillRect(0, 0, pantallaCv.width, pantallaCv.height);
+      if(P.conDragon && dragon) dragon.draw(pctx, (t/pasada()) % 1, t);
+      pantallaTex.needsUpdate = true;
+      // el color medio de la pantalla, cada pocos cuadros, para la luz que echa sobre la vajilla
+      if(luzPantalla && (cuadro++ % 6 === 0)){
+        mediaCtx.drawImage(pantallaCv, 0, 0, 1, 1);
+        const [cr, cg, cb] = mediaCtx.getImageData(0, 0, 1, 1).data;
+        luzPantalla.color.setRGB(cr/255, cg/255, cb/255, THREE.SRGBColorSpace);
+        luzPantalla.intensity = P.conDragon ? 1400 : 0;   // un reflejo suave en la vajilla, no un foco
+      }
+      renderer.render(scene, camera); etiquetas.render(scene, camera);
+    }
+    requestAnimationFrame(frame);
+    (window as any).__barra = { P, armar, vista, camera };
+  </script>
+</body>
+</html>

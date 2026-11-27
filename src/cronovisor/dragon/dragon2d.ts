@@ -13,18 +13,7 @@
  * poco con cada brazada.
  */
 
-type P = { x: number; y: number };
-const TAU = Math.PI*2;
-const suave = (q: number) => q*q*(3 - 2*q);
-const lim = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-const hash = (n: number) => { const s = Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s); };
-
-// la paleta del dragón 3D
-const C = {
-  cuerpo: '#3a9fd8', luz: '#a6e4ff', vientre: '#ffd35a', placa: '#d98a2a', trazo: '#1d5a8c',
-  rojo: '#e8432e', rojoOsc: '#b8241a', naranja: '#f6744a', claro: '#ffc06a',
-  oro: '#ffd03a', hueso: '#f2d28a', borde: '#fff3dc', ojo: '#1f3f6e',
-};
+import { type P, TAU, suave, lim, hash, C, llama, ojoReptil, Hondura, escalaHondura, luzHondura } from './estilo';
 
 export class DragonPlano {
   private L: number; private H: number; private R: number; private F: number;
@@ -34,13 +23,23 @@ export class DragonPlano {
   private readonly N = 120;
 
   // w, h: la mesa en píxeles; el dragón se dibuja con el origen en su esquina de arriba a la izquierda
-  constructor(readonly w: number, readonly h: number){
-    this.L = w*.8;            // el largo del cuerpo: ~80 % de la mesa
+  // `largo`: el largo del cuerpo en píxeles; por defecto el 80 % del ancho. En una franja angosta (la pantalla LED de la
+  // barra, ~10:1) el 80 % del ancho no entraría a lo alto: ahí se lo da a la medida de la franja
+  // `hondo` (la variante 7, Eze 2026-11-26: "que venga del fondo"): el mismo dibujo con profundidad. Cada punto de la
+  // columna tiene su hondura bajo el vidrio (z: 0 en el vidrio, más hondo cuanto más grande); se proyecta en perspectiva
+  // hacia el centro de la mesa (k = 1/(1 + z·.55): lo hondo, más chico) y se apaga con la hondura (`vis`: a ~z 3,2 ya no
+  // se ve, el abismo es negro). El recorrido: sube del fondo en espiral, cruza la mesa rozando el vidrio y se hunde.
+  private hondo = false;
+  private arcoQ = new Float64Array(0);
+  private kk: number[] = []; private vv: number[] = [];
+  constructor(readonly w: number, readonly h: number, largo?: number, hondo: boolean | 'pez' = false){
+    this.hondo = !!hondo;
+    this.L = largo ?? w*.8;   // el largo del cuerpo: ~80 % de la mesa
     this.F = this.L*.105;     // la escala de las llamas y las patas
-    this.H = this.L*.14;      // la cabeza: grande, es lo que se mira (como en la referencia)
+    this.H = this.L*.175;     // la cabeza: grande, es lo que se mira (Eze: más grande, por la proporción del cuerpo con las alas)
     this.R = this.L*.04;      // medio ancho del cuerpo en el pecho
     const L = this.L;
-    this.x0 = -w/2 - L - 700; this.x1 = w/2 + L + 700;
+    this.x0 = -w/2 - L - 700*L/1444; this.x1 = w/2 + L + 700*L/1444;
     const PASOS = 6000;
     this.arco = new Float64Array(PASOS + 1); this.xs = new Float64Array(PASOS + 1);
     let prev = this.camino(this.x0); this.xs[0] = this.x0;
@@ -51,9 +50,125 @@ export class DragonPlano {
     // la pasada: empieza con la perla y la cabeza fuera por la izquierda, termina con las últimas llamas de la cola
     // fuera por la derecha (en el salto del bucle la mesa está vacía)
     const sDeX = (x: number) => this.arco[Math.round((x - this.x0)/(this.x1 - this.x0)*PASOS)];
-    this.S_INI = sDeX(-w/2 - this.H*2.4);
+    this.S_INI = sDeX(-w/2 - this.H*2.7);
     this.S_FIN = sDeX(w/2 + this.F*2.4) + L;
+    if(hondo === 'pez') this.armarPez(); else if(hondo) this.armarHondo();
   }
+
+  // El recorrido en profundidad, rehecho (Eze: giros bruscos; medido: la cabeza llegaba a girar >1000°/s donde el
+  // camino subía casi en vertical hacia el vidrio: visto desde arriba apenas avanzaba y su dirección en pantalla saltaba).
+  // Dos reglas: lo que se ve desde arriba (x, y) es siempre una curva amplia y regular, una espiral de radio grande que
+  // sale tangente a una travesía suave, nunca más cerrada de lo que el cuerpo puede seguir; y la hondura va aparte, una
+  // curva suave a lo largo del camino (sube durante la espiral, roza el vidrio en la travesía, se hunde al final),
+  // mientras sigue avanzando lo bastante para que la perspectiva no lo haga parecer retroceder.
+  private hx = new Float64Array(0); private hy = new Float64Array(0); private hz = new Float64Array(0);
+  // La variante 8, "el pez" (Eze: como un pez que sube a la superficie): sube del fondo en una punta de la pantalla,
+  // sale a flor de vidrio, recorre la pantalla a lo largo y en la otra punta se vuelve a hundir. El recorrido se diseña
+  // como se VE en pantalla (una curva suave: sube por la izquierda, cruza arriba del centro, baja por la derecha) y la
+  // hondura aparte; la posición en el espacio sale de deshacer la perspectiva (mundo = pantalla · (1 + .55 z)). Así, en
+  // pantalla sigue siempre esa curva, sin poder retroceder ni dar media vuelta; sólo cambia de tamaño y de luz.
+  private armarPez(){
+    const W2 = this.w/2, H2 = this.h/2, L = this.L;
+    // nace en la punta izquierda, a media altura y ya mirando a lo largo (Eze: empezaba hacia el medio, subiendo en
+    // diagonal desde la esquina); el final, como estaba
+    // Entra desde fuera, por el borde izquierdo (Eze: no que aparezca dentro de la pantalla, "del medio", sino del
+    // extremo opuesto al que se retira). Del cuarto punto en adelante es el recorrido original, sin tocar: Eze quería el
+    // final tal cual (cómo se hunde a la derecha); sólo cambia la entrada.
+    // y al final (Eze: no parecía irse para abajo) la curva frena y converge a un punto: el cuerpo entero pasa por ahí
+    // y se hunde por ese mismo sitio, como un pez que se zambulle
+    const ctl = [[-1.4, .06], [-1.15, .02], [-.85, -.06], [-.42, -.12], [-.05, -.15], [.3, -.08], [.52, .05], [.64, .14], [.69, .18]]
+      .map(([x, y]) => [x*W2, y*H2]);
+    const cat = (q: number) => {
+      const n = ctl.length - 1, i = Math.max(0, Math.min(n - 1, Math.floor(q))), f = q - i;
+      const p0 = ctl[Math.max(0, i - 1)], p1 = ctl[i], p2 = ctl[i + 1], p3 = ctl[Math.min(n, i + 2)];
+      return [0, 1].map(k => .5*((2*p1[k]) + (-p0[k] + p2[k])*f + (2*p0[k] - 5*p1[k] + 4*p2[k] - p3[k])*f*f + (-p0[k] + 3*p1[k] - 3*p2[k] + p3[k])*f*f*f));
+    };
+    const xs: number[] = [], ys: number[] = [];
+    for(let q = 0; q <= ctl.length - 1 + 1e-9; q += .002){ const p = cat(q); xs.push(p[0]); ys.push(p[1]); }
+    // la hondura a lo largo de la curva (en pantalla): sube mientras entra (hasta el punto 2,7 de la curva), roza el
+    // vidrio, y se hunde desde el punto 4,69 de la curva (el mismo donde se hundía en la versión que Eze quería, a la
+    // altura del centro-derecha), con la misma suavidad, hasta el final
+    const n = xs.length, sp = new Float64Array(n);
+    for(let j = 1; j < n; j++) sp[j] = sp[j - 1] + Math.hypot(xs[j] - xs[j - 1], ys[j] - ys[j - 1]);
+    const tot = sp[n - 1], sm = (q: number) => { q = lim(q, 0, 1); return q*q*q*(q*(q*6 - 15) + 10); };
+    const enQ = (q: number) => sp[Math.min(n - 1, Math.round(q/.002))];
+    const spR = enQ(2.7), spD = enQ(4.69);
+    const Z0 = 6.5, ZV = .12, ZE = 2.4;
+    this.hx = new Float64Array(n); this.hy = new Float64Array(n); this.hz = new Float64Array(n);
+    for(let j = 0; j < n; j++){
+      const z = sp[j] < spR ? ZE + (ZV - ZE)*sm(sp[j]/spR) : sp[j] < spD ? ZV : ZV + (Z0 - ZV)*sm((sp[j] - spD)/(tot - spD));
+      const m = 1 + .55*z;                                     // deshacer la perspectiva
+      this.hx[j] = xs[j]*m; this.hy[j] = ys[j]*m; this.hz[j] = z;
+    }
+    // el largo de arco, en el espacio (con la hondura): así el cuerpo, hondo, se ve acortado como corresponde
+    const arco = new Float64Array(n);
+    for(let j = 1; j < n; j++) arco[j] = arco[j - 1] + Math.hypot(this.hx[j] - this.hx[j - 1], this.hy[j] - this.hy[j - 1], (this.hz[j] - this.hz[j - 1])*W2*.6);
+    this.arcoQ = arco;
+    const total = arco[n - 1], zDe = (q: number) => this.punto(q)[2], ZI = 3.3;
+    // empieza cuando la perla, delante de la cabeza, está por asomar por el borde izquierdo (o por salir del fondo)
+    // (la cabeza, honda, es más chica: la perla va a ~1,9 cabezas por delante, a la escala de su hondura)
+    const asoma = (q: number) => { const p = this.punto(q), k = DragonPlano.k(p[2]); return p[0]*k + this.H*2.75*k > -W2; };   // con el halo
+    let ini = 0; for(let q = 0; q < total; q += 2) if(zDe(q) < ZI && asoma(q)){ ini = q - 2; break; }
+    let fin = total; for(let q = total; q > 0; q -= 2) if(zDe(q) < ZI){ fin = q + 2; break; }
+    this.S_INI = ini; this.S_FIN = Math.min(total + L*1.5, fin + L*1.02);
+  }
+  private armarHondo(){
+    const W2 = this.w/2, H2 = this.h/2, L = this.L;
+    const cx = -.5*W2, cy = .4*H2, R0 = .62*H2;   // la espiral, a la izquierda: así la travesía cruza dentro de la mesa
+    const vueltas = 1.15, te = -Math.PI/2, ts = te - TAU*vueltas, paso = .004;
+    const xs: number[] = [], ys: number[] = [];
+    const radio = (th: number) => R0*(.85 + .15*(th - ts)/(te - ts));
+    for(let th = ts; th < te; th += paso){ xs.push(cx + radio(th)*Math.cos(th)); ys.push(cy + radio(th)*Math.sin(th)); }
+    const nEsp = xs.length;
+    // la travesía: sale tangente de lo alto de la espiral hacia la derecha y baja apenas (pendiente cero en la unión)
+    const yTop = cy - R0, largoT = 7*W2;
+    for(let d = 3; d <= largoT; d += 3){ xs.push(cx + d); ys.push(yTop + .3*H2*(1 - Math.cos(Math.PI*Math.min(1, d/(1.8*W2))))/2); }
+    // largo de arco en el plano; la hondura, por tramos suaves a lo largo de él
+    const n = xs.length, arco = new Float64Array(n);
+    for(let j = 1; j < n; j++) arco[j] = arco[j - 1] + Math.hypot(xs[j] - xs[j - 1], ys[j] - ys[j - 1]);
+    const finEspiral = arco[nEsp - 1], total = arco[n - 1];
+    const s1 = finEspiral + .15*W2, s2 = finEspiral + .5*W2;          // de s1 a s2 roza el vidrio; se hunde a la derecha del centro, sin salir de la mesa
+    const sm = (q: number) => { q = lim(q, 0, 1); return q*q*q*(q*(q*6 - 15) + 10); };
+    const Z0 = 6.5, ZV = .12;
+    this.hx = new Float64Array(xs); this.hy = new Float64Array(ys); this.hz = new Float64Array(n);
+    // la hondura: sube con la espiral, roza el vidrio, y al hundirse nunca más rápido de lo que deja seguir avanzando en
+    // pantalla (una pieza que se aleja de lado y a la vez se hunde se achica hacia el centro: si se hunde demasiado
+    // rápido, en pantalla frena y retrocede, y la cabeza daba media vuelta en un cuadro; medido: 3700°/s)
+    for(let j = 0; j < n; j++){
+      const sj = arco[j];
+      if(sj < s1){ this.hz[j] = Z0 + (ZV - Z0)*sm(sj/s1); continue; }
+      if(sj < s2 || j === 0){ this.hz[j] = ZV; continue; }
+      const z = this.hz[j - 1], ds2 = sj - arco[j - 1], k = DragonPlano.k(z), x = Math.max(1, Math.abs(xs[j]));
+      const tope = .6/(.55*k*x/ds2)*ds2/ds2;                      // dz/ds máximo para que x·k siga creciendo (margen 40 %)
+      const deseo = (1.4/W2)*sm((sj - s2)/(.5*W2));                // arranca suave
+      this.hz[j] = z + Math.min(deseo, tope)*ds2;
+    }
+    this.arcoQ = arco;
+    // la pasada: empieza con la cabeza todavía invisible en el fondo y termina cuando la cola entera se perdió abajo
+    const zDe = (q: number) => this.punto(q)[2], ZI = 3.3;
+    let ini = 0; for(let q = 0; q < total; q += 2) if(zDe(q) < ZI){ ini = q - 2; break; }
+    let fin = total; for(let q = total; q > 0; q -= 2) if(zDe(q) < ZI){ fin = q + 2; break; }
+    this.S_INI = ini; this.S_FIN = Math.min(total + L, fin + L*1.02);
+  }
+  // un punto del recorrido a una distancia `s` (x, y centradas en la mesa, z hondura); en el plano, z = 0
+  private punto(s: number): number[] {
+    if(!this.hondo){ const p = this.enArco(s); return [p.x, p.y, 0]; }
+    const a = this.arcoQ, n = a.length - 1, X = this.hx, Y = this.hy, Z = this.hz;
+    // antes del comienzo y después del final: más hondo, sobre la misma vertical de la pantalla (invisible, en el negro)
+    if(s <= 0){
+      // antes del comienzo: sigue la curva hacia atrás en pantalla (no apilado en un punto, que hacía girar la cabeza)
+      const m0 = 1 + .55*Z[0], m1 = 1 + .55*Z[1], ax = X[0]/m0, ay = Y[0]/m0, bx = X[1]/m1, by = Y[1]/m1;
+      const l = Math.hypot(bx - ax, by - ay) || 1, z = Z[0] + (-s)/(this.w*.6), m = 1 + .55*z, d = s/m0;
+      return [(ax + (bx - ax)/l*d)*m, (ay + (by - ay)/l*d)*m, z];
+    }
+    if(s >= a[n]){ const z = Z[n] + (s - a[n])/(this.w*.3), m = (1 + .55*z)/(1 + .55*Z[n]); return [X[n]*m, Y[n]*m, z]; }
+    let lo = 0, hi = n;
+    while(hi - lo > 1){ const m = (lo + hi) >> 1; if(a[m] < s) lo = m; else hi = m; }
+    const f = (s - a[lo])/((a[hi] - a[lo]) || 1);
+    return [X[lo] + (X[hi] - X[lo])*f, Y[lo] + (Y[hi] - Y[lo])*f, Z[lo] + (Z[hi] - Z[lo])*f];
+  }
+  private static k(z: number){ return escalaHondura(z); }
+  private static vis(z: number){ return luzHondura(z); }
 
   // la S de la cabeza, en coordenadas centradas en la mesa
   private camino(x: number): P {
@@ -71,6 +186,31 @@ export class DragonPlano {
     return this.camino(this.xs[lo] + (this.xs[hi] - this.xs[lo])*f);
   }
 
+  // la oscuridad de la hondura (estilo.ts)
+  private hondura = new Hondura();
+  private get osc(){ return this.hondura.osc; }
+  private set osc(v: number){ this.hondura.osc = v; }
+  private envolver(ctx: CanvasRenderingContext2D){ return this.hondura.envolver(ctx); }
+
+  // el abismo: brasas que suben lentamente desde el fondo hacia el vidrio, en perspectiva (las hondas, chicas y
+  // apagadas; se encienden y se apagan en el camino). Su movimiento sale de `u` con ciclos enteros por pasada, así el
+  // bucle no salta aunque siempre haya brasas en la mesa.
+  private brasas(ctx: CanvasRenderingContext2D, u: number){
+    const lw = Math.max(2, this.w/650), W2 = this.w*.8, H2 = this.h*.8;
+    for(let j = 0; j < 150; j++){
+      const vida = ((hash(j*3.1) - u*2) % 1 + 1) % 1;              // 0: nace abajo, 1: llega arriba (dos subidas por pasada)
+      const z = 5.4 - vida*5.1, k = DragonPlano.k(z), v = DragonPlano.vis(z)*Math.sin(vida*Math.PI);
+      if(v < .02) continue;
+      const deriva = Math.sin(u*TAU*3 + j)*.04;
+      const x = ((hash(j + .5) - .5)*2*W2 + deriva*W2)*k + this.w/2, y = ((hash(j + 1.7) - .5)*2*H2)*k + this.h/2;
+      const tam = (1 + 2.2*hash(j + 9.3))*lw*.7*k;
+      ctx.globalAlpha = v*.55;
+      ctx.fillStyle = hash(j + 4.4) < .5 ? C.claro : C.naranja;
+      ctx.beginPath(); ctx.arc(x, y, tam, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // el ancho del cuerpo a lo largo (0 la nuca, 1 la punta de la cola), en medios anchos del pecho
   private perfil(f: number){
     const cuello = .62 + .38*suave(lim(f/.16, 0, 1));
@@ -86,14 +226,23 @@ export class DragonPlano {
     // la columna: el camino detrás de la cabeza, más la onda de lado que la recorre
     const sp: P[] = [], T: P[] = [], Nn: P[] = [], r: number[] = [];
     const k = TAU/(L*.85), w = 2.2;
+    this.kk = []; this.vv = [];
     for(let i = 0; i <= N; i++){
-      const s = sCab - i*ds, a = this.enArco(s), b = this.enArco(s + 1);
-      let tx = b.x - a.x, ty = b.y - a.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+      const s = sCab - i*ds, a = this.punto(s), b = this.punto(s + 1);
+      let tx = b[0] - a[0], ty = b[1] - a[1]; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
       const f = i/N, env = suave(lim((f - .02)/.5, 0, 1))*(1 - .25*f);
       const o = Math.sin(k*i*ds - w*t)*R*1.5*env;
-      sp.push({ x: a.x - ty*o + this.w/2, y: a.y + tx*o + this.h/2 });
-      r.push(R*this.perfil(f)*(1 + .04*Math.sin(t*1.6)*Math.exp(-Math.pow((f - .2)/.1, 2))));
+      // la perspectiva: hacia el centro de la mesa, más chico cuanto más hondo
+      const kz = DragonPlano.k(a[2]);
+      this.kk.push(kz); this.vv.push(this.hondo ? DragonPlano.vis(a[2]) : 1);
+      sp.push({ x: (a[0] - ty*o)*kz + this.w/2, y: (a[1] + tx*o)*kz + this.h/2 });
+      r.push(R*this.perfil(f)*(1 + .04*Math.sin(t*1.6)*Math.exp(-Math.pow((f - .2)/.1, 2)))*kz);
     }
+    // la hondura: no transparencia (las llamas superpuestas, transparentes, se veían unas a través de otras y el dragón
+    // se desarmaba al hundirse, Eze: "se va deformando feo") sino oscuridad, como en el agua: cada pieza se dibuja
+    // sólida, con sus colores llevados hacia el negro del fondo según su hondura (`osc`, a través de `envolver`)
+    const kk = this.kk, vv = this.vv, niebla = (i: number) => { this.osc = vv[Math.max(0, Math.min(N, i))]; };
+    if(this.hondo){ this.brasas(ctx, u); ctx = this.envolver(ctx); }
     for(let i = 0; i <= N; i++){
       const a = sp[Math.max(0, i - 1)], b = sp[Math.min(N, i + 1)];
       let tx = a.x - b.x, ty = a.y - b.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
@@ -113,8 +262,10 @@ export class DragonPlano {
 
     // ── las patas, lo primero: quedan debajo del pelaje de llamas, que las tapa en el hombro y el codo, y asoman las
     // manos y las garras (Eze, 2026-11-26: como en Miss Ko, las patas no van encima del pelaje sino por debajo)
-    for(const [f, delantera] of [[.17, true], [.47, false]] as [number, boolean][]) for(const lado of [1, -1])
-      this.pata(ctx, Math.round(f*N), delantera, lado, sp, T, Nn, r, t, lw);
+    for(const [f, delantera] of [[.17, true], [.47, false]] as [number, boolean][]) for(const lado of [1, -1]){
+      const i = Math.round(f*N); niebla(i);
+      this.pata(ctx, i, delantera, lado, sp, T, Nn, r, t, lw*kk[i]);
+    }
     // ── las alas, debajo del pelaje (Eze: que salgan por debajo de las escamas, así no se ven los cortes en el
     // hombro: el pelaje de los costados y del lomo tapa sus raíces): de membrana, como las de un murciélago o un wyvern (Eze, 2026-11-26, con la foto de unas alas de
     // fieltro: "menos elementos"). Por lado, pocas piezas: el brazo (del hombro a la muñeca, el borde de adelante),
@@ -124,10 +275,11 @@ export class DragonPlano {
     // se abren y se pliegan un poco (el ancho) y barren apenas hacia adelante y atrás.
     { const iA = Math.round(N*.2), iB = Math.min(N, iA + 17);
       for(const lado of [1, -1]){
+        niebla(iA);
         const n = { x: Nn[iA].x*lado, y: Nn[iA].y*lado }, at = atrasDe(iA, 12), fw = { x: -at.x, y: -at.y };
         const nB = { x: Nn[iB].x*lado, y: Nn[iB].y*lado };
         const abre = .86 + .14*Math.sin(t*1.25), barre = .12*Math.sin(t*1.25 - .6);
-        const span = H*2.9;
+        const span = H*2.9*kk[iA];
         const en = (o: P, afuera: number, adelante: number) => ({ x: o.x + n.x*afuera + fw.x*adelante, y: o.y + n.y*afuera + fw.y*adelante });
         const hombro = { x: sp[iA].x + n.x*r[iA]*.4, y: sp[iA].y + n.y*r[iA]*.4 };
         const cuerpoAtras = { x: sp[iB].x + nB.x*r[iB]*.8, y: sp[iB].y + nB.y*r[iB]*.8 };
@@ -150,7 +302,7 @@ export class DragonPlano {
             const dx = dst.x - hombro.x, dy = dst.y - hombro.y, l = Math.hypot(dx, dy) || 1, d = { x: dx/l, y: dy/l };
             const base = { x: hombro.x + dx*q0, y: hombro.y + dy*q0 };
             const color = (fila + j) % 3 === 0 ? C.naranja : (fila + j) % 3 === 1 ? C.rojo : C.rojoOsc;
-            this.llama(ctx, base, d, d, l*.5, Math.max(H*.13, l*.12), t, 700 + j*1.7 + fila*.61 + (lado > 0 ? 0 : 13), lado, color, lw, 1, true);
+            this.llama(ctx, base, d, d, l*.5, Math.max(H*.13*kk[iA], l*.12), t, 700 + j*1.7 + fila*.61 + (lado > 0 ? 0 : 13), lado, color, lw*kk[iA], 1, true);
           });
         }
       }
@@ -161,28 +313,32 @@ export class DragonPlano {
       const f = i/N;
       for(const lado of [1, -1]){
         const sem = i*2 + (lado > 0 ? 0 : 1), h1 = hash(sem), h2 = hash(sem + 77);
-        const largo = H*(1 + .3*h1)*(f < .5 ? 1 - .2*f : .9 - .9*(f - .5));
-        if(largo < H*.2) continue;
+        const largo = H*(1 + .3*h1)*(f < .5 ? 1 - .2*f : .9 - .9*(f - .5))*kk[i];
+        if(largo < H*.2*kk[i]) continue;
+        niebla(i);
         const base = { x: sp[i].x + Nn[i].x*lado*r[i]*.7, y: sp[i].y + Nn[i].y*lado*r[i]*.7 };
         const fuera = { x: Nn[i].x*lado, y: Nn[i].y*lado };
         const color = h2 < .55 ? C.rojo : C.rojoOsc;
-        this.llama(ctx, base, fuera, atrasDe(i, 10), largo, Math.max(r[i], R*.45)*.68, t, i*.45 + lado*1.3, lado, color, lw, .3 + .2*h2);
+        this.llama(ctx, base, fuera, atrasDe(i, 10), largo, Math.max(r[i], R*.45*kk[i])*.68, t, i*.45 + lado*1.3, lado, color, lw*kk[i], .3 + .2*h2);
       }
     }
     // la cola: un penacho de llamas hacia atrás
     for(let j = 0; j < 9; j++){
       const a = (j - 4)*.2 + Math.sin(t*2 + j)*.06, c = Math.cos(a), s = Math.sin(a);
       const atras = { x: -T[N].x*c + T[N].y*s, y: -T[N].y*c - T[N].x*s };
-      this.llama(ctx, sp[N - 1], { x: atras.x, y: atras.y }, atras, H*(1.1 + .5*hash(j + 300) - Math.abs(j - 4)*.12), R*.3, t, j*1.1, j < 4 ? 1 : -1, j % 3 ? C.rojo : C.naranja, lw, .1);
+      niebla(N);
+      this.llama(ctx, sp[N - 1], { x: atras.x, y: atras.y }, atras, H*(1.1 + .5*hash(j + 300) - Math.abs(j - 4)*.12)*kk[N], R*.3*kk[N], t, j*1.1, j < 4 ? 1 : -1, j % 3 ? C.rojo : C.naranja, lw*kk[N], .1);
     }
 
 
     // ── el cuerpo: contorno claro, relleno azul, franjas de medialuna
+    niebla(Math.round(N*.3));
+    const alfaCuerpo = ctx.globalAlpha;
     ctx.beginPath();
     for(let i = 0; i <= N; i++) { const p = sp[i]; i ? ctx.lineTo(p.x + Nn[i].x*r[i], p.y + Nn[i].y*r[i]) : ctx.moveTo(p.x + Nn[i].x*r[i], p.y + Nn[i].y*r[i]); }
     for(let i = N; i >= 0; i--){ const p = sp[i]; ctx.lineTo(p.x - Nn[i].x*r[i], p.y - Nn[i].y*r[i]); }
     ctx.closePath();
-    ctx.fillStyle = C.cuerpo; ctx.fill();
+    ctx.fillStyle = C.pata; ctx.fill();   // el cuerpo, debajo del pelaje: rojo profundo como patas y cabeza (asomaba azul en los bordes)
     // las franjas: medialunas que miran hacia atrás, amarillas, cada una con su borde claro
     ctx.save(); ctx.clip();
     // franjas anchas en medialuna (como las de la referencia), con la panza hacia atrás
@@ -193,11 +349,11 @@ export class DragonPlano {
       ctx.beginPath(); ctx.moveTo(a1.x, a1.y); ctx.quadraticCurveTo(c1.x*2 - (a1.x + a2.x)/2, c1.y*2 - (a1.y + a2.y)/2, a2.x, a2.y);
       ctx.lineTo(b2.x, b2.y); ctx.quadraticCurveTo(c2.x*2 - (b1.x + b2.x)/2, c2.y*2 - (b1.y + b2.y)/2, b1.x, b1.y); ctx.closePath();
       ctx.fillStyle = C.vientre; ctx.fill();
-      ctx.strokeStyle = C.borde; ctx.lineWidth = lw*.9; ctx.stroke();
+      ctx.strokeStyle = C.borde; ctx.lineWidth = lw*.9*kk[i]; ctx.stroke();
     }
     // una línea de luz por el lomo
     ctx.beginPath(); for(let i = 4; i < N - 6; i++) i === 4 ? ctx.moveTo(sp[i].x, sp[i].y) : ctx.lineTo(sp[i].x, sp[i].y);
-    ctx.strokeStyle = C.luz; ctx.globalAlpha = .35; ctx.lineWidth = R*.22; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.luz; ctx.globalAlpha = .35*alfaCuerpo; ctx.lineWidth = R*.22*kk[Math.round(N*.3)]; ctx.stroke(); ctx.globalAlpha = alfaCuerpo;
     ctx.restore();
     // el contorno
     ctx.beginPath();
@@ -215,69 +371,23 @@ export class DragonPlano {
         const lado = off >= 0 ? 1 : -1;
         const base = { x: sp[i].x + Nn[i].x*off*r[i], y: sp[i].y + Nn[i].y*off*r[i] };
         const color = fila % 2 ? (k ? C.rojo : C.rojoOsc) : (k ? C.rojoOsc : C.rojo);
-        this.llama(ctx, base, { x: Nn[i].x*lado, y: Nn[i].y*lado }, atrasDe(i, 18), r[i]*4.6, r[i]*.82, t, i*.37 + k, lado, color, lw*.85, .12*Math.abs(off)*2, true);
+        niebla(i);
+        this.llama(ctx, base, { x: Nn[i].x*lado, y: Nn[i].y*lado }, atrasDe(i, 18), r[i]*4.6, r[i]*.82, t, i*.37 + k, lado, color, lw*.85*kk[i], .12*Math.abs(off)*2, true);
       }
     }
     // ── la cabeza, la melena y la perla
-    this.cabeza(ctx, sp, T, r, t, lw);
+    niebla(0);
+    this.cabeza(ctx, sp, T, r, t, lw*kk[0]);
+    this.osc = 1; ctx.globalAlpha = 1;
   }
 
-  // Una llama, como las alas del dragón de Miss Ko (Eze, 2026-11-26: "más irregulares"): no lenguas iguales con borde
-  // entero, sino rizos en S gruesos, cada uno con su carácter (sacado de `fase`, así es estable cuadro a cuadro): su
-  // largo de onda, su amplitud, su grosor, el gancho de la punta; uno de cada cinco es una cinta larga que ondula varias
-  // veces. Lo que separa una llama de la de abajo es una sombra oscura (no un contorno claro); el blanco es sólo un filo
-  // de luz de un lado, el de afuera, que se corta antes de la punta.
-  // `fuera`: hacia dónde sale; `atras`: hacia dónde la lleva el vuelo; `abre`: cuánto sale hacia afuera (0 todo atrás)
+  // la llama: la forma base del estilo (estilo.ts)
   private llama(ctx: CanvasRenderingContext2D, base: P, fuera: P, atras: P, largo: number, ancho: number, t: number, fase: number, lado: number, color: string, lw: number, abre = .55, regular = false){
-    // la semilla sólo de `fase` y `lado`, nunca del largo o el ancho: en el pecho esos respiran con el cuerpo, y una
-    // semilla que cambia cada cuadro cambiaba la forma de cada escama cada cuadro (Eze vio el lomo del pecho agitado)
-    const sem = fase*3.71 + lado*.17, h1 = hash(sem), h2 = hash(sem + 11), h3 = hash(sem + 23), h4 = hash(sem + 37);
-    const cinta = !regular && h4 < .1;                                  // una cinta larga y ondulada
-    const ondas = cinta ? 3 + h1*1 : 1.9 + h1*.5;      // cuántas medias ondas a lo largo
-    const amp = regular ? .035 : (cinta ? .09 : .15) + h2*.04;                 // cuánto se mece de lado
-    const grueso = ((cinta ? .75 : .95) + h3*.25)*1.05;
-    const gancho = (regular ? 0 : cinta ? .05 : .1 + h2*.14)*(h3 < .5 ? 1 : -1)*lado;   // la punta se riza, a un lado o al otro
-    const L = largo*(cinta ? 1.25 : .95 + h1*.2);
-    const M = 32, izq: P[] = [], der: P[] = [], cen: P[] = [];
-    let dx = fuera.x*abre + atras.x*(1 - abre*.4), dy = fuera.y*abre + atras.y*(1 - abre*.4);
-    const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
-    const px = -dy, py = dx;
-    for(let j = 0; j <= M; j++){
-      const q = j/M;
-      // la onda viaja de la raíz a la punta, más lenta en las cintas; la punta se enrosca en gancho
-      const ola = Math.sin(q*Math.PI*ondas - t*(regular ? 1.6 : cinta ? 2.2 : 2.8) + fase + h2*6)*L*amp*Math.pow(q, .55);
-      const rizo = gancho*L*Math.pow(q, 3);
-      const curva = q*q*L*.22;
-      cen.push({ x: base.x + dx*q*L + px*(ola + rizo) + atras.x*curva, y: base.y + dy*q*L + py*(ola + rizo) + atras.y*curva });
-    }
-    for(let j = 0; j <= M; j++){
-      const q = j/M, a = cen[Math.max(0, j - 1)], b = cen[Math.min(M, j + 1)];
-      let tx = b.x - a.x, ty = b.y - a.y; const l2 = Math.hypot(tx, ty) || 1; tx /= l2; ty /= l2;
-      // gruesa en el primer tercio (la panza del rizo) y afinándose hasta la punta
-      const punta = 1 - suave(lim((q - (cinta ? .45 : .5))/(cinta ? .55 : .5), 0, 1));   // pareja casi hasta el final, la punta redondeada
-      const w = ancho*grueso*Math.sqrt(punta)*(cinta ? .55 + .1*Math.sin(q*9 + h1*5) : .8 + .2*Math.sin(Math.min(1, q*1.5)*Math.PI))*(1 - .2*q);
-      izq.push({ x: cen[j].x - ty*w, y: cen[j].y + tx*w }); der.push({ x: cen[j].x + ty*w, y: cen[j].y - tx*w });
-    }
-    const silueta = () => {
-      ctx.beginPath(); ctx.moveTo(izq[0].x, izq[0].y);
-      for(let j = 1; j <= M; j++) ctx.lineTo(izq[j].x, izq[j].y);
-      for(let j = M; j >= 0; j--) ctx.lineTo(der[j].x, der[j].y);
-      ctx.closePath();
-    };
-    // la sombra: la misma silueta en casi negro, más gruesa, que la despega de lo que tiene debajo
-    silueta(); ctx.strokeStyle = 'rgba(12,6,8,.9)'; ctx.lineWidth = lw*(regular ? 1.8 : 3); ctx.stroke();
-    ctx.fillStyle = color; ctx.fill();
-    // el filo de luz: sólo de un lado (el de afuera), de la raíz hasta antes de la punta, y no en todas
-    if(h2 > .18){
-      const borde = lado*gancho >= 0 ? izq : der, hasta = Math.round(M*(.55 + h1*.35));
-      ctx.beginPath(); ctx.moveTo(borde[2].x, borde[2].y);
-      for(let j = 3; j <= hasta; j++) ctx.lineTo(borde[j].x, borde[j].y);
-      ctx.strokeStyle = C.borde; ctx.lineWidth = lw*(.9 + h3*.6); ctx.stroke();
-    }
+    llama(ctx, base, fuera, atras, largo, ancho, t, fase, lado, color, lw, abre, regular);
   }
 
   private pata(ctx: CanvasRenderingContext2D, i: number, delantera: boolean, lado: number, sp: P[], T: P[], Nn: P[], r: number[], t: number, lw: number){
-    const H = this.F, n = { x: Nn[i].x*lado, y: Nn[i].y*lado }, T0 = T[i];
+    const H = this.F*(this.kk[i] ?? 1), n = { x: Nn[i].x*lado, y: Nn[i].y*lado }, T0 = T[i];
     // La brazada (Eze, 2026-11-26: mejorar el movimiento de las patas): al ritmo de la onda del cuerpo (la misma
     // frecuencia), en diagonal como un lagarto (la delantera de un lado con la trasera del otro). Cada brazada es
     // asimétrica: un alcance rápido hacia adelante con la mano abierta (40 %) y un tirón lento hacia atrás con la mano
@@ -294,7 +404,7 @@ export class DragonPlano {
     const codo = { x: hombro.x + d1.x*H*.78, y: hombro.y + d1.y*H*.78 };   // largas: las manos asoman del pelaje
     const dir = hacia(a1 + (delantera ? .7 : -.75) + swLag*.35*(delantera ? 1 : -1) - (sw - swLag)*.6);
     const mano = { x: codo.x + dir.x*H*.72, y: codo.y + dir.y*H*.72 };
-    const g = this.R*(delantera ? .8 : .88);
+    const g = this.R*(delantera ? .8 : .88)*(this.kk[i] ?? 1);
     // un mechón de llama en el codo, hacia atrás
     for(let k = 0; k < 3; k++) this.llama(ctx, codo, n, { x: -T0.x, y: -T0.y }, H*(.45 + k*.12), g*.32, t, k*1.7 + i, lado, k === 1 ? C.naranja : C.rojo, lw*.8, .35);
     // la pata: un solo miembro que se afina, curvo en el codo (no dos tubos), relleno con borde claro
@@ -320,7 +430,7 @@ export class DragonPlano {
       const c = rot(dir, a), largoDedo = H*(pulgar ? .08 : .13 - Math.abs(k - 1)*.02);
       const nudillo = { x: mano.x + c.x*largoDedo, y: mano.y + c.y*largoDedo };
       ctx.beginPath(); ctx.moveTo(mano.x, mano.y); ctx.lineTo(nudillo.x, nudillo.y);
-      ctx.strokeStyle = 'rgba(12,6,8,.9)'; ctx.lineWidth = g*.3 + lw*2.4; ctx.stroke(); ctx.strokeStyle = C.cuerpo; ctx.lineWidth = g*.3; ctx.stroke();
+      ctx.strokeStyle = 'rgba(12,6,8,.9)'; ctx.lineWidth = g*.3 + lw*2.4; ctx.stroke(); ctx.strokeStyle = C.pata; ctx.lineWidth = g*.3; ctx.stroke();
       // la uña: a lo largo de una curva que se dobla hacia adentro de la mano (más cerrada en el tirón)
       const lu = H*(pulgar ? .14 : .19)*(.9 + .1*abierta), dobla = (pulgar ? -1 : 1)*sg*(1.1 + .9*(1 - abierta));
       const cu = rot(c, dobla*.5), fin = rot(c, dobla);
@@ -345,19 +455,19 @@ export class DragonPlano {
     for(let j = 1; j <= M; j++) ctx.lineTo(izq[j].x, izq[j].y);
     ctx.arc(mano.x, mano.y, g*.38, Math.atan2(izq[M].y - mano.y, izq[M].x - mano.x), Math.atan2(der[M].y - mano.y, der[M].x - mano.x), lado > 0);
     for(let j = M; j >= 0; j--) ctx.lineTo(der[j].x, der[j].y);
-    ctx.closePath(); ctx.fillStyle = C.cuerpo; ctx.fill(); ctx.strokeStyle = C.borde; ctx.lineWidth = lw; ctx.stroke();
+    ctx.closePath(); ctx.fillStyle = C.pata; ctx.fill(); ctx.strokeStyle = 'rgba(12,6,8,.9)'; ctx.lineWidth = lw*1.6; ctx.stroke();
     // escamas de la pata: tres arcos claros
     for(let k = 1; k <= 3; k++){
       const m = miembro[Math.round(k*M/4.5)], d = { x: miembro[Math.round(k*M/4.5) + 1].x - m.x, y: miembro[Math.round(k*M/4.5) + 1].y - m.y };
       const a0 = Math.atan2(d.y, d.x);
-      ctx.beginPath(); ctx.arc(m.x, m.y, g*.4, a0 + Math.PI*.6, a0 + Math.PI*1.4); ctx.strokeStyle = C.luz; ctx.globalAlpha = .6; ctx.lineWidth = lw*.9; ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(m.x, m.y, g*.4, a0 + Math.PI*.6, a0 + Math.PI*1.4); const alfa0 = ctx.globalAlpha; ctx.strokeStyle = C.naranja; ctx.globalAlpha = .75*alfa0; ctx.lineWidth = lw*.9; ctx.stroke(); ctx.globalAlpha = alfa0;
     }
   }
 
   private cabeza(ctx: CanvasRenderingContext2D, sp: P[], T: P[], r: number[], t: number, lw: number){
-    const H = this.H;
+    const H = this.H*(this.kk[0] ?? 1);
     // mira por la línea del cuello (estable), y un poco hacia la perla
-    let tx = sp[0].x - sp[5].x, ty = sp[0].y - sp[5].y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    let tx = sp[0].x - sp[8].x, ty = sp[0].y - sp[8].y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;   // una cuerda larga: más estable
     const ang = Math.atan2(ty, tx) + Math.sin(t*.8)*.06;
     const cx = sp[0].x + tx*H*.18, cy = sp[0].y + ty*H*.18;
     const P_ = (x: number, y: number) => ({ x: cx + (x*Math.cos(ang) - y*Math.sin(ang))*H, y: cy + (x*Math.sin(ang) + y*Math.cos(ang))*H });
@@ -371,65 +481,94 @@ export class DragonPlano {
       const raiz = P_(-.25 - k*.04, lado*(.12 + k*.035));
       this.llama(ctx, raiz, fuera, atras, H*(1.25 - k*.07 + .25*hash(j + 50)), H*.08, t, j*.9, -lado, j % 3 === 0 ? C.naranja : j % 3 === 1 ? C.rojo : C.rojoOsc, lw, .75);
     }
-    // las astas: de ciervo, hacia atrás y afuera, con dos puntas
+    // La cabeza, rehecha con los elementos del cuerpo (Eze: no tenía relación con el cuerpo; las cejas doradas sobre
+    // rojo parecían la bandera; "como un biólogo de la época de los dragones"). Como en un reptil: cráneo en cuña,
+    // cubierto de escudos que siguen el pelaje del lomo (filas tendidas hacia atrás, superpuestas), una hilera mayor
+    // sobre la cresta del hocico, crestas supraorbitales de púas sobre los ojos, cuernos de queratina barridos hacia
+    // atrás, narinas en relieve y barbillas largas; todo en los rojos y naranjas del cuerpo, con su contorno oscuro.
+    const rot = (v: P, a: number) => ({ x: v.x*Math.cos(a) - v.y*Math.sin(a), y: v.x*Math.sin(a) + v.y*Math.cos(a) });
+    // los cuernos: de la nuca, barridos hacia atrás y afuera, afinándose; oscuros en la base, más claros en la punta
     for(const lado of [1, -1]){
-      const s = (x: number, y: number) => P_(x, y*lado);
-      const asta = [s(-.2, .17), s(-.55, .38), s(-.95, .46), s(-1.25, .42)];
-      const ramas = [[s(-.5, .35), s(-.48, .55), s(-.38, .66)], [s(-.85, .45), s(-.88, .64), s(-.8, .76)]];
-      const linea = (pts: P[], ancho: number) => {
-        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-        for(let k = 1; k < pts.length - 1; k++) ctx.quadraticCurveTo(pts[k].x, pts[k].y, (pts[k].x + pts[k + 1].x)/2, (pts[k].y + pts[k + 1].y)/2);
-        ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-        ctx.strokeStyle = C.borde; ctx.lineWidth = ancho + lw*2.4; ctx.stroke();
-        ctx.strokeStyle = C.hueso; ctx.lineWidth = ancho; ctx.stroke();
-      };
-      linea(asta, H*.075); for(const rr of ramas) linea(rr, H*.05);
+      const curva: P[] = [];
+      for(let j = 0; j <= 12; j++){ const q = j/12; curva.push(P_(-.22 - q*.85, lado*(.2 + q*.3 + Math.sin(q*Math.PI)*.06))); }
+      const iz: P[] = [], de: P[] = [];
+      for(let j = 0; j <= 12; j++){
+        const q = j/12, a2 = curva[Math.max(0, j - 1)], b2 = curva[Math.min(12, j + 1)];
+        let tx2 = b2.x - a2.x, ty2 = b2.y - a2.y; const l2 = Math.hypot(tx2, ty2) || 1; tx2 /= l2; ty2 /= l2;
+        const w = H*.075*(1 - q*.92);
+        iz.push({ x: curva[j].x - ty2*w, y: curva[j].y + tx2*w }); de.push({ x: curva[j].x + ty2*w, y: curva[j].y - tx2*w });
+      }
+      ctx.beginPath(); ctx.moveTo(iz[0].x, iz[0].y); for(const q of iz) ctx.lineTo(q.x, q.y); for(let j = 12; j >= 0; j--) ctx.lineTo(de[j].x, de[j].y); ctx.closePath();
+      ctx.strokeStyle = 'rgba(12,6,8,.9)'; ctx.lineWidth = lw*2.6; ctx.stroke();
+      const g2 = ctx.createLinearGradient(curva[0].x, curva[0].y, curva[12].x, curva[12].y);
+      g2.addColorStop(0, '#4a1610'); g2.addColorStop(.6, C.rojoOsc); g2.addColorStop(1, C.claro);
+      ctx.fillStyle = g2; ctx.fill();
+      // los anillos de crecimiento del cuerno
+      for(const q of [.2, .38, .55]){ const j = Math.round(q*12); ctx.beginPath(); ctx.moveTo(iz[j].x, iz[j].y); ctx.lineTo(de[j].x, de[j].y); ctx.strokeStyle = 'rgba(12,6,8,.55)'; ctx.lineWidth = lw*.9; ctx.stroke(); }
     }
-    // los bigotes: largos, ondulando hacia atrás
+    // las barbillas: largas, finas, ondulando hacia atrás, en naranja del cuerpo con su contorno oscuro
     for(const lado of [1, -1]){
       const pts: P[] = [];
       for(let j = 0; j <= 14; j++){
-        const q = j/14, ola = Math.sin(q*5 - t*3.2 + (lado > 0 ? 0 : 1.3))*.18*q;
-        pts.push(P_(.9 - q*2.4, lado*(.2 + q*.9 + ola)));
+        const q = j/14, ola = Math.sin(q*5 - t*2.6 + (lado > 0 ? 0 : 1.3))*.16*q;
+        pts.push(P_(.95 - q*2.2, lado*(.19 + q*.8 + ola)));
       }
-      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for(const p of pts) ctx.lineTo(p.x, p.y);
-      ctx.strokeStyle = C.borde; ctx.lineWidth = H*.035 + lw*1.6; ctx.stroke(); ctx.strokeStyle = C.oro; ctx.lineWidth = H*.035; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for(const q of pts) ctx.lineTo(q.x, q.y);
+      ctx.strokeStyle = 'rgba(12,6,8,.85)'; ctx.lineWidth = H*.03 + lw*1.8; ctx.stroke(); ctx.strokeStyle = C.naranja; ctx.lineWidth = H*.03; ctx.stroke();
     }
-    // aletas de llama en las mejillas
+    // aletas de llama en las mejillas (como las del cuerpo)
     for(const lado of [1, -1]) for(let k = 0; k < 3; k++)
       this.llama(ctx, P_(-.05 - k*.12, lado*.3), { x: izqV.x*lado, y: izqV.y*lado }, atras, H*(.55 - k*.08), H*.08, t, k*2 + lado, lado, k === 1 ? C.naranja : C.rojo, lw*.9, .7);
 
-    // el cráneo y el hocico, una sola silueta (de arriba: frente ancha, hocico largo que se ensancha en la punta)
-    const sil = [[-.42, 0], [-.4, .24], [-.22, .36], [.05, .4], [.3, .3], [.55, .2], [.85, .22], [1.05, .2], [1.13, .08], [1.14, 0]];
+    // la cresta supraorbital: tres púas de escama sobre cada ojo, abiertas hacia afuera y atrás; se dibujan antes que
+    // el cráneo, así sus raíces quedan debajo y asoman por el borde, como saliendo de entre las escamas
+    for(const lado of [1, -1]) for(let k = 0; k < 3; k++){
+      const d = rot(atras, -lado*(.55 - k*.12));
+      this.llama(ctx, P_(.06 - k*.12, lado*(.3 + k*.02)), d, atras, H*(.32 + k*.07), H*.065, t, 800 + k + (lado > 0 ? 0 : 5), lado, k === 1 ? C.naranja : C.rojoOsc, lw*.85, .6, true);
+    }
+    // el cráneo en cuña: frente ancha entre los ojos, hocico largo que se afina y se abre un poco en las narinas
+    const sil = [[-.45, 0], [-.43, .26], [-.28, .38], [-.05, .42], [.2, .36], [.45, .25], [.75, .2], [1.0, .19], [1.13, .1], [1.16, 0]];
     const pts = [...sil.map(([x, y]) => P_(x, y)), ...sil.slice(1, -1).reverse().map(([x, y]) => P_(x, -y))];
-    ctx.beginPath();
-    const m0 = { x: (pts[pts.length - 1].x + pts[0].x)/2, y: (pts[pts.length - 1].y + pts[0].y)/2 }; ctx.moveTo(m0.x, m0.y);
-    for(let k = 0; k < pts.length; k++){ const a = pts[k], b = pts[(k + 1) % pts.length]; ctx.quadraticCurveTo(a.x, a.y, (a.x + b.x)/2, (a.y + b.y)/2); }
-    ctx.closePath(); ctx.fillStyle = C.cuerpo; ctx.fill(); ctx.strokeStyle = C.borde; ctx.lineWidth = lw*1.4; ctx.stroke();
-    // la cresta del hocico y las arrugas de la frente
-    ctx.strokeStyle = C.luz; ctx.lineWidth = lw*1.2; ctx.globalAlpha = .7;
-    ctx.beginPath(); const c0 = P_(.35, 0), c1 = P_(.95, 0); ctx.moveTo(c0.x, c0.y); ctx.lineTo(c1.x, c1.y); ctx.stroke();
-    for(let k = 0; k < 3; k++){ const a = P_(-.3 + k*.12, .14), b = P_(-.22 + k*.12, 0), c = P_(-.3 + k*.12, -.14); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(b.x, b.y, c.x, c.y); ctx.stroke(); }
-    ctx.globalAlpha = 1;
-    // las narinas: dos bultos amarillos en la punta, con su hueco
-    for(const lado of [1, -1]){
-      const n = P_(1.0, lado*.12);
-      ctx.beginPath(); ctx.arc(n.x, n.y, H*.075, 0, TAU); ctx.fillStyle = C.oro; ctx.fill(); ctx.strokeStyle = C.borde; ctx.lineWidth = lw; ctx.stroke();
-      const hu = P_(1.02, lado*.13); ctx.beginPath(); ctx.arc(hu.x, hu.y, H*.03, 0, TAU); ctx.fillStyle = C.rojoOsc; ctx.fill();
+    const silueta = () => {
+      ctx.beginPath();
+      const m0 = { x: (pts[pts.length - 1].x + pts[0].x)/2, y: (pts[pts.length - 1].y + pts[0].y)/2 }; ctx.moveTo(m0.x, m0.y);
+      for(let k = 0; k < pts.length; k++){ const a2 = pts[k], b2 = pts[(k + 1) % pts.length]; ctx.quadraticCurveTo(a2.x, a2.y, (a2.x + b2.x)/2, (a2.y + b2.y)/2); }
+      ctx.closePath();
+    };
+    ctx.fillStyle = C.pata; silueta(); ctx.fill();
+    // los escudos de la cabeza, recortados por la silueta: filas de la nuca al hocico (las de adelante encima), cada
+    // escudo una llamita tendida hacia atrás como las del lomo; el ancho de cada fila sigue el de la cabeza
+    const anchoEn = (x: number) => { for(let k = 1; k < sil.length; k++) if(sil[k][0] >= x){ const [x0, y0] = sil[k - 1], [x1, y1] = sil[k]; return y0 + (y1 - y0)*(x - x0)/((x1 - x0) || 1); } return 0; };
+    ctx.save(); silueta(); ctx.clip();
+    let fila = 0;
+    for(let x = -.42; x <= 1.08; x += .12, fila++){
+      const w = anchoEn(x), n = Math.max(1, Math.round(w*2/.13));
+      for(let k = 0; k < n; k++){
+        const y = n === 1 ? 0 : (k/(n - 1) - .5)*w*1.7 + (fila % 2 ? .03 : -.03);
+        const color = (fila + k) % 3 === 0 ? C.rojo : (fila + k) % 3 === 1 ? C.rojoOsc : C.pata;
+        this.llama(ctx, P_(x, y), atras, atras, H*.24, H*.065, t, 600 + fila*1.31 + k*.71, y >= 0 ? 1 : -1, color, lw*.7, 0, true);
+      }
     }
-    // los ojos: grandes, de anillo claro, que asoman por los costados; parpadean cada tanto; cejas amarillas encima
-    const parpado = (t % 4.7) < .14 ? .15 : 1;
+    // la cresta del hocico: una hilera de escudos mayores sobre la línea media, en naranja
+    for(let x = -.25; x <= .95; x += .24) this.llama(ctx, P_(x, 0), atras, atras, H*.3, H*.075, t, 700 + x*7, 1, C.rojo, lw*.8, 0, true);
+    ctx.restore();
+    // y un filo claro sólo a lo largo del hocico (como el de las llamas)
+    // el borde: fino, en un rojo muy oscuro (Eze: el contorno negro grueso no quedaba bien; las escamas ya marcan la forma)
+    silueta(); ctx.strokeStyle = '#5a140c'; ctx.lineWidth = lw*.9; ctx.stroke();
     for(const lado of [1, -1]){
-      const o = P_(.08, lado*.33);
-      ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(ang); ctx.scale(1, parpado);
-      ctx.beginPath(); ctx.arc(0, 0, H*.13, 0, TAU); ctx.fillStyle = C.borde; ctx.fill(); ctx.strokeStyle = C.trazo; ctx.lineWidth = lw; ctx.stroke();
-      ctx.beginPath(); ctx.arc(H*.03, lado*H*.03, H*.075, 0, TAU); ctx.fillStyle = C.ojo; ctx.fill();
-      ctx.beginPath(); ctx.arc(H*.05, lado*H*.01, H*.025, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill();
-      ctx.restore();
-      const a = P_(.24, lado*.27), b = P_(.1, lado*.52), c = P_(-.14, lado*.44);
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(b.x, b.y, c.x, c.y);
-      ctx.strokeStyle = C.borde; ctx.lineWidth = H*.07 + lw*2.2; ctx.stroke(); ctx.strokeStyle = C.oro; ctx.lineWidth = H*.07; ctx.stroke();
+      ctx.beginPath(); const tramo = sil.filter(([x]) => x >= .3).map(([x, y]) => P_(x, y*lado));
+      ctx.moveTo(tramo[0].x, tramo[0].y); for(const q of tramo) ctx.lineTo(q.x, q.y);
+      ctx.strokeStyle = C.borde; ctx.lineWidth = lw*.9; ctx.stroke();
     }
+    // las narinas: dos bultos en relieve en la punta, con la raja oscura mirando hacia adelante y afuera
+    for(const lado of [1, -1]){
+      const n = P_(1.0, lado*.11);
+      ctx.beginPath(); ctx.ellipse(n.x, n.y, H*.07, H*.05, ang + lado*.4, 0, TAU); ctx.fillStyle = C.rojo; ctx.fill(); ctx.strokeStyle = 'rgba(12,6,8,.9)'; ctx.lineWidth = lw*1.2; ctx.stroke();
+      const hu = P_(1.03, lado*.13); ctx.beginPath(); ctx.ellipse(hu.x, hu.y, H*.035, H*.012, ang + lado*.55, 0, TAU); ctx.fillStyle = '#140504'; ctx.fill();
+    }
+    // los ojos: el ojo de reptil del estilo (estilo.ts), parpadeando cada tanto
+    const parpado = (t % 4.7) < .14 ? .12 : 1;
+    for(const lado of [1, -1]) ojoReptil(ctx, P_(.1, lado*.27), ang, lado, H, lw, parpado);
 
     // la perla, delante: un sol pequeño con su halo y llamitas que giran
     const pe = P_(1.75 + Math.sin(t*1.3)*.08, Math.sin(t*.8)*.18);

@@ -1,0 +1,139 @@
+---
+/**
+ * La guía de estilo del dragón plano (Eze, 2026-11-27): las reglas gráficas de las variantes 6, 7 y 8, dibujadas en vivo
+ * con el mismo código que dibuja el dragón (src/cronovisor/dragon/estilo.ts). La base para diseñar los elementos.
+ * Unlisted y sin indexar, como /dragon/ y /barra/.
+ */
+import Cabecera from '../../components/CabeceraMesa.astro';
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Guía de estilo · el dragón</title>
+  <style is:global>
+    html, body { margin: 0; background: #0b0908; color: #cfc8bf; font: 13px/1.55 ui-monospace, monospace; }
+    main { max-width: 1100px; margin: 0 auto; padding: 28px 22px 80px; }
+    h1 { font: italic 300 44px/1.05 Georgia, serif; color: #f0ede8; margin: 18px 0 6px; }
+    h2 { font: italic 300 28px/1.1 Georgia, serif; color: #f0ede8; margin: 48px 0 6px; }
+    .sub { color: #8d857b; max-width: 720px; }
+    p { max-width: 760px; }
+    canvas { display: block; width: 100%; background: #000; border: 1px solid #2a241f; }
+    .paleta { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+    .color { border: 1px solid #2a241f; }
+    .color i { display: block; height: 70px; }
+    .color div { padding: 6px 8px; }
+    .color b { color: #f0ede8; font-weight: 400; display: block; }
+    .color span { color: #8d857b; font-size: 11px; }
+    ul.reglas { max-width: 800px; padding-left: 18px; }
+    ul.reglas li { margin: 4px 0; }
+    ul.reglas b { color: #f0ede8; font-weight: 400; }
+    .pie { color: #6d655c; font-size: 11px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <main>
+    <Cabecera actual="estilo" />
+    <h1>Guía de estilo</h1>
+    <p class="sub">Las reglas gráficas del dragón plano, dibujadas con el mismo código que dibuja al dragón: lo que se ve acá es exactamente lo que se ve en la mesa. Son la base para diseñar los elementos.</p>
+
+    <h2>Las reglas</h2>
+    <ul class="reglas">
+      <li><b>Fuego, no arcoíris.</b> Rojos, naranja y dorado pálido; oro sólo en ojos y acentos; crema sólo como filo de luz. Nada de azules ni verdes.</li>
+      <li><b>Contorno oscuro, luz de un lado.</b> Cada pieza lleva una sombra casi negra que la separa de lo de abajo. El crema es un filo de un solo lado, que se corta antes de la punta, y no en todas las piezas.</li>
+      <li><b>La forma base es la llama.</b> Una lengua en S, de grosor parejo casi hasta la punta redondeada, con un rizo chico. Cada llama tiene su carácter, y no cambia de un cuadro al siguiente.</li>
+      <li><b>Las superficies son tejas.</b> Filas de llamas tranquilas tendidas hacia atrás, superpuestas: las de adelante tapan las raíces de las de atrás.</li>
+      <li><b>Movimiento lento.</b> La onda corre de la raíz a la punta. Sin tirones: giros suaves, nada de vueltas bruscas.</li>
+      <li><b>La profundidad es oscuridad.</b> Lo hondo no se vuelve transparente: se oscurece hacia el negro y se achica hacia el centro, y sigue sólido.</li>
+      <li><b>Ojos de reptil.</b> Almendra encajada, iris ámbar, pupila rasgada, un brillo.</li>
+    </ul>
+
+    <h2>Paleta</h2>
+    <div class="paleta" id="paleta"></div>
+
+    <h2>La llama</h2>
+    <p class="sub">Arriba, llamas libres (cada una con su carácter); al medio, cintas largas; abajo, regulares (escamas, plumas, crestas): se mecen poco y no se rizan.</p>
+    <canvas id="llamas" width="2200" height="900"></canvas>
+
+    <h2>Contorno y luz</h2>
+    <p class="sub">La sombra oscura separa; el filo crema, de un solo lado, da volumen.</p>
+    <canvas id="contorno" width="2200" height="520"></canvas>
+
+    <h2>Superficie de escamas</h2>
+    <p class="sub">Filas de llamas regulares superpuestas como tejas: así están hechos el lomo, la cabeza y las alas.</p>
+    <canvas id="escamas" width="2200" height="560"></canvas>
+
+    <h2>El ojo</h2>
+    <canvas id="ojo" width="2200" height="520"></canvas>
+
+    <h2>Profundidad</h2>
+    <p class="sub">La misma pieza a distintas honduras: más chica hacia el centro y más oscura, nunca transparente.</p>
+    <canvas id="hondura" width="2200" height="560"></canvas>
+    <p class="pie">Código: src/cronovisor/dragon/estilo.ts · el dragón: /dragon/?estilo=6, 7, 8</p>
+  </main>
+  <script>
+    import { PALETA, C, SOMBRA, llama, ojoReptil, Hondura, escalaHondura, luzHondura, hash, TAU } from '../../cronovisor/dragon/estilo';
+
+    document.getElementById('paleta')!.innerHTML = PALETA.map(p =>
+      `<div class="color"><i style="background:${p.hex}"></i><div><b>${p.nombre}</b><span>${p.hex} · ${p.papel}</span></div></div>`).join('');
+
+    const lienzo = (id: string) => { const c = document.getElementById(id) as HTMLCanvasElement; return { c, g: c.getContext('2d')!, w: c.width, h: c.height }; };
+    const COLORES = [C.rojo, C.rojoOsc, C.naranja, C.rojo, C.pata, C.rojoOsc, C.naranja, C.rojo];
+    // fases que salen cinta (la llama decide sola su carácter con su semilla: las buscamos)
+    const esCinta = (fase: number) => hash(fase*3.71 + .17 + 37) < .1;
+    const cintas: number[] = []; for(let f = 0; cintas.length < 4; f += .37) if(esCinta(f)) cintas.push(f);
+    const libres: number[] = []; for(let f = 0; libres.length < 9; f += .53) if(!esCinta(f)) libres.push(f);
+    const lw = 3;
+    const der = { x: 1, y: 0 }, abajo = { x: 0, y: 1 };
+
+    function dibujar(t: number){
+      { const { g, w, h } = lienzo('llamas');
+        g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.lineJoin = 'round'; g.lineCap = 'round';
+        libres.forEach((f, i) => llama(g, { x: 120 + i*230, y: 50 }, abajo, abajo, 260, 34, t, f, 1, COLORES[i % 8], lw, 1));
+        cintas.forEach((f, i) => llama(g, { x: 160 + i*520, y: 470 }, der, der, 420, 26, t, f, 1, COLORES[(i + 2) % 8], lw, 1));
+        for(let i = 0; i < 9; i++) llama(g, { x: 120 + i*230, y: 650 }, abajo, abajo, 220, 40, t, 600 + i, 1, COLORES[(i + 4) % 8], lw, 1, true);
+      }
+      { const { g, w, h } = lienzo('contorno');
+        g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.lineJoin = 'round'; g.lineCap = 'round';
+        // tres llamas grandes superpuestas: se ve cómo la sombra separa y el filo de un lado
+        [[700, C.rojoOsc, 3.1], [900, C.rojo, 4.4], [1100, C.naranja, 7.3]].forEach(([x, col, f]) =>
+          llama(g, { x: x as number, y: 470 }, { x: 0, y: -1 }, { x: 0, y: -1 }, 420, 70, t, f as number, 1, col as string, 5, 1));
+        g.fillStyle = '#8d857b'; g.font = '28px ui-monospace, monospace';
+        g.fillText('sombra: ' + SOMBRA, 1450, 200); g.fillText('filo: ' + C.borde + ', de un solo lado', 1450, 250);
+      }
+      { const { g, w, h } = lienzo('escamas');
+        g.fillStyle = C.pata; g.fillRect(0, 0, w, h); g.lineJoin = 'round'; g.lineCap = 'round';
+        // filas de atrás hacia adelante: cada fila tapa las raíces de la anterior
+        for(let fila = 0, x = w + 100; x > -200; x -= 120, fila++)
+          for(let k = 0; k < 4; k++){
+            const y = 90 + k*125 + (fila % 2 ? 60 : 0);
+            const col = (fila + k) % 3 === 0 ? C.rojo : (fila + k) % 3 === 1 ? C.rojoOsc : C.naranja;
+            llama(g, { x: x - 300, y }, der, der, 300, 52, t, 600 + fila*1.31 + k*.71, 1, col, 3.5, 0, true);
+          }
+      }
+      { const { g, w, h } = lienzo('ojo');
+        g.fillStyle = C.pata; g.fillRect(0, 0, w, h);
+        const parpado = (t % 4.7) < .14 ? .12 : 1;
+        ojoReptil(g, { x: w*.32, y: h*.5 }, 0, 1, 1700, 8, parpado);
+        ojoReptil(g, { x: w*.72, y: h*.5 }, 0, -1, 1700, 8, parpado);
+      }
+      { const { g, w, h } = lienzo('hondura');
+        g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.lineJoin = 'round'; g.lineCap = 'round';
+        const hond = new Hondura(), cx = w/2, cy = h/2;
+        [0, .6, 1.2, 2, 2.8].forEach((z, i) => {
+          const k = escalaHondura(z); hond.osc = luzHondura(z);
+          const gz = hond.envolver(g);
+          const x = 200 + i*440, px = cx + (x - cx)*k, py = cy + 120*k;
+          for(let j = 0; j < 3; j++) llama(gz, { x: px + (j - 1)*60*k, y: py }, { x: 0, y: -1 }, { x: 0, y: -1 }, 340*k, 52*k, t, 3 + i*2 + j, 1, [C.rojoOsc, C.rojo, C.naranja][j], 4*k, 1);
+          g.globalAlpha = 1; g.fillStyle = '#6d655c'; g.font = '24px ui-monospace, monospace'; g.fillText(`hondura ${z}`, x - 70, h - 24);
+        });
+      }
+    }
+    const t0 = performance.now();
+    const cuadro = (now: number) => { dibujar((now - t0)/1000); requestAnimationFrame(cuadro); };
+    requestAnimationFrame(cuadro);
+  </script>
+</body>
+</html>

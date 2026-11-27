@@ -12,6 +12,7 @@
  * El selector de abajo a la izquierda (o las teclas 1 y 2) cambia de dragón; se oculta con H, como la ayuda.
  * Teclas: espacio pausa (y en pausa ← → cuadro a cuadro) · O contorno de la mesa · P platos de prueba · G grabar una pasada (.webm) · H ocultar la ayuda · F pantalla completa.
  */
+import Cabecera from '../components/CabeceraMesa.astro';
 ---
 <!doctype html>
 <html lang="es">
@@ -42,11 +43,12 @@
   </style>
 </head>
 <body>
+  <Cabecera actual="dragon" fija />
   <div id="stage"><canvas id="c" width="1920" height="1080"></canvas><canvas id="plano" width="1920" height="1080"></canvas><canvas id="over" width="1920" height="1080"></canvas></div>
-  <div id="estilos"><button data-e="1" title="chino (long)">1</button><button data-e="2" title="japonés (ryū)">2</button><button data-e="3" title="caras">3</button><button data-e="4" title="caras sobre el cosmos">4</button><button data-e="5" title="chino, visto desde arriba">5</button><button data-e="6" title="plano (2D), desde arriba">6</button></div>
+  <div id="estilos"><button data-e="1" title="chino (long)">1</button><button data-e="2" title="japonés (ryū)">2</button><button data-e="3" title="caras">3</button><button data-e="4" title="caras sobre el cosmos">4</button><button data-e="5" title="chino, visto desde arriba">5</button><button data-e="6" title="plano (2D), desde arriba">6</button><button data-e="7" title="plano con profundidad: sube del fondo">7</button><button data-e="8" title="el pez: sube en una punta, recorre la pantalla, se hunde en la otra">8</button></div>
   <iframe id="caras" title="caras" tabindex="-1"></iframe>
   <div id="ui">
-    <b>espacio</b> pausa (<b>← →</b> cuadro a cuadro) · <b>1</b> <b>2</b> <b>3</b> <b>4</b> <b>5</b> <b>6</b> dragón chino / japonés / caras / caras sobre el cosmos / chino desde arriba / plano · <b>O</b> contorno de la mesa · <b>P</b> platos de prueba · <b>G</b> grabar un bucle (.webm) · <b>H</b> ocultar esto · <b>F</b> pantalla completa
+    <b>espacio</b> pausa (<b>← →</b> cuadro a cuadro) · <b>1</b> <b>2</b> <b>3</b> <b>4</b> <b>5</b> <b>6</b> <b>7</b> <b>8</b> dragón chino / japonés / caras / caras sobre el cosmos / chino desde arriba / plano / plano desde el fondo / el pez · <b>O</b> contorno de la mesa · <b>P</b> platos de prueba · <b>G</b> grabar un bucle (.webm) · <b>H</b> ocultar esto · <b>F</b> pantalla completa
     <div id="msg"></div>
   </div>
   <script>
@@ -57,7 +59,9 @@
 
     const Q = new URLSearchParams(location.search);
     const [MESA_W, MESA_H] = (Q.get('mesa') || '180x90').split('x').map(Number);
-    const PERIODO = (Number(Q.get('seg')) || 14)*1000;
+    // la pasada: 14 s, o la de `?seg=`; el plano desde el fondo (7) tiene una coreografía más larga: 26 s
+    const SEG = Number(Q.get('seg')) || 0;
+    let PERIODO = (SEG || 14)*1000;
     const W = 1920, H = 1080;
     // la mesa ocupa el cuadro del proyector lo más grande posible, con su proporción real
     const k = Math.min(W*.94/MESA_W, H*.94/MESA_H);
@@ -143,17 +147,19 @@
     const hechos: Partial<Record<Estilo, DragonCuerpo>> = {};
     let dragon!: DragonCuerpo;
     const caras = document.getElementById('caras') as HTMLIFrameElement;
-    let modoCaras = false, modoPlano = false;
+    let modoCaras = false, modoPlano = false, llano: DragonPlano | null = null, hondo: DragonPlano | null = null, pez: DragonPlano | null = null;
     // 6: el dragón plano, dibujado en 2D en su propio canvas (se arma la primera vez)
     const planoCv = document.getElementById('plano') as HTMLCanvasElement, pctx = planoCv.getContext('2d')!;
     let plano: DragonPlano | null = null;
     function elegir(n: string){
       modoCaras = n === '3' || n === '4';
       document.body.classList.toggle('modo-caras', modoCaras);
-      modoPlano = n === '6';
+      modoPlano = n === '6' || n === '7' || n === '8';
       document.body.classList.toggle('modo-plano', modoPlano);
+      PERIODO = (SEG || (n === '7' ? 26 : n === '8' ? 20 : 14))*1000;
+      if((window as any).__mesa) (window as any).__mesa.PERIODO = PERIODO;
       if(modoPlano){
-        plano ??= new DragonPlano(mesa.w, mesa.h);
+        plano = n === '7' ? (hondo ??= new DragonPlano(mesa.w, mesa.h, undefined, true)) : n === '8' ? (pez ??= new DragonPlano(mesa.w, mesa.h, mesa.w*.7, 'pez')) : (llano ??= new DragonPlano(mesa.w, mesa.h));
         document.querySelectorAll<HTMLButtonElement>('#estilos button').forEach(b => b.classList.toggle('on', b.dataset.e === n));
         const u = new URL(location.href); u.searchParams.set('estilo', n); history.replaceState(null, '', u);
         return;
@@ -175,7 +181,7 @@
       const u = new URL(location.href); u.searchParams.set('estilo', n); history.replaceState(null, '', u);
       if((window as any).__mesa) (window as any).__mesa.dragon = dragon;
     }
-    elegir(ESTILO[Q.get('estilo') ?? ''] || ['3', '4', '6'].includes(Q.get('estilo') ?? '') ? Q.get('estilo')! : '1');
+    elegir(ESTILO[Q.get('estilo') ?? ''] || ['3', '4', '6', '7', '8'].includes(Q.get('estilo') ?? '') ? Q.get('estilo')! : '1');
     document.querySelectorAll<HTMLButtonElement>('#estilos button').forEach(b => b.addEventListener('click', () => elegir(b.dataset.e!)));
 
     let contorno = false, platos = false, grabando: { rec: MediaRecorder; desde: number } | null = null;
@@ -232,7 +238,7 @@
       rec.onstop = () => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob(partes, { type: 'video/webm' }));
-        a.download = `dragon-${modoPlano ? 'plano' : dragon.estilo}-mesa-${MESA_W}x${MESA_H}-${PERIODO/1000}s.webm`;
+        a.download = `dragon-${modoPlano ? (plano === hondo ? 'hondo' : plano === pez ? 'pez' : 'plano') : dragon.estilo}-mesa-${MESA_W}x${MESA_H}-${PERIODO/1000}s.webm`;
         a.click();
         msg.textContent = 'listo: el .webm está en Descargas (para el USB, pasarlo a .mp4)';
       };
@@ -242,7 +248,7 @@
     }
     addEventListener('keydown', e => {
       const key = e.key.toLowerCase();
-      if(key === '1' || key === '2' || key === '3' || key === '4' || key === '5' || key === '6'){ elegir(key); return; }
+      if(key === '1' || key === '2' || key === '3' || key === '4' || key === '5' || key === '6' || key === '7' || key === '8'){ elegir(key); return; }
       if(key === 'h'){ document.body.classList.toggle('clean'); caras.contentDocument?.body.classList.toggle('clean', document.body.classList.contains('clean')); return; }
       if(key === 'f'){ document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); return; }
       if(modoCaras){

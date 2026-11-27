@@ -1,0 +1,75 @@
+---
+/**
+ * La entrada al proyecto de la mesa para el restaurante (Eze, 2026-11-27): desde una sola página se llega a todo lo
+ * hecho (el simulador de la barra, las variantes del dragón, las caras, la guía de estilo) y al apartado de elementos.
+ * Las miniaturas, en public/mesa/miniaturas/ (capturas de cada página). Unlisted y sin indexar.
+ */
+import Cabecera from '../../components/CabeceraMesa.astro';
+const fichas = [
+  { grupo: 'La mesa', items: [
+    { href: '/barra/', img: 'simulador', titulo: 'Simulador de la barra', texto: 'La barra de 250 cm con la pantalla LG en el medio, madera, vidrio templado, alturas, isla o patas, y el dragón corriendo en la pantalla. Con la hoja de pros y contras.' },
+  ]},
+  { grupo: 'El dragón plano', items: [
+    { href: '/dragon/?estilo=8', img: 'dragon-8', titulo: 'Desde el fondo (8)', texto: 'Entra por un extremo subiendo desde el fondo, recorre la pantalla rozando el vidrio y se zambulle en el otro.' },
+    { href: '/dragon/?estilo=7', img: 'dragon-7', titulo: 'Espiral (7)', texto: 'Sube del abismo en espiral, cruza la mesa y se hunde.' },
+    { href: '/dragon/?estilo=6', img: 'dragon-6', titulo: 'Plano (6)', texto: 'El dragón gráfico visto desde arriba, cruzando la mesa en una S tranquila.' },
+  ]},
+  { grupo: 'El dragón en 3D', items: [
+    { href: '/dragon/?estilo=5', img: 'dragon-5', titulo: 'Desde arriba (5)', texto: 'El dragón chino en 3D, ancho, visto en cenital.' },
+    { href: '/dragon/?estilo=1', img: 'dragon-1', titulo: 'Chino (1)', texto: 'El long en 3D, de tres cuartos.' },
+    { href: '/dragon/?estilo=2', img: 'dragon-2', titulo: 'Japonés (2)', texto: 'El ryū en 3D: tres garras, más delgado.' },
+  ]},
+  { grupo: 'Caras', items: [
+    { href: '/dragon/?estilo=3', img: 'caras', titulo: 'Caras que mutan (3)', texto: 'Rostros que se transforman uno en otro.' },
+    { href: '/dragon/?estilo=4', img: 'caras-cosmos', titulo: 'Caras sobre el cosmos (4)', texto: 'Las mismas caras sobre un cosmos animado.' },
+  ]},
+  { grupo: 'Diseño', items: [
+    { href: '/mesa/estilo/', img: 'estilo', titulo: 'Guía de estilo', texto: 'Las reglas gráficas del dragón: paleta, la llama, contorno, escamas, ojos y profundidad. La base de los elementos.' },
+    { href: '/mesa/elementos/', img: 'elementos', titulo: 'Elementos', texto: 'Las piezas que acompañan al dragón, en su mismo lenguaje, cada una animada.' },
+    { href: '/mesa/escenas/', img: 'escenas', titulo: 'Escenas', texto: 'Los elementos combinados en cuadros de una noche japonesa, y la función completa que corre toda la noche.' },
+  ]},
+];
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>La mesa · el proyecto</title>
+  <style is:global>
+    html, body { margin: 0; background: #0b0908; color: #cfc8bf; font: 13px/1.55 ui-monospace, monospace; }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px 22px 80px; }
+    h1 { font: italic 300 52px/1.05 Georgia, serif; color: #f0ede8; margin: 18px 0 6px; }
+    h2 { font: 11px ui-monospace, monospace; letter-spacing: .16em; text-transform: uppercase; color: #8d857b; margin: 40px 0 12px; }
+    .sub { color: #8d857b; max-width: 760px; }
+    .grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    a.ficha { display: block; text-decoration: none; color: inherit; border: 1px solid #2a241f; background: #000; transition: border-color .2s; }
+    a.ficha:hover { border-color: #e8b04a; }
+    a.ficha img { display: block; width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #000; }
+    a.ficha div { padding: 10px 12px 12px; border-top: 1px solid #2a241f; background: #0b0908; }
+    a.ficha b { display: block; font: italic 300 22px/1.2 Georgia, serif; color: #f0ede8; margin-bottom: 4px; }
+    a.ficha span { color: #9d958b; }
+  </style>
+</head>
+<body>
+  <main>
+    <Cabecera actual="inicio" />
+    <h1>La mesa</h1>
+    <p class="sub">El proyecto de la barra con pantalla para el restaurante: el simulador, las animaciones del dragón, las caras, y el diseño de los elementos que vendrán.</p>
+    {fichas.map(g => (
+      <>
+        <h2>{g.grupo}</h2>
+        <div class="grilla">
+          {g.items.map(i => (
+            <a class="ficha" href={i.href}>
+              <img src={`/mesa/miniaturas/${i.img}.jpg`} alt="" loading="lazy">
+              <div><b>{i.titulo}</b><span>{i.texto}</span></div>
+            </a>
+          ))}
+        </div>
+      </>
+    ))}
+  </main>
+</body>
+</html>

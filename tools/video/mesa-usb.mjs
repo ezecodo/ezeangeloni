@@ -24,7 +24,7 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 await page.evaluateOnNewDocument(() => {
   const css = document.createElement('style');
-  css.textContent = '#ui,#estilos,astro-dev-toolbar{display:none!important}';
+  css.textContent = '#ui,#estilos,.cabecera,astro-dev-toolbar{display:none!important}';
   document.addEventListener('DOMContentLoaded', () => document.head.append(css));
 });
 await page.goto(`${BASE}/dragon/?mesa=${MESA}&seg=${SEG}&estilo=${ESTILO}`, { waitUntil: 'load' });
